@@ -26,9 +26,13 @@
 | [WebSocket](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API), [WebTransport](https://developer.mozilla.org/en-US/docs/Web/API/WebTransport) | Транспорт, браузерная поддержка и управление очередями |
 | [Autoplay](https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Autoplay), [WCAG 2.2](https://www.w3.org/TR/WCAG22/) | Поведение медиа и ориентир доступности |
 | [Svelte](https://svelte.dev/docs/svelte/overview), [SvelteKit](https://svelte.dev/docs/kit/page-options) | Компиляция и режимы рендеринга |
-| [Rust ownership](https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html), [Tokio](https://tokio.rs/tokio/tutorial), [Go GC](https://go.dev/doc/gc-guide) | Свойства исполнения и памяти; не результаты сравнения производительности |
+| [Go FAQ](https://go.dev/doc/faq#goroutines), [Go GC](https://go.dev/doc/gc-guide) | Goroutine, потоки и управление памятью выбранного серверного языка |
 | [MCP architecture](https://modelcontextprotocol.io/specification/2025-11-25/architecture), [transports](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports), [tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools) | Роли, Streamable HTTP и инструменты; изученная версия спецификации 2025-11-25 |
 | [WIPO: Copyright FAQ](https://www.wipo.int/en/web/copyright/faq-copyright) | Общее различие авторства, публикации в интернете и разрешения; не заключение о конкретных паках |
+
+Источники по конкретным Go-библиотекам, объектным хранилищам и их ограничениям приведены рядом с выводами в [анализе стека](06-TECH-STACK.md). Официальные документы SvelteKit, React Router, Next.js и Vue/Nuxt — в [сравнении фронтенда](07-FRONTEND-CHOICE.md).
+
+Требование готовых и загружаемых тем поступило от пользователя. Формат архива, охват экранов и лимиты — наши проектные предложения в [контракте оформления](08-THEMES.md), а не заявления о возможностях конкурентов. Технические основания: [CSS custom properties](https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Cascading_variables/Using_custom_properties) и [prefers-reduced-motion](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/@media/prefers-reduced-motion).
 
 ## Как читать выводы
 
