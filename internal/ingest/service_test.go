@@ -477,19 +477,94 @@ func TestLeaseLossCancelsOldWorkerAndStandbyRecovers(t *testing.T) {
 	if err = f.pool.QueryRow(bg, "SELECT status FROM uploads WHERE id=$1", u.ID).Scan(&status); err != nil || status != "processing" {
 		t.Fatal(status, err)
 	}
-	var terminated bool
-	err = f.pool.QueryRow(bg, `SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype='advisory' AND granted
- AND classid=((hashtextextended(current_database()||':'||current_schema()||':si-ingest-owner',0)>>32)&4294967295)::oid
- AND objid=(hashtextextended(current_database()||':'||current_schema()||':si-ingest-owner',0)&4294967295)::oid`).Scan(&terminated)
-	if err != nil || !terminated {
-		t.Fatal("terminate lease", terminated, err)
-	}
+	terminateIngestLease(t, f.pool)
+	// Retire this instance so the standby is the only contender for recovery.
+	f.service.Close()
 	f.service = standby
 	u = awaitStatus(t, f, u.ID, "ready")
 	mine, err := f.lib.Mine(bg, f.owner)
 	if err != nil || len(mine) != 1 || mine[0].ID != u.DraftID {
 		t.Fatal(mine, err)
 	}
+}
+
+// Losing the lease must not leave an otherwise usable service accepting work
+// forever without workers. Recovery must also join old workers before requeueing.
+func TestLeaseLossReacquiresAfterWorkersStopAndProcessesQueuedUpload(t *testing.T) {
+	f := setup(t)
+	gate := &leaseLossStore{Store: f.objects, entered: make(chan struct{}), canceled: make(chan struct{}), release: make(chan struct{})}
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(gate.release) }) }
+	t.Cleanup(release)
+	f.service.objects = gate
+	first := queue(t, f, archive(t, textXML, nil))
+	f.service.Start(bg)
+	select {
+	case <-gate.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("worker did not start")
+	}
+	var before int64
+	if err := f.pool.QueryRow(bg, "SELECT epoch FROM ingest_owner").Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	terminateIngestLease(t, f.pool)
+	select {
+	case <-gate.canceled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("lease loss did not cancel the old worker")
+	}
+	second := queue(t, f, archive(t, strings.Replace(textXML, "Imported", "Queued after lease loss", 1), nil))
+	var whileStopping int64
+	if err := f.pool.QueryRow(bg, "SELECT epoch FROM ingest_owner").Scan(&whileStopping); err != nil || whileStopping != before {
+		t.Fatal("reacquired before old worker stopped", before, whileStopping, err)
+	}
+	release()
+	first = awaitStatus(t, f, first.ID, "ready")
+	second = awaitStatus(t, f, second.ID, "ready")
+	var after int64
+	if err := f.pool.QueryRow(bg, "SELECT epoch FROM ingest_owner").Scan(&after); err != nil || after <= before {
+		t.Fatal("lease epoch did not advance", before, after, err)
+	}
+	mine, err := f.lib.Mine(bg, f.owner)
+	if err != nil || len(mine) != 2 || first.DraftID == second.DraftID {
+		t.Fatal("lost or duplicate recovered import", mine, first, second, err)
+	}
+	f.service.Close()
+}
+
+func terminateIngestLease(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	var terminated bool
+	err := pool.QueryRow(bg, `SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype='advisory' AND granted AND objsubid=1
+ AND database=(SELECT oid FROM pg_database WHERE datname=current_database())
+ AND classid=((hashtextextended(current_database()||':'||current_schema()||':si-ingest-owner',0)>>32)&4294967295)::oid
+ AND objid=(hashtextextended(current_database()||':'||current_schema()||':si-ingest-owner',0)&4294967295)::oid`).Scan(&terminated)
+	if err != nil || !terminated {
+		t.Fatal("terminate this schema's ingest lease", terminated, err)
+	}
+}
+
+type leaseLossStore struct {
+	blob.Store
+	mu                         sync.Mutex
+	started                    bool
+	entered, canceled, release chan struct{}
+}
+
+func (s *leaseLossStore) Put(ctx context.Context, key string, r io.Reader, size int64, ct string) error {
+	s.mu.Lock()
+	first := !s.started
+	s.started = true
+	s.mu.Unlock()
+	if first {
+		close(s.entered)
+		<-ctx.Done()
+		close(s.canceled)
+		<-s.release
+		return ctx.Err()
+	}
+	return s.Store.Put(ctx, key, r, size, ct)
 }
 
 type gatedStore struct {

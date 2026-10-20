@@ -12,6 +12,7 @@ import (
 	"siplatform/internal/game"
 	"siplatform/internal/library"
 	"siplatform/internal/packs"
+	"siplatform/internal/playpack"
 	"siplatform/internal/storage/postgres"
 )
 
@@ -188,12 +189,14 @@ func (s *Server) selectQuestion(w http.ResponseWriter, r *http.Request) {
 			return nil, e
 		}
 		var question *packs.Question
+		var round packs.Round
 		for _, rd := range doc.Rounds {
 			for _, th := range rd.Themes {
 				for _, q := range th.Questions {
 					if q.ID == req.QuestionID {
 						copy := q
 						question = &copy
+						round = rd
 					}
 				}
 			}
@@ -201,7 +204,7 @@ func (s *Server) selectQuestion(w http.ResponseWriter, r *http.Request) {
 		if question == nil {
 			return nil, game.Fault("not_found")
 		}
-		cmd, e := textCommand(*question, req.CommandID, req.ExpectedSeq)
+		cmd, e := playpack.Command(round, *question, req.CommandID, req.ExpectedSeq)
 		if e != nil {
 			return nil, e
 		}
@@ -220,20 +223,4 @@ func (s *Server) selectQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]bool{"ok": true})
-}
-func textCommand(q packs.Question, id string, seq int64) (game.Command, error) {
-	// The next rules/media stage expands this adapter; never flatten a special
-	// question into an ordinary question with different scoring.
-	if q.Type != "" && q.Type != "simple" && q.Type != "withButton" {
-		return game.Command{}, game.Fault("unsupported_question")
-	}
-	var lines []string
-	for _, item := range q.Content("question") {
-		if item.Type != "text" || item.IsRef || item.Placement == "replic" {
-			return game.Command{}, game.Fault("unsupported_question")
-		}
-		lines = append(lines, item.Value)
-	}
-	cmd := game.Command{Version: 1, ID: id, Type: "open_question", QuestionID: q.ID, Text: strings.Join(lines, "\n"), Answer: strings.Join(q.Right, " / "), Value: int64(q.Price), ExpectedSeq: &seq}
-	return cmd, cmd.Validate()
 }

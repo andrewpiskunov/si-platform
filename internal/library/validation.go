@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/text/unicode/norm"
 	"siplatform/internal/packs"
+	"siplatform/internal/playpack"
 	"siplatform/internal/siq"
 )
 
@@ -135,5 +136,6 @@ func prepare(ctx context.Context, in Save) (Draft, error) {
 			seenIssues[issue] = true
 		}
 	}
+	d.PlayIssues = playpack.Validate(d.Document)
 	return d, nil
 }

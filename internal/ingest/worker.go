@@ -48,6 +48,17 @@ func pause(ctx context.Context, d time.Duration) bool {
 	}
 }
 func (s *Service) run() {
+	for s.ctx.Err() == nil {
+		s.runLease()
+		if !pause(s.ctx, 250*time.Millisecond) {
+			return
+		}
+	}
+}
+
+// Each lease lifetime owns a worker/cleanup group. Its deferred cancellation and
+// join finish before the supervisor may reacquire and advance the fencing epoch.
+func (s *Service) runLease() {
 	var conn *pgx.Conn
 	for s.ctx.Err() == nil {
 		candidate, err := pgx.ConnectConfig(s.ctx, s.pool.Config().ConnConfig.Copy())

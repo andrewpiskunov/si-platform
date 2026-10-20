@@ -191,7 +191,7 @@ small,
   display: flex;
   align-items: center;
   gap: 64px;
-  border-bottom: 1px solid #263246;
+  border-bottom: 1px solid var(--line);
 }
 .brand {
   display: flex;
@@ -248,7 +248,7 @@ small,
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #2c3951;
+  background: var(--surface-2);
   display: grid;
   place-items: center;
   font-weight: 700;
@@ -471,7 +471,7 @@ small,
   padding: 28px 0;
   display: flex;
   justify-content: space-between;
-  border-top: 1px solid #263246;
+  border-top: 1px solid var(--line);
   font-size: 12px;
   gap: 20px;
   color: var(--muted);
@@ -621,20 +621,20 @@ small,
   margin-top: 18px;
   text-align: center;
 }
-.room {
+.app-shell {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+.app-shell[data-theme='classic'] {
   --bg: #111b30;
   --surface: #1c2a43;
   --surface-2: #263955;
   --line: #3c5274;
   --accent: #efbc6e;
   --accent-text: #211c16;
-  background: var(--bg);
-  color: var(--text);
-  border-radius: 18px;
-  padding: 32px;
-  margin-top: 28px;
 }
-.room[data-theme='pirate'] {
+.app-shell[data-theme='pirate'] {
   --bg: #102a29;
   --surface: #183e3a;
   --surface-2: #23514a;
@@ -644,7 +644,7 @@ small,
   --muted: #b6cec4;
   --text: #f3eee3;
 }
-.room[data-theme='anime'] {
+.app-shell[data-theme='anime'] {
   --bg: #291d38;
   --surface: #382748;
   --surface-2: #4e355e;
@@ -653,6 +653,13 @@ small,
   --accent-text: #301e39;
   --muted: #d0bada;
   --text: #fff0fd;
+}
+.room {
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 18px;
+  padding: 32px;
+  margin-top: 28px;
 }
 .room-grid {
   display: grid;

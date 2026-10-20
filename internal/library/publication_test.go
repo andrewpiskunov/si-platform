@@ -305,3 +305,221 @@ func TestImporterIdempotencyAndPersistentIssues(t *testing.T) {
 		t.Fatal("persistent diagnostics", d)
 	}
 }
+
+// Head revision status cannot describe a prior publication or pending review;
+// live pointers must survive editing and disappear after withdrawal.
+func TestCardsTrackPublishedAndPendingRevisionsAcrossEdits(t *testing.T) {
+	s, p := setup(t)
+	owner := identity(t, p, "owner", "author", "session")
+	mod := identity(t, p, "moderator", "moderator", "session")
+	first := create(t, s, owner, "First")
+	assertPointers := func(card Card, published, pending int) {
+		t.Helper()
+		if card.PublishedRevision != published || card.PendingRevision != pending {
+			t.Fatalf("revision %d pointers published=%d pending=%d, want %d/%d", card.Revision, card.PublishedRevision, card.PendingRevision, published, pending)
+		}
+	}
+	assertPointers(first.Card, 0, 0)
+	pending, err := s.Submit(ctx, owner, first.Card.ID, 1, rights(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertPointers(pending, 0, 1)
+	second, err := s.UpdateDocument(ctx, owner, first.Card.ID, 1, document("Second"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertPointers(second.Card, 0, 1)
+	approved, err := s.Decide(ctx, mod, first.Card.ID, 1, "approve", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertPointers(approved, 1, 0)
+	third, err := s.UpdateDocument(ctx, owner, first.Card.ID, 2, document("Third"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertPointers(third.Card, 1, 0)
+	pending, err = s.Submit(ctx, owner, first.Card.ID, 2, rights(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertPointers(pending, 1, 2)
+	fourth, err := s.UpdateDocument(ctx, owner, first.Card.ID, 3, document("Fourth"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertPointers(fourth.Card, 1, 2)
+	mine, err := s.Mine(ctx, owner)
+	if err != nil || len(mine) != 1 {
+		t.Fatal(mine, err)
+	}
+	assertPointers(mine[0], 1, 2)
+	public, err := s.Public(ctx, first.Card.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertPointers(public, 1, 2)
+	queue, err := s.Queue(ctx, mod)
+	if err != nil || len(queue) != 1 {
+		t.Fatal(queue, err)
+	}
+	assertPointers(queue[0], 1, 2)
+	data, err := json.Marshal(fourth.Card)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"published_revision":1`) || !strings.Contains(string(data), `"pending_revision":2`) {
+		t.Fatal("missing JSON publication pointers", string(data))
+	}
+	if err = s.Withdraw(ctx, owner, first.Card.ID); err != nil {
+		t.Fatal(err)
+	}
+	current, err := s.Get(ctx, owner, first.Card.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertPointers(current.Card, 0, 0)
+	history, err := s.History(ctx, owner, first.Card.ID)
+	if err != nil || len(history) != 4 {
+		t.Fatal(history, err)
+	}
+	for _, card := range history {
+		assertPointers(card, 0, 0)
+	}
+}
+
+// Private file access needs scopes and live block checks even when an imported
+// draft is unplayable; editor diagnostics remain readable after blocking.
+func TestForFileScopesDiagnosticsAndBlocking(t *testing.T) {
+	s, p := setup(t)
+	owner := identity(t, p, "owner", "author", "session")
+	mod := identity(t, p, "moderator", "moderator", "session")
+	other := identity(t, p, "other", "author", "session")
+	read := credential(t, p, "owner", "api", "drafts:read")
+	export := credential(t, p, "owner", "api", "drafts:export")
+	write := credential(t, p, "owner", "api", "drafts:write")
+	revoked := credential(t, p, "owner", "api", "drafts:read", "drafts:export")
+	asset := Asset{Name: "Images/a.png", Key: strings.Repeat("a", 64), ContentType: "image/png", Size: 10}
+	first, err := s.Create(ctx, owner, Save{Document: document("File source"), Assets: []Asset{asset}, OriginalKey: strings.Repeat("b", 64)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	publish(t, s, owner, mod, first, true)
+	broken := document("Diagnostic draft")
+	broken.Rounds[0].Themes[0].Questions[0].Right = nil
+	current, err := s.UpdateDocument(ctx, owner, first.Card.ID, 1, broken)
+	if err != nil || packs.Playable(current.Issues) {
+		t.Fatal(current, err)
+	}
+	for _, actor := range []accounts.Identity{owner, mod} {
+		for _, original := range []bool{false, true} {
+			file, err := s.ForFile(ctx, actor, first.Card.ID, 0, original)
+			if err != nil || file.Card.Revision != 2 || file.OriginalKey != strings.Repeat("b", 64) || len(file.Assets) != 1 {
+				t.Fatal("diagnostic files unavailable", actor.User.ID, original, file, err)
+			}
+		}
+	}
+	if _, err = s.ForFile(ctx, read, first.Card.ID, 2, false); err != nil {
+		t.Fatal("asset read scope", err)
+	}
+	if _, err = s.ForFile(ctx, export, first.Card.ID, 2, true); err != nil {
+		t.Fatal("original export scope", err)
+	}
+	for _, tc := range []struct {
+		actor    accounts.Identity
+		original bool
+	}{{read, true}, {export, false}, {write, false}, {write, true}} {
+		if _, err := s.ForFile(ctx, tc.actor, first.Card.ID, 2, tc.original); !errors.Is(err, ErrForbidden) {
+			t.Fatal("wrong file scope accepted", tc.original, err)
+		}
+	}
+	for _, original := range []bool{false, true} {
+		if _, err = s.ForFile(ctx, other, first.Card.ID, 2, original); !errors.Is(err, ErrNotFound) {
+			t.Fatal("foreign file access", err)
+		}
+		if _, err = s.ForFile(ctx, accounts.Identity{}, first.Card.ID, 2, original); !errors.Is(err, ErrUnauthorized) {
+			t.Fatal("anonymous file access", err)
+		}
+	}
+	if _, err = p.Exec(ctx, "UPDATE account_credentials SET revoked_at=now() WHERE id=$1", revoked.SessionID); err != nil {
+		t.Fatal(err)
+	}
+	for _, original := range []bool{false, true} {
+		if _, err = s.ForFile(ctx, revoked, first.Card.ID, 2, original); !errors.Is(err, ErrUnauthorized) {
+			t.Fatal("revoked file access", original, err)
+		}
+	}
+	if _, err = s.Decide(ctx, mod, first.Card.ID, 1, "block", "Verified issue"); err != nil {
+		t.Fatal(err)
+	}
+	for _, actor := range []accounts.Identity{owner, mod} {
+		for _, original := range []bool{false, true} {
+			if _, err = s.ForFile(ctx, actor, first.Card.ID, 2, original); !errors.Is(err, ErrBlocked) {
+				t.Fatal("blocked file access", actor.User.ID, original, err)
+			}
+		}
+	}
+	if _, err = s.ForFile(ctx, read, first.Card.ID, 2, false); !errors.Is(err, ErrBlocked) {
+		t.Fatal("blocked asset scope", err)
+	}
+	if _, err = s.ForFile(ctx, export, first.Card.ID, 2, true); !errors.Is(err, ErrBlocked) {
+		t.Fatal("blocked original scope", err)
+	}
+	for _, actor := range []accounts.Identity{owner, mod} {
+		if _, err = s.Get(ctx, actor, first.Card.ID, 0); err != nil {
+			t.Fatal("blocked editor diagnostics inaccessible", actor.User.ID, err)
+		}
+	}
+}
+
+// Engine limitations must prevent room creation without prohibiting otherwise
+// valid SIQ publication, download, or inspecting an already pinned revision.
+func TestPlayCompatibilityIsSeparateFromSIQValidity(t *testing.T) {
+	s, p := setup(t)
+	owner := identity(t, p, "owner", "author", "session")
+	mod := identity(t, p, "moderator", "moderator", "session")
+	other := identity(t, p, "other", "author", "session")
+	zero := document("Zero price")
+	zero.Rounds[0].Themes[0].Questions[0].Price = 0
+	first, err := s.Create(ctx, owner, Save{Document: zero})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first.PlayIssues) == 0 || packs.Playable(first.PlayIssues) || !packs.Playable(first.Issues) {
+		t.Fatal("play and SIQ diagnostics mixed or absent", first.PlayIssues, first.Issues)
+	}
+	if _, err = s.ForPlay(ctx, owner, first.Card.ID, 1); !errors.Is(err, ErrInvalid) {
+		t.Fatal("unsupported owner room allowed", err)
+	}
+	if _, err = s.ForDownload(ctx, owner, first.Card.ID, 1); err != nil {
+		t.Fatal("valid SIQ export blocked", err)
+	}
+	publish(t, s, owner, mod, first, true)
+	if _, err = s.ForPlay(ctx, other, first.Card.ID, 0); !errors.Is(err, ErrInvalid) {
+		t.Fatal("unsupported public room allowed", err)
+	}
+	download, err := s.ForDownload(ctx, accounts.Identity{}, first.Card.ID, 0)
+	if err != nil || !packs.Playable(download.Issues) {
+		t.Fatal("valid public SIQ export blocked", download, err)
+	}
+	pinned, err := s.Pinned(ctx, first.Card.ID, 1)
+	if err != nil || len(pinned.PlayIssues) == 0 {
+		t.Fatal("pinned inspection lost compatibility diagnostics", pinned, err)
+	}
+	loaded, err := s.Get(ctx, owner, first.Card.ID, 1)
+	if err != nil || len(loaded.PlayIssues) == 0 {
+		t.Fatal("stored revision lost derived play diagnostics", loaded, err)
+	}
+	data, err := json.Marshal(loaded)
+	if err != nil || !strings.Contains(string(data), `"play_issues"`) {
+		t.Fatal("missing play diagnostics JSON", string(data), err)
+	}
+	fixed, err := s.UpdateDocument(ctx, owner, first.Card.ID, 1, document("Supported"))
+	if err != nil || len(fixed.PlayIssues) != 0 {
+		t.Fatal("play diagnostics not recomputed", fixed, err)
+	}
+	if _, err = s.ForPlay(ctx, owner, first.Card.ID, 2); err != nil {
+		t.Fatal("supported room rejected", err)
+	}
+}

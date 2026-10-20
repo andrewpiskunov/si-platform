@@ -21,6 +21,8 @@ export interface Card {
   language: string;
   restriction: string;
   revision: number;
+  published_revision: number;
+  pending_revision: number;
   difficulty: number;
   question_count: number;
   round_count: number;
@@ -109,6 +111,7 @@ export interface Draft {
   assets: { name: string; key: string; content_type: string; size: number }[];
   original_key: string;
   issues: Issue[] | null;
+  play_issues: Issue[] | null;
 }
 export interface Credentials {
   room_id: string;

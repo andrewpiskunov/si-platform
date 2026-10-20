@@ -31,25 +31,28 @@ type Rights struct {
 	Confirmed     bool   `json:"confirmed"`
 }
 type Card struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	OwnerID       string    `json:"owner_id"`
-	Author        string    `json:"author"`
-	Status        string    `json:"status"`
-	Language      string    `json:"language"`
-	Restriction   string    `json:"restriction"`
-	Revision      int       `json:"revision"`
-	Difficulty    int       `json:"difficulty"`
-	QuestionCount int       `json:"question_count"`
-	RoundCount    int       `json:"round_count"`
-	SizeBytes     int64     `json:"size_bytes"`
-	HasMedia      bool      `json:"has_media"`
-	AllowDownload bool      `json:"allow_download"`
-	Tags          []string  `json:"tags"`
-	Rights        Rights    `json:"rights"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	PublishedRevision int       `json:"published_revision"`
+	PendingRevision   int       `json:"pending_revision"`
+	ID                string    `json:"id"`
+	Name              string    `json:"name"`
+	OwnerID           string    `json:"owner_id"`
+	Author            string    `json:"author"`
+	Status            string    `json:"status"`
+	Language          string    `json:"language"`
+	Restriction       string    `json:"restriction"`
+	Revision          int       `json:"revision"`
+	Difficulty        int       `json:"difficulty"`
+	QuestionCount     int       `json:"question_count"`
+	RoundCount        int       `json:"round_count"`
+	SizeBytes         int64     `json:"size_bytes"`
+	HasMedia          bool      `json:"has_media"`
+	AllowDownload     bool      `json:"allow_download"`
+	Tags              []string  `json:"tags"`
+	Rights            Rights    `json:"rights"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 type Draft struct {
+	PlayIssues  []packs.Issue  `json:"play_issues"`
 	AssetIssues []packs.Issue  `json:"asset_issues,omitempty"`
 	Card        Card           `json:"card"`
 	Document    packs.Document `json:"document"`

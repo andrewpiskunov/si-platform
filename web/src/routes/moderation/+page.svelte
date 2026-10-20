@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api, errorText } from '#lib/api.ts';
   import type { Card, Report, Draft } from '#lib/types.ts';
+  import { normalizeDraft } from '#lib/draft-model.ts';
   let queue = $state<Card[]>([]),
     reports = $state<Report[]>([]),
     error = $state(''),
@@ -45,7 +46,7 @@
   }
   async function inspect(id: string, revision: number) {
     try {
-      preview = await api<Draft>(`/drafts/${id}?revision=${revision}`);
+      preview = normalizeDraft(await api<Draft>(`/drafts/${id}?revision=${revision}`));
     } catch (e) {
       error = errorText(e);
     }

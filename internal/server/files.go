@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"slices"
 	"strconv"
 	"time"
 
@@ -84,11 +83,7 @@ func (s *Server) originalDraft(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if a.APIToken && !slices.Contains(a.Scopes, "drafts:export") {
-		appError(w, library.ErrForbidden)
-		return
-	}
-	d, e := s.options.Library.Get(r.Context(), a, chi.URLParam(r, "id"), 0)
+	d, e := s.options.Library.ForFile(r.Context(), a, chi.URLParam(r, "id"), 0, true)
 	if e != nil {
 		appError(w, e)
 		return
@@ -109,7 +104,7 @@ func (s *Server) draftAsset(w http.ResponseWriter, r *http.Request) {
 		appError(w, e)
 		return
 	}
-	d, e := s.options.Library.Get(r.Context(), a, chi.URLParam(r, "id"), rev)
+	d, e := s.options.Library.ForFile(r.Context(), a, chi.URLParam(r, "id"), rev, false)
 	if e != nil {
 		appError(w, e)
 		return

@@ -3,7 +3,11 @@
   import { api, errorText } from './api';
   import { user } from './session';
   import type { Credentials } from './types';
-  let { packId = '', revision = 0 }: { packId?: string; revision?: number } = $props();
+  let {
+    packId = '',
+    revision = 0,
+    disabled = false
+  }: { packId?: string; revision?: number; disabled?: boolean } = $props();
   let host = $state(''),
     title = $state(''),
     theme = $state('classic'),
@@ -11,6 +15,7 @@
     error = $state('');
   async function create(event: SubmitEvent) {
     event.preventDefault();
+    if (disabled) return;
     busy = true;
     error = '';
     try {
@@ -72,6 +77,6 @@
   </fieldset>
   {#if error}<div class="notice error" role="alert">{error}</div>{/if}{#if $user}<button
       class="primary"
-      disabled={busy}>{busy ? 'Создаём комнату…' : 'Создать комнату →'}</button
+      disabled={busy || disabled}>{busy ? 'Создаём комнату…' : 'Создать комнату →'}</button
     >{:else}<a class="button primary" href="/login">Войти и создать комнату</a>{/if}
 </form>

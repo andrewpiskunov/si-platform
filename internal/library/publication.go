@@ -153,7 +153,14 @@ func (s *Service) ForPlay(ctx context.Context, actor accounts.Identity, packID s
 	if actor.User.ID == "" {
 		return Draft{}, ErrUnauthorized
 	}
-	return s.available(ctx, actor, packID, revision, false, false)
+	d, err := s.available(ctx, actor, packID, revision, false, false)
+	if err != nil {
+		return Draft{}, err
+	}
+	if !packs.Playable(d.PlayIssues) {
+		return Draft{}, ErrInvalid
+	}
+	return d, nil
 }
 func (s *Service) ForDownload(ctx context.Context, actor accounts.Identity, packID string, revision int) (Draft, error) {
 	return s.available(ctx, actor, packID, revision, true, false)

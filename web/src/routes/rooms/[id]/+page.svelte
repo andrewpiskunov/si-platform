@@ -1,9 +1,11 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, getContext } from 'svelte';
   import { page } from '$app/state';
   import { api, APIError, errorText } from '#lib/api.ts';
   import { RoomConnection, type RoomState } from '#lib/room-client.ts';
   import type { Board, Credentials } from '#lib/types.ts';
+  import { roomThemeContext, type RoomTheme } from '#lib/room-theme.ts';
+  const roomTheme = getContext<RoomTheme>(roomThemeContext);
   let credentials = $state<Credentials | null>(null),
     roomState = $state<RoomState | null>(null),
     board = $state<Board | null>(null),
@@ -48,6 +50,7 @@
   };
   onMount(() => {
     roomID = page.params.id || '';
+    roomTheme.select('classic');
     invite = new URLSearchParams(location.hash.slice(1)).get('invite') || '';
     try {
       const value = sessionStorage.getItem(`room:${roomID}`);
@@ -63,6 +66,7 @@
     return () => {
       alive = false;
       connection?.close();
+      roomTheme.reset();
     };
   });
   function connect() {
@@ -93,6 +97,7 @@
       );
       if (alive) {
         board = result;
+        roomTheme.select(result.theme);
         if (roundIndex >= result.rounds.length) roundIndex = 0;
       }
     } catch (e) {
@@ -221,7 +226,7 @@
           disabled={joining || !invite}>{joining ? 'Подключаемся…' : 'Войти в комнату →'}</button
         >
       </form>
-    </div>{:else}<div class="room" data-theme={board?.theme || 'classic'}>
+    </div>{:else}<div class="room">
       <div class="row between">
         <div>
           <p class="eyebrow">{board?.pack_name || 'Своя игра'}</p>

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"siplatform/internal/accounts"
 	"siplatform/internal/packs"
+	"siplatform/internal/playpack"
 )
 
 type Service struct{ pool *pgxpool.Pool }
@@ -142,7 +143,7 @@ func (a *access) reader() error {
 	return nil
 }
 
-const cardColumns = "r.card,r.status,r.rights,r.updated_at,p.blocked"
+const cardColumns = "r.card,r.status,r.rights,r.updated_at,p.blocked,COALESCE(p.published_revision,0),COALESCE(p.pending_revision,0)"
 
 type scanner interface{ Scan(...any) error }
 
@@ -151,7 +152,8 @@ func scanCard(row scanner) (Card, error) {
 	var metadata, rights []byte
 	var status string
 	var blocked bool
-	err := row.Scan(&metadata, &status, &rights, &card.UpdatedAt, &blocked)
+	var published, pending int
+	err := row.Scan(&metadata, &status, &rights, &card.UpdatedAt, &blocked, &published, &pending)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return card, ErrNotFound
 	}
@@ -166,6 +168,8 @@ func scanCard(row scanner) (Card, error) {
 		return card, err
 	}
 	card.Status = status
+	card.PublishedRevision = published
+	card.PendingRevision = pending
 	card.UpdatedAt = updated
 	card.AllowDownload = card.Rights.AllowDownload
 	if blocked {
@@ -196,6 +200,7 @@ func load(ctx context.Context, tx pgx.Tx, packID string, revision int) (Draft, e
 			return d, err
 		}
 	}
+	d.PlayIssues = playpack.Validate(d.Document)
 	return d, nil
 }
 func listCards(ctx context.Context, tx pgx.Tx, query string, args ...any) ([]Card, error) {
@@ -436,3 +441,30 @@ func (s *Service) Delete(ctx context.Context, actor accounts.Identity, packID st
 
 // Keep error wrapping descriptive for internal failures while sentinel checks remain stable.
 func invalid(what string) error { return fmt.Errorf("%w: %s", ErrInvalid, what) }
+
+// ForFile authorizes private asset or original-archive access independently of
+// SIQ validity. Blocking stops file delivery while Get keeps diagnostics readable.
+func (s *Service) ForFile(ctx context.Context, actor accounts.Identity, packID string, revision int, original bool) (Draft, error) {
+	scope := "drafts:read"
+	if original {
+		scope = "drafts:export"
+	}
+	a, err := s.begin(ctx, actor, scope, false, packID)
+	if err != nil {
+		return Draft{}, err
+	}
+	defer a.close()
+	if err = a.reader(); err != nil {
+		return Draft{}, err
+	}
+	if a.pack.blocked {
+		return Draft{}, ErrBlocked
+	}
+	if revision < 0 {
+		return Draft{}, ErrInvalid
+	}
+	if revision == 0 {
+		revision = a.pack.current
+	}
+	return load(ctx, a.tx, packID, revision)
+}

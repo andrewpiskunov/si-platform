@@ -4,6 +4,7 @@
   import { page } from '$app/state';
   import { api, APIError, errorText, statusText } from '#lib/api.ts';
   import { DraftEditor } from '#lib/draft-editor.ts';
+  import { normalizeDraft, canWithdraw, canPlayDraft } from '#lib/draft-model.ts';
   import QuestionEditor from '#lib/QuestionEditor.svelte';
   import QuestionPreview from '#lib/QuestionPreview.svelte';
   import CreateRoom from '#lib/CreateRoom.svelte';
@@ -70,7 +71,7 @@
   }
   async function load() {
     try {
-      draft = await api<Draft>(`/drafts/${loadedID}`);
+      draft = normalizeDraft(await api<Draft>(`/drafts/${loadedID}`));
       editor = new DraftEditor(draft.document, draft.card.revision);
       rights = { ...rights, ...draft.card.rights, confirmed: false };
       sync();
@@ -111,10 +112,12 @@
     saveLabel = 'Сохраняем…';
     error = '';
     try {
-      const result = await api<Draft>(`/drafts/${loadedID}`, 'PUT', {
-        base_revision: request.base_revision,
-        document: request.document
-      });
+      const result = normalizeDraft(
+        await api<Draft>(`/drafts/${loadedID}`, 'PUT', {
+          base_revision: request.base_revision,
+          document: request.document
+        })
+      );
       editor.saved(request, result.document, result.card.revision);
       draft = result;
       saveLabel = 'Все изменения сохранены';
@@ -196,7 +199,7 @@
   async function restore(version: number) {
     busy = true;
     try {
-      const prior = await api<Draft>(`/drafts/${loadedID}?revision=${version}`);
+      const prior = normalizeDraft(await api<Draft>(`/drafts/${loadedID}?revision=${version}`));
       editor?.edit(prior.document);
       sync();
       schedule();
@@ -209,7 +212,7 @@
   async function resolveConflict(keep: boolean) {
     busy = true;
     try {
-      const latest = await api<Draft>(`/drafts/${loadedID}`);
+      const latest = normalizeDraft(await api<Draft>(`/drafts/${loadedID}`));
       if (keep) {
         editor?.rebase(latest.card.revision);
         sync();
@@ -250,7 +253,18 @@
     busy = true;
     try {
       await api(`/drafts/${loadedID}/withdraw`, 'POST');
-      if (draft) draft = { ...draft, card: { ...draft.card, status: 'withdrawn' } };
+      if (draft)
+        draft = {
+          ...draft,
+          card: {
+            ...draft.card,
+            status: ['published', 'pending'].includes(draft.card.status)
+              ? 'withdrawn'
+              : draft.card.status,
+            published_revision: 0,
+            pending_revision: 0
+          }
+        };
       published = 'Публикация снята.';
     } catch (e) {
       error = errorText(e);
@@ -505,6 +519,18 @@
             </ul>
             <p class="helper">Проверка обновится после сохранения.</p>
           </details>{/if}
+        {#if draft.play_issues?.length}<details open>
+            <summary>Готовность к игре · {draft.play_issues.length}</summary>
+            <p class="helper">
+              Исправьте ошибки ниже, чтобы начать игру. Эта проверка относится только к игре.
+            </p>
+            <ul class="issues">
+              {#each draft.play_issues as issue}<li>
+                  <strong>{issue.severity === 'error' ? 'Ошибка' : 'Замечание'}:</strong>
+                  {issue.message} <span class="helper">({issue.path})</span>
+                </li>{/each}
+            </ul>
+          </details>{/if}
         <details>
           <summary>История версий</summary>
           <div class="list scroll-list">
@@ -555,17 +581,19 @@
               имею право публиковать вопросы и все материалы этого пакета.</label
             ><button class="primary" disabled={busy || saving || conflict || !rights.confirmed}
               >Отправить на проверку</button
-            >{#if ['published', 'pending'].includes(draft.card.status)}<button
-                type="button"
-                onclick={withdraw}
-                disabled={busy}>Снять публикацию</button
+            >{#if canWithdraw(draft.card)}<button type="button" onclick={withdraw} disabled={busy}
+                >Снять публикацию</button
               >{/if}{#if published}<div class="notice success" role="status">{published}</div>{/if}
           </form>
         </details>
         <details>
           <summary>Сыграть в этот пакет</summary>{#if dirty || saving}<p class="notice">
               Сначала сохраните изменения.
-            </p>{:else}<CreateRoom packId={draft.card.id} {revision} />{/if}
+            </p>{:else}<CreateRoom
+              packId={draft.card.id}
+              {revision}
+              disabled={!canPlayDraft(draft)}
+            />{/if}
         </details>
         <details>
           <summary>Файлы и управление</summary>
