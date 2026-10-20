@@ -31,7 +31,7 @@ func Write(ctx context.Context, output io.Writer, doc packs.Document, assets []A
 	var total int64
 	for i := range normalized {
 		a := &normalized[i]
-		key, err := canonicalName(a.Name)
+		key, err := entryName(a.Name)
 		if err != nil {
 			return err
 		}
@@ -157,6 +157,16 @@ func encodeDocument(ctx context.Context, d packs.Document) (*node, error) {
 		attr(root, "difficulty", strconv.Itoa(d.Difficulty))
 	}
 	root.children = append(root.children, infoNode(d.Info))
+	if len(d.Files) > 0 {
+		files := element("files")
+		for _, f := range d.Files {
+			n := element("file")
+			n.attrs["name"] = f.Name
+			n.attrs["hash"] = f.Hash
+			files.children = append(files.children, n)
+		}
+		root.children = append(root.children, files)
+	}
 	if len(d.Tags) > 0 {
 		tags := element("tags")
 		for _, t := range d.Tags {
@@ -176,7 +186,9 @@ func encodeDocument(ctx context.Context, d packs.Document) (*node, error) {
 		if !packs.Playable(issues) || len(n.children) != 1 || n.children[0].name != "global" {
 			return nil, errors.New("invalid global metadata")
 		}
-		root.children = append(root.children, n.children[0])
+		if len(n.children[0].children) > 0 {
+			root.children = append(root.children, n.children[0])
+		}
 	}
 	rounds := element("rounds")
 	root.children = append(root.children, rounds)

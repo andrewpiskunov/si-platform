@@ -51,7 +51,7 @@ func Read(ctx context.Context, input io.ReaderAt, size int64, limits Limits) (*A
 	if size < 22 || size > limits.ArchiveBytes {
 		return nil, errors.New("archive size limit exceeded")
 	}
-	if err := preflight(input, size, limits); err != nil {
+	if err := preflight(ctx, input, size, limits); err != nil {
 		return nil, err
 	}
 	zr, err := zip.NewReader(input, size)
@@ -66,7 +66,7 @@ func Read(ctx context.Context, input io.ReaderAt, size int64, limits Limits) (*A
 	var content *zip.File
 	out := &Archive{}
 	for _, f := range zr.File {
-		key, err := canonicalName(f.Name)
+		key, err := entryName(f.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -80,10 +80,6 @@ func Read(ctx context.Context, input io.ReaderAt, size int64, limits Limits) (*A
 		}
 		if mode.IsDir() {
 			continue
-		}
-		switch strings.ToLower(path.Ext(key)) {
-		case ".zip", ".siq", ".7z", ".rar", ".tar", ".gz":
-			return nil, errors.New("nested archives are not accepted")
 		}
 		if f.Flags&1 != 0 {
 			return nil, errors.New("encrypted archive is not accepted")
@@ -184,9 +180,12 @@ func canonicalName(name string) (string, error) {
 	}
 	return strings.ToLower(norm.NFC.String(decoded)), nil
 }
-func preflight(input io.ReaderAt, size int64, limits Limits) error {
+func preflight(ctx context.Context, input io.ReaderAt, size int64, limits Limits) error {
 	tail := make([]byte, min(size, 65557))
 	if _, err := input.ReadAt(tail, size-int64(len(tail))); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	at := -1
@@ -212,10 +211,48 @@ func preflight(input io.ReaderAt, size int64, limits Limits) error {
 	if int(count) > limits.Files || directoryBytes > 8<<20 {
 		return errors.New("ZIP directory limit exceeded")
 	}
-	if uint64(offset)+uint64(directoryBytes) > uint64(size-int64(len(tail))+int64(at)) {
+	directoryEnd := int64(offset) + int64(directoryBytes)
+	if directoryEnd != size-int64(len(tail))+int64(at) {
 		return errors.New("invalid ZIP directory bounds")
 	}
-	return nil
+	// Do not trust EOCD hints: archive/zip scans actual headers and can allocate
+	// far beyond forged counts. Validate bounded records before invoking it.
+	cursor := int64(offset)
+	actual := 0
+	header := make([]byte, 46)
+	for cursor < directoryEnd {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		actual++
+		if actual > limits.Files || directoryEnd-cursor < 46 {
+			return errors.New("ZIP directory count/record limit exceeded")
+		}
+		if _, err := input.ReadAt(header, cursor); err != nil {
+			return err
+		}
+		if binary.LittleEndian.Uint32(header) != 0x02014b50 {
+			return errors.New("invalid ZIP central record")
+		}
+		compressed := binary.LittleEndian.Uint32(header[20:])
+		unpacked := binary.LittleEndian.Uint32(header[24:])
+		localOffset := binary.LittleEndian.Uint32(header[42:])
+		if compressed == 0xffffffff || unpacked == 0xffffffff || localOffset == 0xffffffff || binary.LittleEndian.Uint16(header[34:]) != 0 {
+			return errors.New("ZIP64/multi-volume entry is not supported")
+		}
+		if int64(localOffset)+30 > int64(offset) {
+			return errors.New("invalid ZIP local record offset")
+		}
+		recordBytes := int64(46) + int64(binary.LittleEndian.Uint16(header[28:])) + int64(binary.LittleEndian.Uint16(header[30:])) + int64(binary.LittleEndian.Uint16(header[32:]))
+		if recordBytes > directoryEnd-cursor {
+			return errors.New("ZIP directory record exceeds bounds")
+		}
+		cursor += recordBytes
+	}
+	if actual != int(count) {
+		return errors.New("ZIP directory count differs from declaration")
+	}
+	return ctx.Err()
 }
 
 type contextReader struct {
@@ -228,4 +265,17 @@ func (r contextReader) Read(b []byte) (int, error) {
 		return 0, err
 	}
 	return r.reader.Read(b)
+}
+
+// entryName is shared by import and export so authoring cannot emit a rejected archive.
+func entryName(name string) (string, error) {
+	key, err := canonicalName(name)
+	if err != nil {
+		return "", err
+	}
+	switch strings.ToLower(path.Ext(key)) {
+	case ".zip", ".siq", ".7z", ".rar", ".tar", ".gz":
+		return "", errors.New("nested archives are not accepted")
+	}
+	return key, nil
 }

@@ -1,24 +1,30 @@
 // Package packs defines the private, editable quiz model shared by SIQ, authoring and game services.
 package packs
 
+type FileHash struct {
+	Name string `json:"name"`
+	Hash string `json:"hash"`
+}
+
 type Document struct {
-	ID            string   `json:"id"`
-	Name          string   `json:"name"`
-	Version       string   `json:"version"`
-	SourceVersion string   `json:"source_version,omitempty"`
-	Date          string   `json:"date,omitempty"`
-	Publisher     string   `json:"publisher,omitempty"`
-	Language      string   `json:"language,omitempty"`
-	Restriction   string   `json:"restriction,omitempty"`
-	Difficulty    int      `json:"difficulty,omitempty"`
-	Logo          string   `json:"logo,omitempty"`
-	ContactURI    string   `json:"contact_uri,omitempty"`
-	Generator     string   `json:"generator,omitempty"`
-	Tags          []string `json:"tags,omitempty"`
-	Info          Info     `json:"info"`
-	GlobalXML     string   `json:"global_xml,omitempty"`
-	Rounds        []Round  `json:"rounds"`
-	ImportIssues  []Issue  `json:"import_issues,omitempty"`
+	Files         []FileHash `json:"files,omitempty"`
+	ID            string     `json:"id"`
+	Name          string     `json:"name"`
+	Version       string     `json:"version"`
+	SourceVersion string     `json:"source_version,omitempty"`
+	Date          string     `json:"date,omitempty"`
+	Publisher     string     `json:"publisher,omitempty"`
+	Language      string     `json:"language,omitempty"`
+	Restriction   string     `json:"restriction,omitempty"`
+	Difficulty    int        `json:"difficulty,omitempty"`
+	Logo          string     `json:"logo,omitempty"`
+	ContactURI    string     `json:"contact_uri,omitempty"`
+	Generator     string     `json:"generator,omitempty"`
+	Tags          []string   `json:"tags,omitempty"`
+	Info          Info       `json:"info"`
+	GlobalXML     string     `json:"global_xml,omitempty"`
+	Rounds        []Round    `json:"rounds"`
+	ImportIssues  []Issue    `json:"import_issues,omitempty"`
 }
 type Info struct {
 	Authors         []string `json:"authors,omitempty"`

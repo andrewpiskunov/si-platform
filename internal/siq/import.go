@@ -32,8 +32,11 @@ func parseXML(ctx context.Context, data []byte, l Limits) (packs.Document, error
 	for _, n := range root.child("tags").childrenNamed("tag") {
 		d.Tags = append(d.Tags, n.value())
 	}
-	if root.present("global") {
+	if root.present("global") && len(root.child("global").children) > 0 {
 		d.GlobalXML = nodeXML(root.child("global"))
+	}
+	for _, f := range root.child("files").childrenNamed("file") {
+		d.Files = append(d.Files, packs.FileHash{Name: f.attrs["name"], Hash: f.attrs["hash"]})
 	}
 	for ri, rn := range root.child("rounds").childrenNamed("round") {
 		r := packs.Round{ID: fmt.Sprintf("r%d", ri+1), Name: rn.attrs["name"], Type: rn.attrs["type"], Info: parseInfo(rn.child("info"))}
@@ -94,7 +97,10 @@ func parseQuestion(n *node, id string) (packs.Question, error) {
 	return q, nil
 }
 func parseParameter(n *node) (packs.Parameter, error) {
-	p := packs.Parameter{Name: n.attrs["name"], Type: n.attrs["type"], Value: strings.TrimSpace(n.value())}
+	p := packs.Parameter{Name: n.attrs["name"], Type: n.attrs["type"], Value: n.value()}
+	if len(n.children) > 0 && strings.TrimSpace(p.Value) == "" {
+		p.Value = ""
+	}
 	for _, c := range n.childrenNamed("item") {
 		item := packs.Content{Type: c.attrs["type"], Value: c.value(), Placement: c.attrs["placement"]}
 		if item.Type == "" {
@@ -230,6 +236,8 @@ func upgradeLegacy(q *packs.Question, n *node) error {
 	}
 	q.Type = kind
 	switch kind {
+	case "simple":
+		q.Type = ""
 	case "auction":
 		q.Type = "stake"
 	case "sponsored":
@@ -291,7 +299,11 @@ func upgradeLegacy(q *packs.Question, n *node) error {
 			item.IsRef = true
 			item.Value = strings.TrimPrefix(item.Value, "@")
 		}
-		if ts := atom.attrs["time"]; ts != "" && ts != "-1" {
+		ts := atom.attrs["time"]
+		if ts == "" {
+			ts = "0"
+		}
+		if ts != "-1" {
 			v, err := strconv.ParseFloat(ts, 64)
 			if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || v < 0 || v > 600 {
 				return fmt.Errorf("invalid legacy content duration")
@@ -313,6 +325,16 @@ func mediaIssues(doc packs.Document, assets []Asset) []packs.Issue {
 		available[a.Key] = true
 	}
 	var issues []packs.Issue
+	if doc.Logo != "" {
+		if !strings.HasPrefix(doc.Logo, "@") {
+			issues = append(issues, packs.Issue{Severity: "error", Code: "external_media", Path: "logo", Message: "Логотип должен ссылаться на локальное изображение"})
+		} else {
+			key, err := canonicalName("Images/" + strings.TrimPrefix(doc.Logo, "@"))
+			if err != nil || !available[key] {
+				issues = append(issues, packs.Issue{Severity: "error", Code: "missing_media", Path: "logo", Message: "Файл логотипа отсутствует"})
+			}
+		}
+	}
 	var check func(packs.Parameter, string)
 	check = func(p packs.Parameter, prefix string) {
 		for i, c := range p.Items {

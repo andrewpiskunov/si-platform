@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"siplatform/internal/packs"
@@ -83,6 +84,9 @@ func readXML(ctx context.Context, data []byte, l Limits) (*node, []packs.Issue, 
 				if a.Name.Local == "xmlns" || a.Name.Space == "xmlns" {
 					continue
 				}
+				if a.Name.Space != "" {
+					issues = append(issues, packs.Issue{Severity: "error", Code: "unsupported_namespace", Path: n.name + "/@" + a.Name.Local, Message: "Пространство имён атрибута не поддерживается"})
+				}
 				if _, ok := n.attrs[a.Name.Local]; ok {
 					return nil, nil, errors.New("duplicate XML attribute")
 				}
@@ -114,7 +118,7 @@ func readXML(ctx context.Context, data []byte, l Limits) (*node, []packs.Issue, 
 	if root == nil || len(stack) != 0 {
 		return nil, nil, errors.New("incomplete XML")
 	}
-	inspectXML(root, "package", &issues)
+	inspectXML(root, "package", "", &issues)
 	return root, issues, nil
 }
 
@@ -134,9 +138,43 @@ func includes(list, value string) bool {
 	}
 	return false
 }
-func inspectXML(n *node, p string, issues *[]packs.Issue) {
+func inspectXML(n *node, p, parent string, issues *[]packs.Issue) {
+	add := func(code, path, message string) {
+		*issues = append(*issues, packs.Issue{Severity: "error", Code: code, Path: path, Message: message})
+	}
+	children, attrs := elements[n.name], attributes[n.name]
+	// The runtime SIPackages serializer uses collection wrappers, unlike the
+	// outdated global fragment of the published XSD. Source/Author is a leaf.
+	if n.name == "Authors" {
+		children, attrs = "Author", ""
+	}
+	if n.name == "Sources" {
+		children, attrs = "Source", ""
+	}
+	if n.name == "Author" && parent == "Source" {
+		children, attrs = "", ""
+	}
+	textAllowed := includes("tag author source comments showmanComments extension atom item answer Name SecondName Surname Country City Title Year Publish", n.name) || (n.name == "Author" && parent == "Source") || (n.name == "param" && len(n.children) == 0)
+	if !textAllowed && strings.TrimSpace(n.value()) != "" {
+		add("unexpected_text", p, "Текст в структурном элементе не поддерживается")
+	}
+	if (n.name == "Author" && parent == "Authors") || (n.name == "Source" && parent == "Sources") {
+		if strings.TrimSpace(n.attrs["id"]) == "" {
+			add("required", p+"/@id", "Нужен ID записи глобальных метаданных")
+		}
+		for _, field := range strings.Fields(children) {
+			if !n.present(field) {
+				add("required", p+"/"+field, "Отсутствует поле глобальных метаданных")
+			}
+		}
+	}
+	if n.name == "Year" {
+		if _, err := strconv.ParseInt(strings.TrimSpace(n.value()), 10, 32); err != nil {
+			add("invalid_year", p, "Год должен быть целым числом")
+		}
+	}
 	for attr := range n.attrs {
-		if !includes(attributes[n.name], attr) {
+		if !includes(attrs, attr) {
 			*issues = append(*issues, packs.Issue{Severity: "error", Code: "unsupported_attribute", Path: p + "/@" + attr, Message: "Неизвестный атрибут XML"})
 		}
 	}
@@ -148,9 +186,9 @@ func inspectXML(n *node, p string, issues *[]packs.Issue) {
 			*issues = append(*issues, packs.Issue{Severity: "error", Code: "duplicate_element", Path: p + "/" + c.name, Message: "Однозначный элемент XML повторяется"})
 		}
 		cp := fmt.Sprintf("%s/%s[%d]", p, c.name, counts[c.name])
-		if !includes(elements[n.name], c.name) {
+		if !includes(children, c.name) {
 			*issues = append(*issues, packs.Issue{Severity: "error", Code: "unsupported_xml", Path: cp, Message: "Неизвестный элемент XML"})
 		}
-		inspectXML(c, cp, issues)
+		inspectXML(c, cp, n.name, issues)
 	}
 }

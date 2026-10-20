@@ -2,12 +2,15 @@ package packs
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
+	"unicode/utf8"
 )
 
 func Validate(d Document) []Issue {
 	issues := append([]Issue(nil), d.ImportIssues...)
 	add := func(code, path, message string) { issues = append(issues, Issue{"error", code, path, message}) }
+	validateStrings(reflect.ValueOf(d), "", 0, add)
 	required := func(value, path string) {
 		if strings.TrimSpace(value) == "" {
 			add("required", path, "Поле обязательно")
@@ -106,8 +109,25 @@ func validateParameter(p Parameter, path string, depth int, add func(string, str
 	default:
 		add("unsupported_parameter_type", path, "Неизвестный тип параметра: "+p.Type)
 	}
+	badShape := false
+	switch p.Type {
+	case "", "simple":
+		badShape = len(p.Items) > 0 || len(p.Params) > 0 || p.NumberSet != nil
+	case "content":
+		badShape = p.Value != "" || len(p.Params) > 0 || p.NumberSet != nil
+	case "group":
+		badShape = p.Value != "" || len(p.Items) > 0 || p.NumberSet != nil
+	case "numberSet":
+		badShape = p.Value != "" || len(p.Items) > 0 || len(p.Params) > 0
+	}
+	if badShape {
+		add("parameter_shape", path, "Содержимое не соответствует типу параметра")
+	}
 	if p.NumberSet != nil {
 		n := p.NumberSet
+		if n.Value != "" {
+			add("parameter_shape", path, "Диапазон не может содержать текст")
+		}
 		if (n.Minimum != nil && n.Maximum != nil && *n.Minimum > *n.Maximum) || (n.Step != nil && *n.Step <= 0) {
 			add("invalid_number_set", path, "Недопустимый диапазон значений")
 		}
@@ -131,5 +151,45 @@ func validateParameter(p Parameter, path string, depth int, add func(string, str
 	}
 	for _, child := range p.Params {
 		validateParameter(child, path+"."+child.Name, depth+1, add)
+	}
+}
+
+// encoding/xml replaces forbidden characters with U+FFFD. Reject them before
+// encoding so exports never silently change editable strings. Walking the typed
+// model covers metadata and future fields as well as question text.
+func validateStrings(v reflect.Value, path string, depth int, add func(string, string, string)) {
+	if depth > 100 {
+		add("model_depth", path, "Слишком глубокая модель")
+		return
+	}
+	switch v.Kind() {
+	case reflect.String:
+		value := v.String()
+		valid := utf8.ValidString(value)
+		for _, c := range value {
+			if !(c == '\t' || c == '\n' || c == '\r' || c >= 0x20 && c <= 0xd7ff || c >= 0xe000 && c <= 0xfffd || c >= 0x10000 && c <= 0x10ffff) {
+				valid = false
+				break
+			}
+		}
+		if !valid {
+			add("invalid_xml_string", path, "Поле содержит недопустимые для XML символы")
+		}
+	case reflect.Struct:
+		for i := 0; i < v.NumField(); i++ {
+			name := strings.Split(v.Type().Field(i).Tag.Get("json"), ",")[0]
+			if path != "" {
+				name = path + "." + name
+			}
+			validateStrings(v.Field(i), name, depth+1, add)
+		}
+	case reflect.Slice:
+		for i := 0; i < v.Len(); i++ {
+			validateStrings(v.Index(i), fmt.Sprintf("%s[%d]", path, i), depth+1, add)
+		}
+	case reflect.Pointer:
+		if !v.IsNil() {
+			validateStrings(v.Elem(), path, depth+1, add)
+		}
 	}
 }

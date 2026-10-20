@@ -93,7 +93,7 @@ func TestImportV4BoundaryAndTypes(t *testing.T) {
 	if q.Type != "stake" || len(body) != 3 || body[1].Placement != "replic" || body[2].Type != "audio" || !body[2].IsRef || body[2].DurationMS != 2500 || q.Content("answer")[0].Value != "Пояснение" || q.Wrong[0] != "Нет" {
 		t.Fatalf("bad upgrade: %+v", q)
 	}
-	for old, want := range map[string]string{"simple": "simple", "sponsored": "noRisk", "cat": "secret", "bagcat": "secret"} {
+	for old, want := range map[string]string{"simple": "", "sponsored": "noRisk", "cat": "secret", "bagcat": "secret"} {
 		xml := strings.Replace(v4, `<type name="auction"/>`, `<type name="`+old+`"><param name="theme">Секрет</param><param name="cost">[100;500]/100</param></type>`, 1)
 		a := readArchive(t, archiveBytes(t, entry{"content.xml", []byte(xml), 0}, entry{"Audio/песня.mp3", []byte("a"), 0}))
 		if a.Document.Rounds[0].Themes[0].Questions[0].Type != want {
