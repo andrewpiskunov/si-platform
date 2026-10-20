@@ -79,6 +79,8 @@ func (s *Server) Handler() http.Handler {
 		r.Post("/rooms", s.create)
 		r.Post("/rooms/{room}/participants", s.join)
 		r.Get("/rooms/{room}/ws", s.websocket)
+		r.Post("/rooms/{room}/invite", s.rotateInvite)
+		r.Get("/rooms/{room}/results", s.roomResults)
 	})
 	return r
 }

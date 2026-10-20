@@ -128,7 +128,7 @@ func validateParameter(p Parameter, path string, depth int, add func(string, str
 		if n.Value != "" {
 			add("parameter_shape", path, "Диапазон не может содержать текст")
 		}
-		if (n.Minimum != nil && n.Maximum != nil && *n.Minimum > *n.Maximum) || (n.Step != nil && *n.Step <= 0) {
+		if (n.Minimum != nil && n.Maximum != nil && *n.Minimum > *n.Maximum) || (n.Step != nil && *n.Step < 0) {
 			add("invalid_number_set", path, "Недопустимый диапазон значений")
 		}
 	}

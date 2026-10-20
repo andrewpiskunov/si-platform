@@ -31,7 +31,7 @@ func TestDiagnosticsMatchCommands(t *testing.T) {
 			round := &doc.Rounds[0]
 			q := &round.Themes[0].Questions[0]
 			tc.change(round, q)
-			issues := Validate(doc)
+			issues := ValidateLegacy(doc)
 			cmd, err := Command(*round, *q, "select", 1)
 			if packs.Playable(issues) != tc.valid || (err == nil) != tc.valid {
 				t.Fatalf("diagnostics/command mismatch: %+v %v", issues, err)

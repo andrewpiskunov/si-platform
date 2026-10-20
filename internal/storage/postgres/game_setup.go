@@ -19,6 +19,7 @@ type GameSetup struct {
 	Revision              int
 	Title, Theme          string
 	DemoDocument          *packs.Document
+	Rules                 *game.Rules
 }
 
 func (g GameSetup) authorize(ctx context.Context, tx pgx.Tx) error {

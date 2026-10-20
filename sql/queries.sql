@@ -37,3 +37,10 @@ VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: AddEvent :exec
 INSERT INTO game_events (room_id, seq, kind, actor_id, payload) VALUES ($1, $2, $3, $4, $5);
+
+-- name: SetInvite :exec
+UPDATE rooms SET invite_hash = $2 WHERE id = $1;
+
+-- name: RoomEvents :many
+SELECT seq,kind,actor_id,payload,created_at FROM game_events
+WHERE room_id=$1 AND seq>$2 AND seq<=$3 ORDER BY seq LIMIT $4;

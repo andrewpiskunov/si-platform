@@ -23,7 +23,7 @@ func TestCreateGameRejectsIncompatibleSIQ(t *testing.T) {
 		name string
 		edit func(*packs.Document)
 	}{
-		{"zero_price", func(d *packs.Document) { d.Rounds[0].Themes[0].Questions[0].Price = 0 }},
+		{"large_price", func(d *packs.Document) { d.Rounds[0].Themes[0].Questions[0].Price = 100001 }},
 		{"question_id", func(d *packs.Document) { d.Rounds[0].Themes[0].Questions[0].ID = "вопрос" }},
 		{"text_length", func(d *packs.Document) {
 			d.Rounds[0].Themes[0].Questions[0].Params[0].Items[0].Value = strings.Repeat("т", 2049)

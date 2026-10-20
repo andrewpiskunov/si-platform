@@ -84,6 +84,12 @@ func (s *Store) create(ctx context.Context, name string, setup *GameSetup) (Cred
 	}
 	c := Credentials{RoomID: randomHex(16), ParticipantID: randomHex(16), Token: randomHex(32), InviteToken: randomHex(32)}
 	state := game.State{ID: c.RoomID, Seq: 1, Phase: game.Lobby, Participants: []game.Participant{{ID: c.ParticipantID, Name: name, Role: game.Host}}}
+	if setup != nil && setup.Rules != nil {
+		if err := setup.Rules.Validate(); err != nil {
+			return Credentials{}, err
+		}
+		state.Gameplay = game.NewSession(*setup.Rules)
+	}
 	b, err := json.Marshal(state)
 	if err != nil {
 		return Credentials{}, err

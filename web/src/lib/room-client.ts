@@ -1,3 +1,4 @@
+import type { SessionView, V2Command } from './game-v2.ts';
 export interface Participant {
   id: string;
   name: string;
@@ -7,19 +8,21 @@ export interface Participant {
 export interface RoomState {
   room_id: string;
   seq: number;
-  phase: 'lobby' | 'open' | 'answering' | 'resolved' | 'paused' | 'finished';
+  gameplay?: SessionView;
+  phase: 'running' | 'lobby' | 'open' | 'answering' | 'resolved' | 'paused' | 'finished';
   participants: Participant[];
   question?: { id: string; text: string; answer?: string; value: number };
   winner?: string;
   you: string;
 }
-export interface Command {
+export interface LegacyCommand {
   v: 1;
   id: string;
   type: string;
   question_id?: string;
   correct?: boolean;
 }
+export type Command = LegacyCommand | V2Command;
 export interface Message {
   v: number;
   type: string;
@@ -61,8 +64,19 @@ export class RoomProtocol {
     }
     return command;
   }
+  commandV2(command: V2Command): V2Command {
+    if (!this.ready) throw new Error('disconnected');
+    const serialized = JSON.stringify(command);
+    if (this.known.has(command.id) && this.known.get(command.id) !== serialized)
+      throw new Error('command_conflict');
+    if (!this.known.has(command.id)) {
+      this.known.set(command.id, serialized);
+      this.pending.set(command.id, JSON.parse(serialized));
+    }
+    return command;
+  }
   receive(message: Message): Command[] {
-    if (message.v !== 1) return [];
+    if (message.v !== 1 && message.v !== 2) return [];
     if (message.state && (!this.state || message.state.seq >= this.state.seq))
       this.state = message.state;
     if (
@@ -137,6 +151,11 @@ export class RoomConnection {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) throw new Error('disconnected');
     const command = this.protocol.command(type, fields);
     this.socket.send(JSON.stringify(command));
+    this.update(this.protocol, 'connected');
+  }
+  sendV2(command: V2Command) {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) throw new Error('disconnected');
+    this.socket.send(JSON.stringify(this.protocol.commandV2(command)));
     this.update(this.protocol, 'connected');
   }
   close() {

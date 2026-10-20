@@ -10,7 +10,7 @@ import (
 	"siplatform/internal/packs"
 )
 
-func Validate(doc packs.Document) []packs.Issue {
+func ValidateLegacy(doc packs.Document) []packs.Issue {
 	issues := []packs.Issue{}
 	for ri, round := range doc.Rounds {
 		rp := fmt.Sprintf("rounds[%d]", ri)

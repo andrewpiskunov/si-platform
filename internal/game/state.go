@@ -2,6 +2,7 @@
 package game
 
 import (
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -20,12 +21,14 @@ const (
 type Phase string
 
 const (
-	Lobby     Phase = "lobby"
-	Open      Phase = "open"
-	Answering Phase = "answering"
-	Resolved  Phase = "resolved"
-	Paused    Phase = "paused"
-	Finished  Phase = "finished"
+	Lobby        Phase = "lobby"
+	Running      Phase = "running"
+	PhaseRunning Phase = Running
+	Open         Phase = "open"
+	Answering    Phase = "answering"
+	Resolved     Phase = "resolved"
+	Paused       Phase = "paused"
+	Finished     Phase = "finished"
 )
 
 type Participant struct {
@@ -41,6 +44,7 @@ type Question struct {
 	Value  int64  `json:"value"`
 }
 type State struct {
+	Gameplay     *Session      `json:"gameplay,omitempty"`
 	ID           string        `json:"room_id"`
 	Seq          int64         `json:"seq"`
 	Phase        Phase         `json:"phase"`
@@ -51,6 +55,7 @@ type State struct {
 	Asked        []string      `json:"asked,omitempty"`
 }
 type View struct {
+	Gameplay     *SessionView  `json:"gameplay,omitempty"`
 	ID           string        `json:"room_id"`
 	Seq          int64         `json:"seq"`
 	Phase        Phase         `json:"phase"`
@@ -74,6 +79,12 @@ func Code(err error) string {
 	return "unavailable"
 }
 func (s State) Clone() State {
+	if s.Gameplay != nil {
+		b, _ := json.Marshal(s.Gameplay)
+		var g Session
+		_ = json.Unmarshal(b, &g)
+		s.Gameplay = &g
+	}
 	s.Participants = slices.Clone(s.Participants)
 	s.Asked = slices.Clone(s.Asked)
 	if s.Question != nil {
@@ -120,7 +131,7 @@ func AddParticipant(s State, p Participant) (State, error) {
 		return s, Fault("room_full")
 	}
 	// New players join only between questions. Spectators can join at any phase.
-	if p.Role == Player && s.Phase != Lobby && s.Phase != Resolved {
+	if p.Role == Player && !betweenQuestions(s) {
 		return s, Fault("question_in_progress")
 	}
 	n := s.Clone()
@@ -128,7 +139,8 @@ func AddParticipant(s State, p Participant) (State, error) {
 	n.Participants = append(n.Participants, p)
 	return n, nil
 }
-func Project(s State, id string) View {
+func Project(s State, id string) View { return ProjectAt(s, id, 0) }
+func projectLegacy(s State, id string) View {
 	n := s.Clone()
 	p, _ := n.Participant(id)
 	if n.Question != nil && p.Role != Host && n.Phase != Resolved && n.Phase != Finished {
@@ -138,7 +150,8 @@ func Project(s State, id string) View {
 }
 
 // Pause suspends only an active question; safe to call repeatedly on disconnect/restart.
-func Pause(s State) (State, bool) {
+func Pause(s State) (State, bool) { return PauseAt(s, 0) }
+func pauseLegacy(s State) (State, bool) {
 	if s.Phase != Open && s.Phase != Answering {
 		return s, false
 	}

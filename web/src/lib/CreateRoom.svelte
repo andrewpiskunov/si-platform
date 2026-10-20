@@ -3,6 +3,9 @@
   import { api, errorText } from './api';
   import { user } from './session';
   import type { Credentials } from './types';
+  import GameRules from './GameRules.svelte';
+  import { classicRules, type Rules } from './game-v2.ts';
+  let rules = $state<Rules>(classicRules());
   let {
     packId = '',
     revision = 0,
@@ -24,7 +27,8 @@
         pack_id: packId,
         revision,
         title,
-        theme
+        theme,
+        rules
       });
       sessionStorage.setItem(
         `room:${credentials.room_id}`,
@@ -75,6 +79,13 @@
         >{/each}
     </div>
   </fieldset>
+  <details>
+    <summary>Правила и таймеры</summary><GameRules
+      {rules}
+      onchange={(value) => (rules = value)}
+      disabled={busy}
+    />
+  </details>
   {#if error}<div class="notice error" role="alert">{error}</div>{/if}{#if $user}<button
       class="primary"
       disabled={busy || disabled}>{busy ? 'Создаём комнату…' : 'Создать комнату →'}</button

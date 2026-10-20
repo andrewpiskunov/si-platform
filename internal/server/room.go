@@ -23,10 +23,15 @@ type room struct {
 	clients      map[*client]struct{}
 	limits       map[string]*bucket
 	pausePending bool
+	timer        *time.Timer
+	timerC       <-chan time.Time
 }
 
 func (r *room) run() {
 	defer func() {
+		if r.timer != nil {
+			r.timer.Stop()
+		}
 		for c := range r.clients {
 			c.cancel()
 		}
@@ -35,6 +40,19 @@ func (r *room) run() {
 		select {
 		case <-r.server.ctx.Done():
 			return
+		case <-r.timerC:
+			r.timerC = nil
+			ctx, cancel := context.WithTimeout(r.server.ctx, 5*time.Second)
+			err := r.expire(ctx)
+			cancel()
+			if game.Code(err) == "ownership_lost" {
+				r.server.cancel()
+				return
+			}
+			if err != nil {
+				r.timer.Reset(250 * time.Millisecond)
+				r.timerC = r.timer.C
+			}
 		case j := <-r.requests:
 			if j.ctx.Err() != nil {
 				j.result <- reply{err: j.ctx.Err()}
@@ -91,11 +109,10 @@ func (r *room) attach(ctx context.Context, c *client) error {
 		if err != nil {
 			return nil, err
 		}
-		participant, ok := state.Participant(c.id)
+		_, ok := state.Participant(c.id)
 		if !ok {
 			return nil, game.Fault("unauthorized")
 		}
-		c.role = participant.Role
 		if c.ctx.Err() != nil {
 			return nil, c.ctx.Err()
 		}
@@ -103,7 +120,8 @@ func (r *room) attach(ctx context.Context, c *client) error {
 		if r.limits[c.id] == nil {
 			r.limits[c.id] = newBucket()
 		}
-		view := game.Project(state, c.id)
+		r.arm(state)
+		view := game.ProjectAt(state, c.id, time.Now().UnixMilli())
 		if !c.send(Message{Type: "snapshot", State: &view}) {
 			return nil, game.Fault("slow_client")
 		}
@@ -115,13 +133,17 @@ func (r *room) detach(c *client) {
 	// Removal must not be dropped when the ordinary command queue is full.
 	j := job{ctx: r.server.ctx, result: make(chan reply, 1), run: func(ctx context.Context, r *room) (any, error) {
 		delete(r.clients, c)
-		if c.role != game.Host {
-			return nil, nil
-		}
-		for existing := range r.clients {
-			if existing.role == game.Host && existing.ctx.Err() == nil {
-				return nil, nil
+		state, err := r.server.store.Load(ctx, r.id)
+		if err != nil {
+			r.pausePending = true
+			for existing := range r.clients {
+				existing.cancel()
 			}
+			return nil, err
+		}
+		participant, ok := state.Participant(c.id)
+		if !ok || participant.Role != game.Host || r.hostOnline(state) {
+			return nil, nil
 		}
 		r.pausePending = true
 		if err := r.resolvePause(ctx); err != nil {
@@ -159,21 +181,27 @@ func (r *room) command(ctx context.Context, c *client, cmd game.Command) error {
 		if !r.limits[c.id].allow(time.Now()) {
 			return nil, game.Fault("rate_limited")
 		}
-		// A connected host is required even when the persisted room is paused.
-		hostOnline := false
-		for existing := range r.clients {
-			if existing.role == game.Host && existing.ctx.Err() == nil {
-				hostOnline = true
-			}
+		state, err := r.server.store.Load(ctx, r.id)
+		if err != nil {
+			return nil, err
 		}
-		if !hostOnline {
+		if !r.hostOnline(state) {
 			return nil, game.Fault("host_offline")
+		}
+		if cmd.Version == 2 && cmd.Type == "transfer_host" {
+			payload, err := cmd.Payload()
+			if err != nil {
+				return nil, err
+			}
+			if !r.connected(payload.(*game.TransferPayload).TargetID) {
+				return nil, game.Fault("target_offline")
+			}
 		}
 		out, err := r.server.store.Execute(ctx, r.id, c.id, cmd)
 		if err != nil {
 			return nil, err
 		}
-		view := game.Project(out.State, c.id)
+		view := game.ProjectAt(out.State, c.id, time.Now().UnixMilli())
 		c.send(Message{Type: "result", CommandID: cmd.ID, Code: out.Code, ResultSeq: out.Seq, Duplicate: out.Duplicate, State: &view})
 		if out.Code == "ok" {
 			// A duplicate repairs distribution after an ambiguous commit without
@@ -185,11 +213,12 @@ func (r *room) command(ctx context.Context, c *client, cmd game.Command) error {
 	return err
 }
 func (r *room) broadcast(state game.State, except *client) {
+	r.arm(state)
 	for c := range r.clients {
 		if c == except {
 			continue
 		}
-		view := game.Project(state, c.id)
+		view := game.ProjectAt(state, c.id, time.Now().UnixMilli())
 		c.send(Message{Type: "snapshot", State: &view})
 	}
 }

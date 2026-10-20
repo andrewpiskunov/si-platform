@@ -114,9 +114,12 @@ try {
       .filter({ hasText: "Собираемся" })
       .waitFor();
   }
+  await owner.getByRole("button", { name: "Начать раунд", exact: true }).click();
+  await owner.getByRole("status").filter({ hasText: "Идёт игра" }).waitFor();
   await owner
     .getByRole("button", { name: "Новая тема, 100 очков", exact: true })
     .click();
+  await owner.getByRole("button", { name: "Открыть кнопку", exact: true }).click();
   await players[0]
     .getByRole("button", { name: "Знаю ответ!", exact: true })
     .waitFor();
@@ -199,6 +202,11 @@ try {
       page_errors: 0,
     }),
   );
+} catch (error) {
+  console.error(await owner?.locator("main").innerText().catch(() => ""));
+  console.error(errors);
+  await owner?.screenshot({ path: `${output}/smoke-failure.png`, fullPage: true });
+  throw error;
 } finally {
   if (owner) {
     try {

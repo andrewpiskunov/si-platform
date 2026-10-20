@@ -212,7 +212,16 @@ func legacyPrice(value string) (*packs.NumberSet, error) {
 	if err != nil {
 		return nil, err
 	}
-	var step *int
+	// Legacy ranges without /step mean the two endpoints, unlike a native
+	// numeric step=0, which permits every integer in the interval.
+	gap := 0
+	if hi >= lo {
+		if lo < 0 && hi > int(^uint(0)>>1)+lo {
+			return nil, fmt.Errorf("legacy price range overflow")
+		}
+		gap = hi - lo
+	}
+	step := &gap
 	if m[3] != "" {
 		step, err = optionalInt(m[3])
 		if err != nil {

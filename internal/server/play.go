@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"slices"
 	"strings"
@@ -26,17 +27,26 @@ func (s *Server) createGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		HostName string `json:"host_name"`
-		PackID   string `json:"pack_id"`
-		Revision int    `json:"revision"`
-		Title    string `json:"title"`
-		Theme    string `json:"theme"`
+		HostName string      `json:"host_name"`
+		PackID   string      `json:"pack_id"`
+		Revision int         `json:"revision"`
+		Title    string      `json:"title"`
+		Theme    string      `json:"theme"`
+		Rules    *game.Rules `json:"rules,omitempty"`
 	}
 	if err := readJSON(w, r, &req); err != nil {
 		appError(w, err)
 		return
 	}
-	setup := postgres.GameSetup{ActorID: a.User.ID, CredentialID: a.SessionID, PackID: req.PackID, Revision: req.Revision, Title: strings.TrimSpace(req.Title), Theme: req.Theme}
+	rules := game.DefaultRules()
+	if req.Rules != nil {
+		rules = *req.Rules
+	}
+	if err := rules.Validate(); err != nil {
+		appError(w, err)
+		return
+	}
+	setup := postgres.GameSetup{Rules: &rules, ActorID: a.User.ID, CredentialID: a.SessionID, PackID: req.PackID, Revision: req.Revision, Title: strings.TrimSpace(req.Title), Theme: req.Theme}
 	if setup.Title == "" {
 		setup.Title = "Своя игра"
 	}
@@ -145,6 +155,7 @@ func (s *Server) selectQuestion(w http.ResponseWriter, r *http.Request) {
 		QuestionID  string `json:"question_id"`
 		CommandID   string `json:"command_id"`
 		ExpectedSeq int64  `json:"expected_seq"`
+		Replay      bool   `json:"replay,omitempty"`
 	}
 	if e = readJSON(w, r, &req); e != nil {
 		appError(w, e)
@@ -166,16 +177,10 @@ func (s *Server) selectQuestion(w http.ResponseWriter, r *http.Request) {
 			return nil, e
 		}
 		p, ok := state.Participant(actor)
-		if !ok || p.Role != game.Host {
+		if !ok || (state.Gameplay == nil && p.Role != game.Host) {
 			return nil, game.Fault("forbidden")
 		}
-		connected := false
-		for c := range rm.clients {
-			if c.id == actor && c.ctx.Err() == nil {
-				connected = true
-			}
-		}
-		if !connected {
+		if !rm.connected(actor) || !rm.hostOnline(state) {
 			return nil, game.Fault("host_offline")
 		}
 		if rm.limits[actor] == nil {
@@ -188,25 +193,41 @@ func (s *Server) selectQuestion(w http.ResponseWriter, r *http.Request) {
 		if e != nil {
 			return nil, e
 		}
-		var question *packs.Question
-		var round packs.Round
-		for _, rd := range doc.Rounds {
-			for _, th := range rd.Themes {
-				for _, q := range th.Questions {
-					if q.ID == req.QuestionID {
-						copy := q
-						question = &copy
-						round = rd
+		var cmd game.Command
+		if state.Gameplay != nil {
+			question, err := playpack.Compile(doc, req.QuestionID)
+			if err != nil {
+				return nil, game.Fault("unsupported_question")
+			}
+			data, err := json.Marshal(game.BeginQuestionPayload{Question: question, Replay: req.Replay})
+			if err != nil {
+				return nil, err
+			}
+			cmd = game.Command{Version: 2, ID: req.CommandID, Type: "begin_question", ExpectedSeq: &req.ExpectedSeq, Data: data}
+		} else {
+			if req.Replay {
+				return nil, game.Fault("unsupported_question")
+			}
+			var question *packs.Question
+			var round packs.Round
+			for _, rd := range doc.Rounds {
+				for _, th := range rd.Themes {
+					for _, q := range th.Questions {
+						if q.ID == req.QuestionID {
+							copy := q
+							question = &copy
+							round = rd
+						}
 					}
 				}
 			}
-		}
-		if question == nil {
-			return nil, game.Fault("not_found")
-		}
-		cmd, e := playpack.Command(round, *question, req.CommandID, req.ExpectedSeq)
-		if e != nil {
-			return nil, e
+			if question == nil {
+				return nil, game.Fault("not_found")
+			}
+			cmd, e = playpack.Command(round, *question, req.CommandID, req.ExpectedSeq)
+			if e != nil {
+				return nil, e
+			}
 		}
 		out, e := s.store.Execute(ctx, id, actor, cmd)
 		if e != nil {

@@ -87,7 +87,7 @@ func result(ctx context.Context, ws *websocket.Conn, id string) (server.Message,
 	}
 }
 func send(ctx context.Context, ws *websocket.Conn, cmd game.Command) (server.Message, error) {
-	cmd.Version = 1
+	cmd.Version = 2
 	if err := wsjson.Write(ctx, ws, cmd); err != nil {
 		return server.Message{}, err
 	}
@@ -137,17 +137,26 @@ func run(base string) error {
 		defer ws.CloseNow()
 		clients = append(clients, ws)
 	}
-	if err = request(ctx, "POST", base+"/api/rooms/"+host.RoomID+"/select", host.Token, map[string]any{"question_id": "r1-t1-q1", "command_id": "open", "expected_seq": hostSnapshot.State.Seq}, 200, nil); err != nil {
+	if err = request(ctx, "POST", base+"/api/rooms/"+host.RoomID+"/round", host.Token, map[string]any{"round_id": "r1", "command_id": "round", "expected_seq": hostSnapshot.State.Seq}, 200, nil); err != nil {
 		return err
 	}
-	for {
-		var m server.Message
-		if err = wsjson.Read(ctx, hws, &m); err != nil {
-			return err
-		}
-		if m.State != nil && m.State.Phase == game.Open {
-			break
-		}
+	round, err := awaitStage(ctx, hws, "select_question")
+	if err != nil {
+		return err
+	}
+	if err = request(ctx, "POST", base+"/api/rooms/"+host.RoomID+"/select", host.Token, map[string]any{"question_id": "r1-t1-q1", "command_id": "open", "expected_seq": round.State.Seq}, 200, nil); err != nil {
+		return err
+	}
+	present, err := awaitStage(ctx, hws, "present_question")
+	if err != nil {
+		return err
+	}
+	opened, err := send(ctx, hws, game.Command{ID: "open-buzzer", Type: "open_buzzer", ExpectedSeq: &present.State.Seq, Data: scope(present)})
+	if err != nil {
+		return err
+	}
+	if opened.Code != "ok" {
+		return fmt.Errorf("open buzzer: %s", opened.Code)
 	}
 	start := make(chan struct{})
 	errs := make(chan error, 12)
@@ -157,7 +166,7 @@ func run(base string) error {
 		go func(ws *websocket.Conn) {
 			defer wg.Done()
 			<-start
-			errs <- wsjson.Write(ctx, ws, game.Command{Version: 1, ID: "buzz", Type: "buzz", QuestionID: "r1-t1-q1"})
+			errs <- wsjson.Write(ctx, ws, game.Command{Version: 2, ID: "buzz", Type: "buzz", Data: scope(opened)})
 		}(ws)
 	}
 	close(start)
@@ -169,6 +178,7 @@ func run(base string) error {
 		}
 	}
 	winner := -1
+	var winnerState server.Message
 	for i, ws := range clients {
 		m, err := result(ctx, ws, "buzz")
 		if err != nil {
@@ -179,13 +189,17 @@ func run(base string) error {
 				return errors.New("multiple winners")
 			}
 			winner = i
+			winnerState = m
 		}
 	}
 	if winner < 0 {
 		return errors.New("no winner")
 	}
-	correct := true
-	cmd := game.Command{ID: "judge", Type: "judge", QuestionID: "r1-t1-q1", Correct: &correct}
+	data, err := json.Marshal(map[string]any{"stage_id": winnerState.State.Gameplay.Stage.ID, "instance_id": winnerState.State.Gameplay.Stage.InstanceID, "target_id": people[winner].ParticipantID, "correct": true})
+	if err != nil {
+		return err
+	}
+	cmd := game.Command{ID: "judge", Type: "judge", ExpectedSeq: &winnerState.State.Seq, Data: data}
 	judged, err := send(ctx, hws, cmd)
 	if err != nil {
 		return err
@@ -206,10 +220,33 @@ func run(base string) error {
 	if snapshot.State.You != people[winner].ParticipantID || snapshot.State.Participants[winner+1].Score != 100 {
 		return errors.New("reconnect check failed")
 	}
-	if _, err = send(ctx, hws, game.Command{ID: "finish", Type: "finish"}); err != nil {
+	finished, err := send(ctx, hws, game.Command{ID: "finish", Type: "finish", ExpectedSeq: &retry.State.Seq, Data: json.RawMessage(`{}`)})
+	if err != nil {
 		return err
 	}
+	if finished.Code != "ok" || finished.State.Phase != game.Finished {
+		return errors.New("finish check failed")
+	}
 	return json.NewEncoder(os.Stdout).Encode(map[string]any{"room_id": host.RoomID, "players": 12, "winners": 1, "winner": snapshot.State.Participants[winner+1].Name, "score": 100, "duplicate_safe": true, "reconnect_restored": true})
+}
+
+func awaitStage(ctx context.Context, ws *websocket.Conn, kind string) (server.Message, error) {
+	for {
+		var m server.Message
+		if err := wsjson.Read(ctx, ws, &m); err != nil {
+			return m, err
+		}
+		if m.Type == "error" {
+			return m, fmt.Errorf("server: %s", m.Code)
+		}
+		if m.State != nil && m.State.Gameplay != nil && m.State.Gameplay.Stage.Kind == kind {
+			return m, nil
+		}
+	}
+}
+func scope(m server.Message) json.RawMessage {
+	b, _ := json.Marshal(map[string]string{"stage_id": m.State.Gameplay.Stage.ID, "instance_id": m.State.Gameplay.Stage.InstanceID})
+	return b
 }
 
 func request(ctx context.Context, method, url, token string, body any, want int, out any) error {

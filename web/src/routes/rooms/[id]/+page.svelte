@@ -4,6 +4,9 @@
   import { api, APIError, errorText } from '#lib/api.ts';
   import { RoomConnection, type RoomState } from '#lib/room-client.ts';
   import type { Board, Credentials } from '#lib/types.ts';
+  import GameV2 from '#lib/GameV2.svelte';
+  import GameResults from '#lib/GameResults.svelte';
+  import { actionFor, prepareAction, type V2Command } from '#lib/game-v2.ts';
   import { roomThemeContext, type RoomTheme } from '#lib/room-theme.ts';
   const roomTheme = getContext<RoomTheme>(roomThemeContext);
   let credentials = $state<Credentials | null>(null),
@@ -19,12 +22,18 @@
     pending = $state(0),
     copied = $state(false),
     roundIndex = $state(0),
-    selection = $state<{ question_id: string; command_id: string; expected_seq: number } | null>(
-      null
-    ),
+    selection = $state<{
+      question_id?: string;
+      round_id?: string;
+      replay?: boolean;
+      command_id: string;
+      expected_seq: number;
+    } | null>(null),
     selecting = $state(false),
     confirmFinish = $state(false),
-    mounted = $state(false);
+    mounted = $state(false),
+    resultsOpen = $state(false),
+    rotating = $state(false);
   let connection: RoomConnection | null = null;
   let roomID = $state('');
   let boardSeq = -1;
@@ -37,12 +46,17 @@
   );
   const isHost = $derived(me?.role === 'host');
   const canBuzz = $derived(
-    ready && roomState?.phase === 'open' && me?.role === 'player' && pending === 0
+    ready &&
+      pending === 0 &&
+      (roomState?.gameplay
+        ? !!actionFor(roomState.gameplay, 'buzz')
+        : roomState?.phase === 'open' && me?.role === 'player')
   );
   const between = $derived(roomState?.phase === 'lobby' || roomState?.phase === 'resolved');
   const phaseNames: Record<string, string> = {
     lobby: 'Собираемся',
     open: 'Вопрос открыт',
+    running: 'Идёт игра',
     answering: 'Есть ответ!',
     resolved: 'Ответ разобран',
     paused: 'Пауза',
@@ -130,7 +144,23 @@
       error = errorText(e);
     }
   }
+  function sendV2(command: V2Command) {
+    error = '';
+    try {
+      connection?.sendV2(command);
+    } catch (e) {
+      error = errorText(e);
+    }
+  }
   function buzz() {
+    if (canBuzz && roomState?.gameplay) {
+      try {
+        sendV2(prepareAction(roomState.gameplay, roomState.seq, 'buzz'));
+      } catch (e) {
+        error = errorText(e);
+      }
+      return;
+    }
     if (canBuzz && roomState?.question) send('buzz', { question_id: roomState.question.id });
   }
   function keydown(event: KeyboardEvent) {
@@ -147,18 +177,26 @@
       buzz();
     }
   }
-  async function choose(questionID: string, retry = false) {
+  async function roomAction(kind: 'select' | 'round', id: string, retry = false, replay = false) {
     if (!credentials || !roomState || !ready || selecting) return;
+    if (
+      !retry &&
+      roomState.gameplay &&
+      !actionFor(roomState.gameplay, kind === 'select' ? 'begin_question' : 'begin_round')
+    )
+      return;
     error = '';
     selecting = true;
     if (!retry)
       selection = {
-        question_id: questionID,
+        ...(kind === 'select'
+          ? { question_id: id, ...(replay ? { replay: true } : {}) }
+          : { round_id: id }),
         command_id: crypto.randomUUID(),
         expected_seq: roomState.seq
       };
     try {
-      await api(`/rooms/${roomID}/select`, 'POST', selection, credentials.token);
+      await api(`/rooms/${roomID}/${kind}`, 'POST', selection, credentials.token);
       selection = null;
       await loadBoard();
     } catch (e) {
@@ -166,6 +204,40 @@
       if (e instanceof APIError && e.status < 500) selection = null;
     } finally {
       selecting = false;
+    }
+  }
+  function choose(questionID: string, retry = false) {
+    return roomAction('select', questionID, retry);
+  }
+  function retrySelection() {
+    if (selection)
+      return roomAction(
+        selection.round_id ? 'round' : 'select',
+        selection.round_id || selection.question_id || '',
+        true
+      );
+  }
+  async function rotateInvite() {
+    if (!credentials || rotating) return;
+    rotating = true;
+    error = '';
+    try {
+      const result = await api<{ invite_token: string }>(
+        `/rooms/${roomID}/invite`,
+        'POST',
+        {},
+        credentials.token
+      );
+      invite = result.invite_token;
+      history.replaceState(
+        history.state,
+        '',
+        `${location.pathname}#invite=${encodeURIComponent(invite)}`
+      );
+    } catch (e) {
+      error = errorText(e);
+    } finally {
+      rotating = false;
     }
   }
   async function share() {
@@ -185,6 +257,8 @@
     credentials = null;
     roomState = null;
     ready = false;
+    resultsOpen = false;
+    selection = null;
     error = '';
   }
 </script>
@@ -226,6 +300,65 @@
           disabled={joining || !invite}>{joining ? 'Подключаемся…' : 'Войти в комнату →'}</button
         >
       </form>
+    </div>{:else if roomState?.gameplay}<div class="room">
+      <div class="row between section-head">
+        <div>
+          <p class="eyebrow">{board?.pack_name || 'Своя игра'}</p>
+          <h1 style="font-size:32px;margin-bottom:10px">{board?.title || 'Игровой вечер'}</h1>
+          <span class="helper" role="status" aria-live="polite"
+            >{ready
+              ? '● В сети'
+              : connectionStatus === 'reconnecting'
+                ? 'Восстанавливаем соединение…'
+                : 'Подключаемся…'} · {phaseNames[roomState.phase] || 'Игра'}</span
+          >
+        </div>
+        {#if isHost}<div class="row">
+            {#if invite}<button class="small" onclick={share}
+                >{copied ? 'Ссылка скопирована' : 'Пригласить друзей ↗'}</button
+              >{/if}<button class="small" disabled={rotating || !ready} onclick={rotateInvite}
+              >{rotating
+                ? 'Обновляем…'
+                : invite
+                  ? 'Обновить приглашение'
+                  : 'Создать приглашение'}</button
+            >
+          </div>{/if}
+      </div>
+      {#if isHost && invite}<details class="invite-details">
+          <summary>Ссылка приглашения</summary><input
+            readonly
+            value={`${location.origin}/rooms/${roomID}#invite=${encodeURIComponent(invite)}`}
+            aria-label="Ссылка приглашения"
+            onclick={(event) => event.currentTarget.select()}
+          />
+          <p class="helper">
+            Обновление приглашения отключает прежнюю ссылку. Участники комнаты сохраняют свои места.
+          </p>
+        </details>{/if}
+      {#if error}<div class="notice error" role="alert">
+          {error}{#if selection}<button
+              class="small"
+              disabled={selecting || !ready}
+              onclick={retrySelection}>Повторить действие</button
+            >{/if}
+        </div>{/if}
+      <GameV2
+        room={roomState}
+        view={roomState.gameplay}
+        {board}
+        {ready}
+        pending={pending + (selection || selecting ? 1 : 0)}
+        onsend={sendV2}
+        onround={(id) => roomAction('round', id)}
+        onselect={(id, replay) => roomAction('select', id, false, replay)}
+        onresults={() => (resultsOpen = true)}
+      />
+      {#if resultsOpen}<GameResults
+          {roomID}
+          token={credentials.token}
+          onclose={() => (resultsOpen = false)}
+        />{/if}
     </div>{:else}<div class="room">
       <div class="row between">
         <div>
@@ -257,7 +390,7 @@
           {error}{#if selection}<button
               class="small"
               disabled={selecting || !ready}
-              onclick={() => choose(selection!.question_id, true)}>Повторить выбор</button
+              onclick={retrySelection}>Повторить выбор</button
             >{/if}
         </div>{/if}{#if !roomState}<div class="empty" style="margin-top:30px">
           <h2>Ждём соединение</h2>

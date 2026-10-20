@@ -999,3 +999,98 @@ details[open] > summary {
     scroll-behavior: auto !important;
   }
 }
+
+/* Gameplay shares the session palette, including its controls and journal. */
+.game-v2 {
+  margin-top: 30px;
+}
+.game-v2 .room-grid {
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr) 300px;
+}
+.game-controls {
+  gap: 10px;
+  margin: 20px 0;
+}
+.game-controls button {
+  padding: 10px 16px;
+}
+.game-timer {
+  min-width: 100px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.game-timer strong {
+  display: block;
+  color: var(--accent);
+  font-size: 36px;
+  line-height: 1.2;
+}
+.game-timer span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.game-timer.elapsed strong,
+.error-text {
+  color: var(--danger);
+}
+.game-action {
+  padding: 22px;
+}
+.game-action h3 {
+  margin: 0;
+}
+.game-action .row {
+  gap: 8px;
+}
+.game-action button {
+  padding: 10px 15px;
+}
+.game-v2 aside .game-action {
+  padding: 16px;
+  margin-top: 12px;
+}
+.game-v2 aside .form-grid {
+  grid-template-columns: 1fr;
+}
+.game-v2 .question-stage {
+  overflow-wrap: anywhere;
+}
+.game-v2 aside,
+.game-v2 .stack {
+  min-width: 0;
+}
+.invite-details {
+  margin: 24px 0;
+}
+.results-panel {
+  margin-top: 32px;
+}
+.results-list {
+  max-height: 600px;
+  overflow: auto;
+}
+.result-entry {
+  border-bottom: 1px solid var(--line);
+  padding: 16px 0;
+  overflow-wrap: anywhere;
+}
+.result-entry p {
+  margin: 6px 0;
+}
+@media (max-width: 950px) {
+  .game-v2 .room-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 600px) {
+  .game-timer strong {
+    font-size: 28px;
+  }
+  .game-timer {
+    min-width: 80px;
+  }
+  .game-action {
+    padding: 16px;
+  }
+}

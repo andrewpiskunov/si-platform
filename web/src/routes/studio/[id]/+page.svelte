@@ -138,23 +138,23 @@
     sync();
     schedule();
   }
-  function newQuestion(): Question {
+  function newQuestion(final = false): Question {
     return {
       id: crypto.randomUUID(),
       price: 100,
-      type: 'simple',
+      type: final ? 'stakeAll' : 'simple',
       info: {},
       params: [{ name: 'question', type: 'content', items: [{ type: 'text', value: '' }] }],
       right: ['']
     };
   }
-  function addRound() {
-    const q = newQuestion();
+  function addRound(type = 'standard') {
+    const q = newQuestion(type === 'final');
     change((next) =>
       next.rounds.push({
         id: crypto.randomUUID(),
         name: `Раунд ${next.rounds.length + 1}`,
-        type: 'standard',
+        type,
         info: {},
         themes: [{ id: crypto.randomUUID(), name: 'Новая тема', info: {}, questions: [q] }]
       })
@@ -162,7 +162,7 @@
     selected = q.id;
   }
   function addTheme(roundIndex: number) {
-    const q = newQuestion();
+    const q = newQuestion(document?.rounds[roundIndex].type === 'final');
     change((next) =>
       next.rounds[roundIndex].themes.push({
         id: crypto.randomUUID(),
@@ -174,7 +174,7 @@
     selected = q.id;
   }
   function addQuestion(ri: number, ti: number) {
-    const q = newQuestion();
+    const q = newQuestion(document?.rounds[ri].type === 'final');
     q.price = ((document?.rounds[ri].themes[ti].questions.length || 0) + 1) * 100;
     change((next) => next.rounds[ri].themes[ti].questions.push(q));
     selected = q.id;
@@ -382,6 +382,15 @@
                   change((next) => (next.rounds[ri].name = event.currentTarget.value))}
               /></label
             >
+            <label
+              >Тип раунда<select
+                value={round.type || 'standard'}
+                onchange={(event) =>
+                  change((next) => (next.rounds[ri].type = event.currentTarget.value))}
+                ><option value="standard">Обычный</option><option value="final">Финал</option
+                ></select
+              ></label
+            >
             <div class="row">
               <button class="small ghost" onclick={() => addTheme(ri)}>＋ Тема</button><button
                 class="small ghost"
@@ -418,8 +427,12 @@
                   >Удалить тему</button
                 >
               </div>{/each}
-          </div>{/each}<button class="small" style="margin-top:20px;width:100%" onclick={addRound}
-          >＋ Раунд</button
+          </div>{/each}<button
+          class="small"
+          style="margin-top:20px;width:100%"
+          onclick={() => addRound()}>＋ Раунд</button
+        ><button class="small" style="margin-top:8px;width:100%" onclick={() => addRound('final')}
+          >＋ Финал</button
         >
       </aside>
       <div class="stack">
@@ -508,7 +521,7 @@
           </article>{:else}<div class="empty">
             <h3>Выберите вопрос слева</h3>
             <p>Или добавьте раунд, чтобы начать работу.</p>
-            <button onclick={addRound}>Добавить раунд</button>
+            <button onclick={() => addRound()}>Добавить раунд</button>
           </div>{/if}{#if draft.issues?.length}<details open>
             <summary>Проверка пакета · {draft.issues.length}</summary>
             <ul class="issues">

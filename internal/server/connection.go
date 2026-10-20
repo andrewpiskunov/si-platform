@@ -49,7 +49,6 @@ func (b *outbox) sent(size int) { b.mu.Lock(); b.bytes -= size; b.mu.Unlock() }
 
 type client struct {
 	id     string
-	role   game.Role
 	ctx    context.Context
 	cancel context.CancelFunc
 	conn   *websocket.Conn
@@ -202,7 +201,7 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		// Configured rooms select immutable package questions on the server.
-		if s.options.Library != nil && cmd.Type == "open_question" {
+		if (s.options.Library != nil && cmd.Type == "open_question") || cmd.Type == "begin_round" || cmd.Type == "begin_question" {
 			c.send(Message{Type: "error", CommandID: cmd.ID, Code: "forbidden"})
 			continue
 		}

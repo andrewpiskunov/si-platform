@@ -41,6 +41,7 @@ func (s *Server) platformRoutes(r chi.Router) {
 	r.Post("/catalogue/{id}/reports", s.report)
 	r.Get("/rooms/{room}/board", s.board)
 	r.Post("/rooms/{room}/select", s.selectQuestion)
+	r.Post("/rooms/{room}/round", s.startRound)
 	if s.options.Uploads != nil {
 		r.Post("/uploads", s.uploadCreate)
 		r.Get("/uploads/{id}", s.uploadGet)

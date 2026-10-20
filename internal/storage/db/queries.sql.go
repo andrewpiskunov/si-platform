@@ -7,6 +7,8 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const addEvent = `-- name: AddEvent :exec
@@ -197,6 +199,57 @@ func (q *Queries) LockRoom(ctx context.Context, id string) (Room, error) {
 	return i, err
 }
 
+const roomEvents = `-- name: RoomEvents :many
+SELECT seq,kind,actor_id,payload,created_at FROM game_events
+WHERE room_id=$1 AND seq>$2 AND seq<=$3 ORDER BY seq LIMIT $4
+`
+
+type RoomEventsParams struct {
+	RoomID string
+	Seq    int64
+	Seq_2  int64
+	Limit  int32
+}
+
+type RoomEventsRow struct {
+	Seq       int64
+	Kind      string
+	ActorID   string
+	Payload   []byte
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) RoomEvents(ctx context.Context, arg RoomEventsParams) ([]RoomEventsRow, error) {
+	rows, err := q.db.Query(ctx, roomEvents,
+		arg.RoomID,
+		arg.Seq,
+		arg.Seq_2,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RoomEventsRow
+	for rows.Next() {
+		var i RoomEventsRow
+		if err := rows.Scan(
+			&i.Seq,
+			&i.Kind,
+			&i.ActorID,
+			&i.Payload,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const saveCommand = `-- name: SaveCommand :exec
 INSERT INTO command_results (room_id, actor_id, command_id, request_hash, code, seq)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -220,6 +273,20 @@ func (q *Queries) SaveCommand(ctx context.Context, arg SaveCommandParams) error 
 		arg.Code,
 		arg.Seq,
 	)
+	return err
+}
+
+const setInvite = `-- name: SetInvite :exec
+UPDATE rooms SET invite_hash = $2 WHERE id = $1
+`
+
+type SetInviteParams struct {
+	ID         string
+	InviteHash string
+}
+
+func (q *Queries) SetInvite(ctx context.Context, arg SetInviteParams) error {
+	_, err := q.db.Exec(ctx, setInvite, arg.ID, arg.InviteHash)
 	return err
 }
 

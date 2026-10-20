@@ -8,6 +8,36 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AccountAudit struct {
+	ID        int64
+	UserID    string
+	Action    string
+	TargetID  string
+	CreatedAt pgtype.Timestamptz
+}
+
+type AccountCredential struct {
+	ID        string
+	UserID    string
+	TokenHash string
+	Kind      string
+	Name      string
+	Scopes    []string
+	CreatedAt pgtype.Timestamptz
+	ExpiresAt pgtype.Timestamptz
+	RevokedAt pgtype.Timestamptz
+}
+
+type AccountUser struct {
+	ID           string
+	Username     pgtype.Text
+	DisplayName  string
+	Role         string
+	PasswordHash pgtype.Text
+	CreatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+}
+
 type CommandResult struct {
 	RoomID      string
 	ActorID     string
@@ -31,6 +61,58 @@ type GameEvent struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type IngestOwner struct {
+	Singleton bool
+	Epoch     int64
+}
+
+type LibraryDecision struct {
+	ID          int64
+	PackID      string
+	Revision    int32
+	ModeratorID string
+	Decision    string
+	Reason      string
+	CreatedAt   pgtype.Timestamptz
+}
+
+type LibraryPack struct {
+	ID                string
+	OwnerID           string
+	ImportID          pgtype.Text
+	CurrentRevision   int32
+	PublishedRevision pgtype.Int4
+	PendingRevision   pgtype.Int4
+	Blocked           bool
+	CreatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+}
+
+type LibraryReport struct {
+	ID         string
+	PackID     string
+	Revision   int32
+	ReporterID string
+	Reason     string
+	Status     string
+	CreatedAt  pgtype.Timestamptz
+}
+
+type LibraryRevision struct {
+	PackID      string
+	Revision    int32
+	Card        []byte
+	Document    []byte
+	Assets      []byte
+	OriginalKey string
+	Issues      []byte
+	AssetIssues []byte
+	SizeBytes   int64
+	Status      string
+	Rights      []byte
+	UpdatedAt   pgtype.Timestamptz
+}
+
 type Room struct {
 	ID         string
 	Snapshot   []byte
@@ -39,8 +121,36 @@ type Room struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type RoomPack struct {
+	RoomID       string
+	OwnerID      string
+	PackID       pgtype.Text
+	Revision     pgtype.Int4
+	Title        string
+	Theme        string
+	DemoDocument []byte
+}
+
 type Session struct {
 	TokenHash     string
 	RoomID        string
 	ParticipantID string
+}
+
+type Upload struct {
+	ID            string
+	OwnerID       string
+	CredentialID  string
+	Name          string
+	Size          int64
+	OffsetBytes   int64
+	Status        string
+	DraftID       string
+	Error         string
+	LeaseEpoch    int64
+	StagedDeleted bool
+	StoredKeys    []string
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	ExpiresAt     pgtype.Timestamptz
 }

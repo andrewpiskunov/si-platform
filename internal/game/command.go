@@ -1,17 +1,21 @@
 package game
 
-import "strings"
+import (
+	"encoding/json"
+	"strings"
+)
 
 type Command struct {
-	Version     int    `json:"v"`
-	ID          string `json:"id"`
-	Type        string `json:"type"`
-	QuestionID  string `json:"question_id,omitempty"`
-	Text        string `json:"text,omitempty"`
-	Answer      string `json:"answer,omitempty"`
-	Value       int64  `json:"value,omitempty"`
-	Correct     *bool  `json:"correct,omitempty"`
-	ExpectedSeq *int64 `json:"expected_seq,omitempty"`
+	Data        json.RawMessage `json:"data,omitempty"`
+	Version     int             `json:"v"`
+	ID          string          `json:"id"`
+	Type        string          `json:"type"`
+	QuestionID  string          `json:"question_id,omitempty"`
+	Text        string          `json:"text,omitempty"`
+	Answer      string          `json:"answer,omitempty"`
+	Value       int64           `json:"value,omitempty"`
+	Correct     *bool           `json:"correct,omitempty"`
+	ExpectedSeq *int64          `json:"expected_seq,omitempty"`
 }
 
 func ValidID(id string) bool {
@@ -27,6 +31,13 @@ func ValidID(id string) bool {
 }
 
 func (c Command) Validate() error {
+	if c.Version == 2 {
+		_, err := c.Payload()
+		return err
+	}
+	if len(c.Data) != 0 {
+		return Fault("invalid_command")
+	}
 	if c.Version != 1 || !ValidID(c.ID) {
 		return Fault("invalid_command")
 	}
@@ -52,7 +63,8 @@ func (c Command) Validate() error {
 	return nil
 }
 
-func Apply(s State, actorID string, c Command) (State, error) {
+func Apply(s State, actorID string, c Command) (State, error) { return ApplyAt(s, actorID, c, 0, 0) }
+func applyLegacy(s State, actorID string, c Command) (State, error) {
 	if err := c.Validate(); err != nil {
 		return s, err
 	}

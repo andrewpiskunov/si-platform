@@ -101,7 +101,7 @@ try {
   assert.equal(withdrawn.card.pending_revision, 0);
   // Engine incompatibility is visible separately and never prevents SIQ export.
   const zero = structuredClone(repaired.document);
-  zero.rounds[0].themes[0].questions[0].price = 0;
+  zero.rounds[0].themes[0].questions[0].price = 100001;
   const invalidGame = await request("POST", "/drafts", { document: zero });
   await visit("/studio/" + invalidGame.card.id);
   await page.getByText(/Готовность к игре/).waitFor();

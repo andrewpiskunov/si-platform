@@ -480,8 +480,8 @@ func TestPlayCompatibilityIsSeparateFromSIQValidity(t *testing.T) {
 	owner := identity(t, p, "owner", "author", "session")
 	mod := identity(t, p, "moderator", "moderator", "session")
 	other := identity(t, p, "other", "author", "session")
-	zero := document("Zero price")
-	zero.Rounds[0].Themes[0].Questions[0].Price = 0
+	zero := document("Unsupported price")
+	zero.Rounds[0].Themes[0].Questions[0].Price = 100001
 	first, err := s.Create(ctx, owner, Save{Document: zero})
 	if err != nil {
 		t.Fatal(err)

@@ -2,8 +2,11 @@ package postgres
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"siplatform/internal/game"
@@ -58,11 +61,27 @@ func (s *Store) Execute(ctx context.Context, roomID, actorID string, c game.Comm
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return Outcome{}, err
 	}
-	next, transitionErr := game.Apply(state, actorID, c)
+	now := time.Now().UnixMilli()
+	var seed [8]byte
+	_, _ = rand.Read(seed[:])
+	entropy := binary.LittleEndian.Uint64(seed[:])
+	next, transitionErr := game.ApplyAt(state, actorID, c, now, entropy)
 	code := game.Code(transitionErr)
 	if transitionErr == nil {
 		next.Seq++
-		if err = saveState(ctx, q, next, c.Type, actorID, payload); err != nil {
+		eventPayload := payload
+		if c.Version == 2 {
+			eventPayload, err = json.Marshal(struct {
+				Command      game.Command `json:"command"`
+				ServerTimeMS int64        `json:"server_time_ms"`
+				Entropy      uint64       `json:"entropy"`
+				Public       PublicEvent  `json:"public"`
+			}{c, now, entropy, publicDelta(state, next)})
+			if err != nil {
+				return Outcome{}, err
+			}
+		}
+		if err = saveState(ctx, q, next, c.Type, actorID, eventPayload); err != nil {
 			return Outcome{}, err
 		}
 	}
@@ -93,12 +112,13 @@ func (s *Store) Pause(ctx context.Context, roomID, reason string) (game.State, e
 	if err != nil {
 		return game.State{}, err
 	}
-	next, changed := game.Pause(state)
+	now := time.Now().UnixMilli()
+	next, changed := game.PauseAt(state, now)
 	if !changed {
 		return state, nil
 	}
 	next.Seq++
-	payload, err := json.Marshal(map[string]string{"reason": reason})
+	payload, err := json.Marshal(map[string]any{"reason": reason, "server_time_ms": now})
 	if err != nil {
 		return game.State{}, err
 	}

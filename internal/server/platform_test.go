@@ -102,27 +102,31 @@ func TestAuthoringRoomBoundary(t *testing.T) {
 	pws, _ := connect(t, h.URL, p)
 	question := doc.Rounds[0].Themes[0].Questions[0]
 	selectURL := h.URL + "/api/rooms/" + host.RoomID + "/select"
-	selection := map[string]any{"question_id": question.ID, "command_id": "select1", "expected_seq": initial.State.Seq}
-	api(t, "POST", selectURL, p.Token, selection, 403)
+	api(t, "POST", h.URL+"/api/rooms/"+host.RoomID+"/round", host.Token, map[string]any{"round_id": doc.Rounds[0].ID, "command_id": "round1", "expected_seq": initial.State.Seq}, 200)
+	current, _ := app.store.Load(ctx, host.RoomID)
+	selection := map[string]any{"question_id": question.ID, "command_id": "select1", "expected_seq": current.Seq}
+	api(t, "POST", selectURL, other.Token, selection, 401)
 	api(t, "POST", selectURL, host.Token, selection, 200)
 	api(t, "POST", selectURL, host.Token, selection, 200) // transport retry must remain idempotent despite old seq
-	revealed := readUntil(t, pws, func(m Message) bool { return m.State != nil && m.State.Phase == game.Open })
-	if revealed.State.Question.Answer != "" {
+	revealed := readUntil(t, pws, func(m Message) bool {
+		return m.State != nil && m.State.Gameplay != nil && m.State.Gameplay.Question != nil
+	})
+	if revealed.State.Gameplay.Question.Answer != nil {
 		t.Fatal("answer leaked")
 	}
 	write(t, hws, game.Command{ID: "bypass", Type: "open_question", QuestionID: "invented", Text: "injected", Answer: "injected", Value: 100})
 	if got := result(t, hws, "bypass"); got.Code != "forbidden" {
 		t.Fatalf("raw question bypass: %+v", got)
 	}
-	write(t, pws, game.Command{ID: "buzz1", Type: "buzz", QuestionID: question.ID})
-	if m := result(t, pws, "buzz1"); m.Code != "ok" {
-		t.Fatal(m)
-	}
+	stage := revealed.State.Gameplay.Stage
+	open := sendV2(t, app, hws, host, "open1", "open_buzzer", game.StagePayload{StageID: stage.ID, InstanceID: stage.InstanceID})
+	stage = open.State.Gameplay.Stage
+	buzz := sendV2(t, app, pws, p, "buzz1", "buzz", game.StagePayload{StageID: stage.ID, InstanceID: stage.InstanceID})
+	stage = buzz.State.Gameplay.Stage
+	answered := sendV2(t, app, pws, p, "answer1", "answer", game.AnswerPayload{StageID: stage.ID, InstanceID: stage.InstanceID, Text: question.Right[0]})
+	stage = answered.State.Gameplay.Stage
 	correct := true
-	write(t, hws, game.Command{ID: "judge1", Type: "judge", QuestionID: question.ID, Correct: &correct})
-	if m := result(t, hws, "judge1"); m.Code != "ok" {
-		t.Fatal(m)
-	}
+	sendV2(t, app, hws, host, "judge1", "judge", game.JudgePayload{StageID: stage.ID, InstanceID: stage.InstanceID, TargetID: p.ParticipantID, Correct: &correct})
 	// The room stays pinned to the selected version after author changes the draft.
 	doc.Rounds[0].Themes[0].Questions[1].Params[0].Items[0].Value = "CHANGED AFTER PIN"
 	api(t, "PUT", path, owner.Token, map[string]any{"base_revision": newer.Card.Revision, "document": doc}, 200)
@@ -133,9 +137,9 @@ func TestAuthoringRoomBoundary(t *testing.T) {
 	selection = map[string]any{"question_id": doc.Rounds[0].Themes[0].Questions[1].ID, "command_id": "select2", "expected_seq": state.Seq}
 	api(t, "POST", selectURL, host.Token, selection, 200)
 	m := readUntil(t, pws, func(m Message) bool {
-		return m.State != nil && m.State.Question != nil && m.State.Question.ID == doc.Rounds[0].Themes[0].Questions[1].ID
+		return m.State != nil && m.State.Gameplay != nil && m.State.Gameplay.Question != nil && m.State.Gameplay.Question.ID == doc.Rounds[0].Themes[0].Questions[1].ID
 	})
-	if strings.Contains(m.State.Question.Text, "CHANGED") {
+	if strings.Contains(m.State.Gameplay.Question.Text, "CHANGED") {
 		t.Fatal("room switched to mutable revision")
 	}
 }
