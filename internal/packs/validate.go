@@ -101,6 +101,11 @@ func validateParameter(p Parameter, path string, depth int, add func(string, str
 		add("parameter_depth", path, "Слишком глубокая вложенность параметров")
 		return
 	}
+	switch p.Type {
+	case "", "simple", "content", "group", "numberSet":
+	default:
+		add("unsupported_parameter_type", path, "Неизвестный тип параметра: "+p.Type)
+	}
 	if p.NumberSet != nil {
 		n := p.NumberSet
 		if (n.Minimum != nil && n.Maximum != nil && *n.Minimum > *n.Maximum) || (n.Step != nil && *n.Step <= 0) {
