@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"sync/atomic"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -15,7 +16,10 @@ import (
 	"siplatform/internal/storage/db"
 )
 
-type Store struct{ pool *pgxpool.Pool }
+type Store struct {
+	pool  *pgxpool.Pool
+	epoch atomic.Int64
+}
 
 func New(pool *pgxpool.Pool) *Store  { return &Store{pool: pool} }
 func (s *Store) Pool() *pgxpool.Pool { return s.pool }
@@ -84,6 +88,9 @@ func (s *Store) Create(ctx context.Context, name string) (Credentials, error) {
 	}
 	defer tx.Rollback(ctx)
 	q := db.New(tx)
+	if err = s.checkOwner(ctx, q); err != nil {
+		return Credentials{}, err
+	}
 	if err = q.LockCreate(ctx); err != nil {
 		return Credentials{}, err
 	}
@@ -118,6 +125,9 @@ func (s *Store) Join(ctx context.Context, roomID, invite, name string, role game
 	}
 	defer tx.Rollback(ctx)
 	q := db.New(tx)
+	if err = s.checkOwner(ctx, q); err != nil {
+		return Credentials{}, err
+	}
 	row, err := q.LockRoom(ctx, roomID)
 	if err != nil {
 		return Credentials{}, normalize(err)

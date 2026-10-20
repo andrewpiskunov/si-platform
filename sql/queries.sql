@@ -1,6 +1,9 @@
 -- name: LockCreate :exec
 SELECT pg_advisory_xact_lock(1902026001);
 
+-- name: LockOwner :one
+SELECT epoch FROM engine_owner WHERE singleton = true FOR SHARE;
+
 -- name: CountRooms :one
 SELECT count(*) FROM rooms;
 

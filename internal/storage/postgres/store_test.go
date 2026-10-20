@@ -215,3 +215,32 @@ CREATE TRIGGER fail_event BEFORE INSERT ON game_events FOR EACH ROW EXECUTE FUNC
 		t.Fatalf("recovered: %+v", recovered)
 	}
 }
+
+func TestExclusiveOwnerAndFencing(t *testing.T) {
+	s, h, _ := room(t)
+	ctx := context.Background()
+	first, err := s.Own(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	next := postgres.New(s.Pool())
+	if lease, err := next.Own(ctx); err == nil {
+		lease.Close()
+		t.Fatal("second process acquired ownership")
+	}
+	first.Close()
+	second, err := next.Own(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	_, err = s.Execute(ctx, h.RoomID, h.ParticipantID, game.Command{Version: 1, ID: "stale-owner", Type: "finish"})
+	if game.Code(err) != "ownership_lost" {
+		t.Fatalf("old owner could write: %v", err)
+	}
+	out := execute(t, next, h, game.Command{ID: "finish", Type: "finish"})
+	if out.Code != "ok" {
+		t.Fatalf("new owner: %+v", out)
+	}
+}

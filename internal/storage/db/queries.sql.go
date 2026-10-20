@@ -169,6 +169,17 @@ func (q *Queries) LockCreate(ctx context.Context) error {
 	return err
 }
 
+const lockOwner = `-- name: LockOwner :one
+SELECT epoch FROM engine_owner WHERE singleton = true FOR SHARE
+`
+
+func (q *Queries) LockOwner(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, lockOwner)
+	var epoch int64
+	err := row.Scan(&epoch)
+	return epoch, err
+}
+
 const lockRoom = `-- name: LockRoom :one
 SELECT id, snapshot, seq, invite_hash, created_at FROM rooms WHERE id = $1 FOR UPDATE
 `

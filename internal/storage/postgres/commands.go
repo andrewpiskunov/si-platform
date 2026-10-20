@@ -32,6 +32,9 @@ func (s *Store) Execute(ctx context.Context, roomID, actorID string, c game.Comm
 	}
 	defer tx.Rollback(ctx)
 	q := db.New(tx)
+	if err = s.checkOwner(ctx, q); err != nil {
+		return Outcome{}, err
+	}
 	row, err := q.LockRoom(ctx, roomID)
 	if err != nil {
 		return Outcome{}, normalize(err)
@@ -79,6 +82,9 @@ func (s *Store) Pause(ctx context.Context, roomID, reason string) (game.State, e
 	}
 	defer tx.Rollback(ctx)
 	q := db.New(tx)
+	if err = s.checkOwner(ctx, q); err != nil {
+		return game.State{}, err
+	}
 	row, err := q.LockRoom(ctx, roomID)
 	if err != nil {
 		return game.State{}, normalize(err)

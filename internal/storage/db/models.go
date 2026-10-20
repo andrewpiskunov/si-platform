@@ -17,6 +17,11 @@ type CommandResult struct {
 	Seq         int64
 }
 
+type EngineOwner struct {
+	Singleton bool
+	Epoch     int64
+}
+
 type GameEvent struct {
 	RoomID    string
 	Seq       int64

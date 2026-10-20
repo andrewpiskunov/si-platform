@@ -46,10 +46,10 @@ WS: `/api/rooms/{id}/ws`; первым кадром за 5 секунд отпр
 
 **Interfaces:** `game.Apply(State, actorID string, Command) (State, error)`; `game.Project(State, participantID string) View`; `game.AddParticipant(State, Participant) (State,error)`. State хранит участников, фазу, текущий вопрос, использованные ID и sequence; View не раскрывает секретов.
 
-- [ ] Написать тесты `TestRound`, `TestRolesAndStaleQuestion`, `TestParticipantLimits`, `TestProjection`, `TestPauseResume`, `TestCommandValidation`: +100/-100, один победитель, запрет 13-го игрока и 21-го зрителя, ответ скрыт, исходное состояние не изменяется при ошибке.
-- [ ] `go test ./internal/game` — увидеть отсутствие реализации / FAIL.
-- [ ] Реализовать переходы и валидацию без сети и БД.
-- [ ] `go test ./internal/game` — PASS; сохранить коммит.
+- [x] Написать тесты `TestRound`, `TestRolesAndStaleQuestion`, `TestParticipantLimits`, `TestProjection`, `TestPauseResume`, `TestCommandValidation`: +100/-100, один победитель, запрет 13-го игрока и 21-го зрителя, ответ скрыт, исходное состояние не изменяется при ошибке.
+- [x] `go test ./internal/game` — увидеть отсутствие реализации / FAIL.
+- [x] Реализовать переходы и валидацию без сети и БД.
+- [x] `go test ./internal/game` — PASS; сохранить коммит.
 
 ## Task 2: Долговечность и идентичность
 
@@ -57,19 +57,24 @@ WS: `/api/rooms/{id}/ws`; первым кадром за 5 секунд отпр
 
 **Interfaces:** `Store.Create(ctx,hostName) (Credentials,error)`, `Store.Join(ctx,roomID,invite,name,role) (Credentials,error)`, `Store.Authenticate(ctx,roomID,token) (string,error)`, `Store.Load(ctx,roomID) (game.State,error)`, `Store.Execute(ctx,roomID,actorID,cmd) (Outcome,error)`, `Store.Pause(ctx,roomID,reason)`, `Store.Recover(ctx)`. Outcome содержит state, code, result sequence и duplicate.
 
-- [ ] Написать PostgreSQL-тесты: повтор после нового Store не удваивает +100; изменённый повтор конфликтует; 12 конкурентных buzz дают одного победителя; чужой токен не подходит; конкурентный вход не превышает 12; сбой транзакции не оставляет половину решения.
-- [ ] `TEST_DATABASE_URL=… go test ./internal/storage/postgres` — FAIL до реализации.
-- [ ] Добавить SQL/миграцию, сгенерировать sqlc; транзакция блокирует строку комнаты, проверяет ID, применяет переход, сохраняет snapshot/event/result.
-- [ ] Проверить восстановление, паузу и хеширование токенов. Повторить тесты — PASS; сохранить коммит.
+- [x] Написать PostgreSQL-тесты: повтор после нового Store не удваивает +100; изменённый повтор конфликтует; 12 конкурентных buzz дают одного победителя; чужой токен не подходит; конкурентный вход не превышает 12; сбой транзакции не оставляет половину решения.
+- [x] `TEST_DATABASE_URL=… go test ./internal/storage/postgres` — FAIL до реализации.
+- [x] Добавить SQL/миграцию, сгенерировать sqlc; транзакция блокирует строку комнаты, проверяет ID, применяет переход, сохраняет snapshot/event/result.
+- [x] Проверить восстановление, паузу и хеширование токенов. Повторить тесты — PASS; сохранить коммит.
 
 ## Task 3: WebSocket, запуск и демонстрация
 
 **Files:** `internal/server/{server,room,connection}.go`, `internal/server/server_test.go`, `internal/storage/postgres/lease.go`, `cmd/{server,migrate,demo}/main.go`, `compose.yaml`, `.env.example`, `Makefile`, `README.md`, `Docs/10-GAME-CORE.md`.
 
-**Interfaces:** `server.New(store,*options) *Server`, `Server.Handler() http.Handler`, `Server.Close()`; сериализация команд/подписок через bounded channel комнаты. Сессия владения БД живёт отдельно от пула запросов.
+**Interfaces:** `server.New(store, options Options) *Server`, `Server.Handler() http.Handler`, `Server.Close()`; сериализация команд/подписок через bounded channel комнаты. Сессия владения БД живёт отдельно от пула запросов.
 
-- [ ] Написать реальные HTTP/WS-тесты: 12 игроков, ответы по ролям, race buzz, judge/retry, reconnect, рестарт сервера с той же БД, Origin/auth, переполнение очереди и пауза при уходе ведущего.
-- [ ] `TEST_DATABASE_URL=… go test ./internal/server` — FAIL до реализации.
-- [ ] Реализовать маршруты, auth frame, heartbeat, лимиты, ограниченные очереди и остановку; добавить CLI, миграции, демонстрационный клиент и команды запуска.
-- [ ] Прогнать PostgreSQL-интеграцию, `go test -race ./...`, `go vet ./...`, сборку, демонстрацию и проверку зависимостей. Исправить обнаруженные ошибки.
-- [ ] Обновить документацию фактически выполненным объёмом; сохранить коммит, провести отдельное ревью и перенести готовый результат в основную рабочую папку.
+- [x] Написать реальные HTTP/WS-тесты: 12 игроков, ответы по ролям, race buzz, judge/retry, reconnect, рестарт сервера с той же БД, Origin/auth, переполнение очереди и пауза при уходе ведущего.
+- [x] `TEST_DATABASE_URL=… go test ./internal/server` — FAIL до реализации.
+- [x] Реализовать маршруты, auth frame, heartbeat, лимиты, ограниченные очереди и остановку; добавить CLI, миграции, демонстрационный клиент и команды запуска.
+- [x] Прогнать PostgreSQL-интеграцию, `go test -race ./...`, `go vet ./...`, сборку, демонстрацию и проверку зависимостей. Исправить обнаруженные ошибки.
+- [x] Обновить документацию фактически выполненным объёмом и сохранить коммит.
+
+## Завершение
+
+- [ ] Провести отдельное ревью всего изменения и исправить существенные замечания.
+- [ ] Перенести проверенный результат в основную рабочую папку.
