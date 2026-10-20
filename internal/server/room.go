@@ -17,11 +17,12 @@ type job struct {
 	result chan reply
 }
 type room struct {
-	id       string
-	server   *Server
-	requests chan job
-	clients  map[*client]struct{}
-	limits   map[string]*bucket
+	id           string
+	server       *Server
+	requests     chan job
+	clients      map[*client]struct{}
+	limits       map[string]*bucket
+	pausePending bool
 }
 
 func (r *room) run() {
@@ -49,7 +50,14 @@ func (r *room) run() {
 	}
 }
 func (r *room) do(ctx context.Context, run func(context.Context, *room) (any, error)) (any, error) {
-	j := job{ctx: ctx, run: run, result: make(chan reply, 1)}
+	j := job{ctx: ctx, result: make(chan reply, 1), run: func(ctx context.Context, r *room) (any, error) {
+		// Every new request, including reconnects and joins, must first make a
+		// previously failed disconnect pause durable. Detach cleanup bypasses do.
+		if err := r.resolvePause(ctx); err != nil {
+			return nil, err
+		}
+		return run(ctx, r)
+	}}
 	select {
 	case <-r.server.ctx.Done():
 		return nil, game.Fault("unavailable")
@@ -115,21 +123,33 @@ func (r *room) detach(c *client) {
 				return nil, nil
 			}
 		}
-		state, err := r.server.store.Pause(ctx, r.id, "host_disconnected")
-		if err != nil {
-			// No further game commands are accepted on these connections until state can be reloaded.
+		r.pausePending = true
+		if err := r.resolvePause(ctx); err != nil {
+			// Keep the pending pause after a failed/ambiguous commit and close
+			// current connections. A reconnect must resolve it before attaching.
 			for existing := range r.clients {
 				existing.cancel()
 			}
 			return nil, err
 		}
-		r.broadcast(state, nil)
 		return nil, nil
 	}}
 	select {
 	case r.requests <- j:
 	case <-r.server.ctx.Done():
 	}
+}
+func (r *room) resolvePause(ctx context.Context) error {
+	if !r.pausePending {
+		return nil
+	}
+	state, err := r.server.store.Pause(ctx, r.id, "host_disconnected")
+	if err != nil {
+		return err
+	}
+	r.pausePending = false
+	r.broadcast(state, nil)
+	return nil
 }
 func (r *room) command(ctx context.Context, c *client, cmd game.Command) error {
 	_, err := r.do(ctx, func(ctx context.Context, r *room) (any, error) {
@@ -139,7 +159,7 @@ func (r *room) command(ctx context.Context, c *client, cmd game.Command) error {
 		if !r.limits[c.id].allow(time.Now()) {
 			return nil, game.Fault("rate_limited")
 		}
-		// If a disconnect could not be persisted, fail closed until the host returns.
+		// A connected host is required even when the persisted room is paused.
 		hostOnline := false
 		for existing := range r.clients {
 			if existing.role == game.Host && existing.ctx.Err() == nil {
@@ -155,7 +175,9 @@ func (r *room) command(ctx context.Context, c *client, cmd game.Command) error {
 		}
 		view := game.Project(out.State, c.id)
 		c.send(Message{Type: "result", CommandID: cmd.ID, Code: out.Code, ResultSeq: out.Seq, Duplicate: out.Duplicate, State: &view})
-		if out.Code == "ok" && !out.Duplicate {
+		if out.Code == "ok" {
+			// A duplicate repairs distribution after an ambiguous commit without
+			// reapplying the transition or advancing the sequence.
 			r.broadcast(out.State, c)
 		}
 		return nil, nil

@@ -218,6 +218,101 @@ func TestHostDisconnectPausesAndResume(t *testing.T) {
 	}
 }
 
+func TestRetryRepairsUnbroadcastCommittedDecision(t *testing.T) {
+	_, h, store := setup(t)
+	host := create(t, h.URL)
+	p1 := join(t, h.URL, host, "First")
+	p2 := join(t, h.URL, host, "Second")
+	hws, _ := connect(t, h.URL, host)
+	first, _ := connect(t, h.URL, p1)
+	second, _ := connect(t, h.URL, p2)
+	write(t, hws, game.Command{ID: "open", Type: "open_question", QuestionID: "q", Text: "Q", Answer: "SECRET", Value: 100})
+	result(t, hws, "open")
+	for _, ws := range []*websocket.Conn{first, second} {
+		readUntil(t, ws, func(m Message) bool { return m.State != nil && m.State.Phase == game.Open })
+	}
+
+	// Persist without distribution: the state peers see after a committed
+	// command whose commit acknowledgement or broadcast was lost.
+	cmd := game.Command{Version: 1, ID: "buzz", Type: "buzz", QuestionID: "q"}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	committed, err := store.Execute(ctx, host.RoomID, p1.ParticipantID, cmd)
+	if err != nil || committed.Code != "ok" {
+		t.Fatalf("commit: %+v, %v", committed, err)
+	}
+	write(t, first, cmd)
+	retry := result(t, first, "buzz")
+	if !retry.Duplicate || retry.Code != "ok" || retry.ResultSeq != committed.Seq || retry.State.Seq != committed.Seq {
+		t.Fatalf("retry: %+v", retry)
+	}
+	for _, ws := range []*websocket.Conn{hws, second} {
+		m := readUntil(t, ws, func(m Message) bool { return m.State != nil && m.State.Phase == game.Answering })
+		if m.State.Winner != p1.ParticipantID || m.State.Seq != committed.Seq {
+			t.Fatalf("peer did not recover committed decision: %+v", m)
+		}
+		if ws == second && m.State.Question.Answer != "" {
+			t.Fatal("retry broadcast leaked answer")
+		}
+	}
+}
+
+func TestFailedDisconnectPauseSurvivesReconnect(t *testing.T) {
+	_, h, store := setup(t)
+	host := create(t, h.URL)
+	player := join(t, h.URL, host, "Player")
+	join(t, h.URL, host, "Other")
+	hws, _ := connect(t, h.URL, host)
+	pws, _ := connect(t, h.URL, player)
+	write(t, hws, game.Command{ID: "open", Type: "open_question", QuestionID: "q", Text: "Q", Answer: "SECRET", Value: 100})
+	result(t, hws, "open")
+	readUntil(t, pws, func(m Message) bool { return m.State != nil && m.State.Phase == game.Open })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := store.Pool().Exec(ctx, `
+		CREATE FUNCTION fail_pause() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN
+			IF NEW.kind = 'paused' THEN RAISE EXCEPTION 'pause persistence failure'; END IF;
+			RETURN NEW;
+		END $$;
+		CREATE TRIGGER fail_pause BEFORE INSERT ON game_events FOR EACH ROW EXECUTE FUNCTION fail_pause();
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hws.CloseNow()
+	var closed Message
+	if err = wsjson.Read(ctx, pws, &closed); err == nil || ctx.Err() != nil {
+		t.Fatalf("failed pause must close player connection: message=%+v, err=%v, context=%v", closed, err, ctx.Err())
+	}
+	// While persistence still fails, reconnect must not expose an active room.
+	blocked, unavailable := connect(t, h.URL, host)
+	blocked.CloseNow()
+	if unavailable.Type != "error" || unavailable.Code != "unavailable" {
+		t.Fatalf("reconnect bypassed failed pause: %+v", unavailable)
+	}
+	if _, err = store.Pool().Exec(ctx, "DROP TRIGGER fail_pause ON game_events"); err != nil {
+		t.Fatal(err)
+	}
+	newPlayer, paused := connect(t, h.URL, player)
+	if paused.State == nil || paused.State.Phase != game.Paused || paused.State.Question.Answer != "" {
+		t.Fatalf("player reconnect: %+v", paused)
+	}
+	newHost, pausedHost := connect(t, h.URL, host)
+	if pausedHost.State == nil || pausedHost.State.Phase != game.Paused || pausedHost.State.Seq != paused.State.Seq {
+		t.Fatalf("host reconnect must preserve pause: %+v", pausedHost)
+	}
+	write(t, newPlayer, game.Command{ID: "too-early", Type: "buzz", QuestionID: "q"})
+	if m := result(t, newPlayer, "too-early"); m.Code == "ok" || m.State == nil || m.State.Phase != game.Paused {
+		t.Fatalf("command resumed room without host decision: %+v", m)
+	}
+	write(t, newHost, game.Command{ID: "resume", Type: "resume"})
+	if m := result(t, newHost, "resume"); m.Code != "ok" || m.State == nil || m.State.Phase != game.Open {
+		t.Fatalf("explicit resume: %+v", m)
+	}
+}
+
 func TestAuthOriginAndMalformedCommands(t *testing.T) {
 	_, h, _ := setup(t)
 	host := create(t, h.URL)
