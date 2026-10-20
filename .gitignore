@@ -7,3 +7,7 @@ dist/
 .DS_Store
 Thumbs.db
 *.siq
+.worktrees/
+.superpowers/
+.local/
+bin/
