@@ -201,6 +201,11 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 			c.send(Message{Type: "error", CommandID: id, Code: game.Code(err)})
 			continue
 		}
+		// Configured rooms select immutable package questions on the server.
+		if s.options.Library != nil && cmd.Type == "open_question" {
+			c.send(Message{Type: "error", CommandID: cmd.ID, Code: "forbidden"})
+			continue
+		}
 		if err = rm.command(ctx, c, cmd); err != nil {
 			c.send(Message{Type: "error", CommandID: cmd.ID, Code: game.Code(err)})
 			if game.Code(err) == "ownership_lost" {

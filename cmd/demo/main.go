@@ -4,6 +4,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -94,7 +96,22 @@ func send(ctx context.Context, ws *websocket.Conn, cmd game.Command) (server.Mes
 func run(base string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	host, err := post(ctx, base+"/api/rooms", map[string]string{"host_name": "Демо-ведущий"})
+	var entropy [16]byte
+	_, _ = rand.Read(entropy[:])
+	password := hex.EncodeToString(entropy[:])
+	var account struct {
+		Token string `json:"token"`
+	}
+	if err := request(ctx, "POST", base+"/api/account/register", "", map[string]string{"username": "demo_" + password[:16], "password": password, "display_name": "Демонстрация"}, 201, &account); err != nil {
+		return err
+	}
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = request(cleanup, "DELETE", base+"/api/account/me", account.Token, map[string]string{"password": password}, 200, nil)
+	}()
+	var host postgres.Credentials
+	err := request(ctx, "POST", base+"/api/rooms", account.Token, map[string]string{"host_name": "Демо-ведущий", "title": "Проверка 12 игроков", "theme": "classic"}, 201, &host)
 	if err != nil {
 		return err
 	}
@@ -106,7 +123,7 @@ func run(base string) error {
 		}
 		people = append(people, p)
 	}
-	hws, _, err := connect(ctx, base, host)
+	hws, hostSnapshot, err := connect(ctx, base, host)
 	if err != nil {
 		return err
 	}
@@ -120,12 +137,17 @@ func run(base string) error {
 		defer ws.CloseNow()
 		clients = append(clients, ws)
 	}
-	opened, err := send(ctx, hws, game.Command{ID: "open", Type: "open_question", QuestionID: "demo-question", Text: "Сколько будет 2 + 2?", Answer: "4", Value: 100})
-	if err != nil {
+	if err = request(ctx, "POST", base+"/api/rooms/"+host.RoomID+"/select", host.Token, map[string]any{"question_id": "r1-t1-q1", "command_id": "open", "expected_seq": hostSnapshot.State.Seq}, 200, nil); err != nil {
 		return err
 	}
-	if opened.Code != "ok" {
-		return errors.New(opened.Code)
+	for {
+		var m server.Message
+		if err = wsjson.Read(ctx, hws, &m); err != nil {
+			return err
+		}
+		if m.State != nil && m.State.Phase == game.Open {
+			break
+		}
 	}
 	start := make(chan struct{})
 	errs := make(chan error, 12)
@@ -135,7 +157,7 @@ func run(base string) error {
 		go func(ws *websocket.Conn) {
 			defer wg.Done()
 			<-start
-			errs <- wsjson.Write(ctx, ws, game.Command{Version: 1, ID: "buzz", Type: "buzz", QuestionID: "demo-question"})
+			errs <- wsjson.Write(ctx, ws, game.Command{Version: 1, ID: "buzz", Type: "buzz", QuestionID: "r1-t1-q1"})
 		}(ws)
 	}
 	close(start)
@@ -163,7 +185,7 @@ func run(base string) error {
 		return errors.New("no winner")
 	}
 	correct := true
-	cmd := game.Command{ID: "judge", Type: "judge", QuestionID: "demo-question", Correct: &correct}
+	cmd := game.Command{ID: "judge", Type: "judge", QuestionID: "r1-t1-q1", Correct: &correct}
 	judged, err := send(ctx, hws, cmd)
 	if err != nil {
 		return err
@@ -188,4 +210,31 @@ func run(base string) error {
 		return err
 	}
 	return json.NewEncoder(os.Stdout).Encode(map[string]any{"room_id": host.RoomID, "players": 12, "winners": 1, "winner": snapshot.State.Participants[winner+1].Name, "score": 100, "duplicate_safe": true, "reconnect_restored": true})
+}
+
+func request(ctx context.Context, method, url, token string, body any, want int, out any) error {
+	b, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(b))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != want {
+		return fmt.Errorf("HTTP status %d", resp.StatusCode)
+	}
+	if out != nil {
+		return json.NewDecoder(resp.Body).Decode(out)
+	}
+	return nil
 }

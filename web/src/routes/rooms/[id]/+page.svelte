@@ -1,0 +1,414 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { page } from '$app/state';
+  import { api, APIError, errorText } from '#lib/api.ts';
+  import { RoomConnection, type RoomState } from '#lib/room-client.ts';
+  import type { Board, Credentials } from '#lib/types.ts';
+  let credentials = $state<Credentials | null>(null),
+    roomState = $state<RoomState | null>(null),
+    board = $state<Board | null>(null),
+    name = $state(''),
+    role = $state('player'),
+    invite = $state(''),
+    joining = $state(false),
+    ready = $state(false),
+    error = $state(''),
+    connectionStatus = $state('connecting'),
+    pending = $state(0),
+    copied = $state(false),
+    roundIndex = $state(0),
+    selection = $state<{ question_id: string; command_id: string; expected_seq: number } | null>(
+      null
+    ),
+    selecting = $state(false),
+    confirmFinish = $state(false),
+    mounted = $state(false);
+  let connection: RoomConnection | null = null;
+  let roomID = $state('');
+  let boardSeq = -1;
+  let alive = true;
+  const me = $derived(
+    roomState?.participants.find((participant) => participant.id === roomState?.you)
+  );
+  const players = $derived(
+    (roomState?.participants || []).filter((participant) => participant.role === 'player')
+  );
+  const isHost = $derived(me?.role === 'host');
+  const canBuzz = $derived(
+    ready && roomState?.phase === 'open' && me?.role === 'player' && pending === 0
+  );
+  const between = $derived(roomState?.phase === 'lobby' || roomState?.phase === 'resolved');
+  const phaseNames: Record<string, string> = {
+    lobby: 'Собираемся',
+    open: 'Вопрос открыт',
+    answering: 'Есть ответ!',
+    resolved: 'Ответ разобран',
+    paused: 'Пауза',
+    finished: 'Игра завершена'
+  };
+  onMount(() => {
+    roomID = page.params.id || '';
+    invite = new URLSearchParams(location.hash.slice(1)).get('invite') || '';
+    try {
+      const value = sessionStorage.getItem(`room:${roomID}`);
+      if (value) {
+        const stored = JSON.parse(value);
+        if (stored.room_id === roomID && typeof stored.token === 'string') credentials = stored;
+      }
+    } catch {
+      /* Storage may be unavailable; joining remains usable. */
+    }
+    mounted = true;
+    if (credentials) connect();
+    return () => {
+      alive = false;
+      connection?.close();
+    };
+  });
+  function connect() {
+    if (!credentials) return;
+    connection?.close();
+    connection = new RoomConnection(roomID, credentials.token, (protocol, status, code) => {
+      if (!alive) return;
+      roomState = protocol.state;
+      ready = protocol.ready;
+      connectionStatus = status;
+      pending = protocol.pending.size;
+      if (code) error = errorText(code);
+      if (roomState && roomState.seq > boardSeq) {
+        boardSeq = roomState.seq;
+        void loadBoard();
+      }
+    });
+    connection.connect();
+  }
+  async function loadBoard() {
+    if (!credentials) return;
+    try {
+      const result = await api<Board>(
+        `/rooms/${roomID}/board`,
+        'GET',
+        undefined,
+        credentials.token
+      );
+      if (alive) {
+        board = result;
+        if (roundIndex >= result.rounds.length) roundIndex = 0;
+      }
+    } catch (e) {
+      if (alive) error = errorText(e);
+    }
+  }
+  async function join(event: SubmitEvent) {
+    event.preventDefault();
+    joining = true;
+    error = '';
+    try {
+      credentials = await api<Credentials>(`/rooms/${roomID}/participants`, 'POST', {
+        name: name.trim(),
+        role,
+        invite_token: invite
+      });
+      sessionStorage.setItem(`room:${roomID}`, JSON.stringify(credentials));
+      connect();
+    } catch (e) {
+      error = errorText(e);
+    } finally {
+      joining = false;
+    }
+  }
+  function send(type: string, fields: { question_id?: string; correct?: boolean } = {}) {
+    error = '';
+    try {
+      connection?.send(type, fields);
+    } catch (e) {
+      error = errorText(e);
+    }
+  }
+  function buzz() {
+    if (canBuzz && roomState?.question) send('buzz', { question_id: roomState.question.id });
+  }
+  function keydown(event: KeyboardEvent) {
+    if (
+      event.code === 'Space' &&
+      !event.repeat &&
+      !(
+        event.target instanceof HTMLElement &&
+        event.target.closest('input,textarea,select,button,a')
+      ) &&
+      canBuzz
+    ) {
+      event.preventDefault();
+      buzz();
+    }
+  }
+  async function choose(questionID: string, retry = false) {
+    if (!credentials || !roomState || !ready || selecting) return;
+    error = '';
+    selecting = true;
+    if (!retry)
+      selection = {
+        question_id: questionID,
+        command_id: crypto.randomUUID(),
+        expected_seq: roomState.seq
+      };
+    try {
+      await api(`/rooms/${roomID}/select`, 'POST', selection, credentials.token);
+      selection = null;
+      await loadBoard();
+    } catch (e) {
+      error = errorText(e);
+      if (e instanceof APIError && e.status < 500) selection = null;
+    } finally {
+      selecting = false;
+    }
+  }
+  async function share() {
+    try {
+      await navigator.clipboard.writeText(
+        `${location.origin}/rooms/${roomID}#invite=${encodeURIComponent(invite)}`
+      );
+      copied = true;
+      setTimeout(() => (copied = false), 3000);
+    } catch {
+      error = 'Не удалось скопировать ссылку. Скопируйте её из поля приглашения.';
+    }
+  }
+  function reset() {
+    connection?.close();
+    sessionStorage.removeItem(`room:${roomID}`);
+    credentials = null;
+    roomState = null;
+    ready = false;
+    error = '';
+  }
+</script>
+
+<svelte:window onkeydown={keydown} />
+<svelte:head
+  ><title>{board?.title || 'Игровая комната'} — Своя игра</title><meta
+    name="referrer"
+    content="no-referrer"
+  /></svelte:head
+>
+<section class="page">
+  {#if !mounted}<p class="loading" role="status">Открываем комнату…</p>{:else if !credentials}<div
+      class="narrow"
+      style="margin:auto"
+    >
+      <p class="eyebrow">Вас пригласили играть</p>
+      <h1>Занимайте место.</h1>
+      <p class="muted">Представьтесь друзьям и присоединяйтесь к комнате.</p>
+      <form class="panel stack" onsubmit={join}>
+        <label
+          >Ваше имя<input
+            bind:value={name}
+            required
+            maxlength="32"
+            autocomplete="nickname"
+            placeholder="Как вас представить?"
+          /></label
+        ><label
+          >Роль<select bind:value={role}
+            ><option value="player">Игрок — отвечаю и набираю очки</option><option value="spectator"
+              >Зритель — смотрю игру</option
+            ></select
+          ></label
+        >{#if !invite}<div class="notice">
+            В этой ссылке нет приглашения. Попросите ведущего прислать полную ссылку.
+          </div>{/if}{#if error}<div class="notice error" role="alert">{error}</div>{/if}<button
+          class="primary"
+          disabled={joining || !invite}>{joining ? 'Подключаемся…' : 'Войти в комнату →'}</button
+        >
+      </form>
+    </div>{:else}<div class="room" data-theme={board?.theme || 'classic'}>
+      <div class="row between">
+        <div>
+          <p class="eyebrow">{board?.pack_name || 'Своя игра'}</p>
+          <h1 style="font-size:32px;margin-bottom:10px">{board?.title || 'Игровой вечер'}</h1>
+          <span class="helper" role="status" aria-live="polite"
+            >{ready
+              ? '● В сети'
+              : connectionStatus === 'reconnecting'
+                ? 'Восстанавливаем соединение…'
+                : 'Подключаемся…'}{roomState ? ` · ${phaseNames[roomState.phase]}` : ''}</span
+          >
+        </div>
+        <div class="row">
+          {#if isHost && invite}<button class="small" onclick={share}
+              >{copied ? 'Ссылка скопирована' : 'Пригласить друзей ↗'}</button
+            >{/if}{#if isHost && roomState?.phase === 'paused'}<button
+              class="primary small"
+              disabled={!ready || pending > 0}
+              onclick={() => send('resume')}>Продолжить ▶</button
+            >{:else if isHost && ['open', 'answering'].includes(roomState?.phase || '')}<button
+              class="small"
+              disabled={!ready || pending > 0}
+              onclick={() => send('pause')}>Пауза Ⅱ</button
+            >{/if}
+        </div>
+      </div>
+      {#if error}<div class="notice error" role="alert" style="margin-top:20px">
+          {error}{#if selection}<button
+              class="small"
+              disabled={selecting || !ready}
+              onclick={() => choose(selection!.question_id, true)}>Повторить выбор</button
+            >{/if}
+        </div>{/if}{#if !roomState}<div class="empty" style="margin-top:30px">
+          <h2>Ждём соединение</h2>
+          <p>Ваше место восстановится автоматически.</p>
+          <button class="small" onclick={reset}>Войти по приглашению заново</button>
+        </div>{:else}<div class="room-grid">
+          <div class="stack">
+            {#if roomState.phase === 'finished'}<div class="question-stage">
+                <p class="eyebrow">Спасибо за игру</p>
+                <h2>
+                  {[...players].sort((a, b) => b.score - a.score)[0]?.name || 'Вы'} — отличный вечер!
+                </h2>
+                <p class="muted">Итоговые очки — в таблице игроков.</p>
+                <a class="button primary" href="/">Выбрать следующий пакет</a>
+              </div>{:else if between}<div>
+                <div class="row between" style="margin-bottom:20px">
+                  <h2 style="margin:0">
+                    {roomState.phase === 'lobby' ? 'Выбираем первый вопрос' : 'Продолжаем игру'}
+                  </h2>
+                  {#if board?.rounds.length}<select
+                      style="width:auto;max-width:240px"
+                      bind:value={roundIndex}
+                      aria-label="Раунд"
+                      >{#each board.rounds as round, index}<option value={index}
+                          >{round.name}</option
+                        >{/each}</select
+                    >{/if}
+                </div>
+                {#if roomState.phase === 'lobby' && players.length < 2}<p class="notice">
+                    Для начала игры нужны хотя бы два игрока. Пригласите друзей по ссылке.
+                  </p>{/if}{#if roomState.phase === 'resolved' && roomState.question?.answer}<div
+                    class="notice success"
+                    style="margin-bottom:20px"
+                  >
+                    <strong>Ответ:</strong>
+                    {roomState.question.answer}
+                  </div>{/if}{#if board?.rounds[roundIndex]}<div class="board-scroll">
+                    <div class="board">
+                      {#each board.rounds[roundIndex].themes as theme}<div
+                          class="board-row"
+                          style={`--columns:${Math.max(1, theme.questions.length)}`}
+                        >
+                          <div class="board-theme">{theme.name}</div>
+                          {#each theme.questions as question}<button
+                              class="board-cell"
+                              disabled={!isHost ||
+                                !ready ||
+                                question.played ||
+                                selecting ||
+                                players.length < 2}
+                              onclick={() => choose(question.id)}
+                              aria-label={`${theme.name}, ${question.value} очков${question.played ? ', сыгран' : ''}`}
+                              >{question.played ? '—' : question.value}</button
+                            >{/each}
+                        </div>{/each}
+                    </div>
+                  </div>{:else}<p class="loading">Загружаем табло…</p>{/if}{#if !isHost}<p
+                    class="helper"
+                    style="margin-top:16px"
+                  >
+                    Ведущий выбирает следующий вопрос.
+                  </p>{/if}
+              </div>{:else}<div>
+                <div class="question-stage">
+                  {#if roomState.phase === 'paused'}<p class="eyebrow">Игра на паузе</p>{/if}
+                  <div class="question-price">{roomState.question?.value} очков</div>
+                  <h2>{roomState.question?.text}</h2>
+                  {#if roomState.phase === 'answering'}<p class="pill">
+                      Отвечает {roomState.participants.find(
+                        (participant) => participant.id === roomState?.winner
+                      )?.name}
+                    </p>{/if}{#if isHost && roomState.question?.answer}<div
+                      class="notice"
+                      style="width:100%;margin-top:20px;text-align:left"
+                    >
+                      <span class="helper">Только для ведущего</span>
+                      <p style="margin:8px 0 0">{roomState.question.answer}</p>
+                    </div>{/if}{#if roomState.phase === 'paused'}<p
+                      class="muted"
+                      style="margin-top:24px"
+                    >
+                      Ведущий продолжит, когда все будут готовы.
+                    </p>{/if}
+                </div>
+                {#if me?.role === 'player'}<button class="buzz" disabled={!canBuzz} onclick={buzz}
+                    >{roomState.winner === roomState.you && roomState.phase === 'answering'
+                      ? 'Ваш ответ!'
+                      : 'Знаю ответ!'}</button
+                  >
+                  <p class="helper" style="text-align:center;margin-top:14px">
+                    Кнопка или пробел на клавиатуре
+                  </p>{/if}{#if isHost && roomState.phase === 'answering'}<div
+                    class="row"
+                    style="margin-top:20px"
+                  >
+                    <button
+                      class="primary"
+                      disabled={!ready || pending > 0}
+                      onclick={() =>
+                        send('judge', { question_id: roomState!.question!.id, correct: true })}
+                      >✓ Верно · +{roomState.question?.value}</button
+                    ><button
+                      class="danger"
+                      disabled={!ready || pending > 0}
+                      onclick={() =>
+                        send('judge', { question_id: roomState!.question!.id, correct: false })}
+                      >× Неверно · −{roomState.question?.value}</button
+                    >
+                  </div>{/if}
+              </div>{/if}
+          </div>
+          <aside>
+            <div class="row between" style="margin-bottom:16px">
+              <h3 style="margin:0">Игроки</h3>
+              <span class="helper">{players.length} / 12</span>
+            </div>
+            <div class="score-list">
+              {#each roomState.phase === 'finished' ? [...players].sort((a, b) => b.score - a.score) : players as participant}<div
+                  class="score-item"
+                  class:winner={participant.id === roomState.winner}
+                >
+                  <span>{participant.name}{participant.id === roomState?.you ? ' (вы)' : ''}</span
+                  ><strong>{participant.score}</strong>
+                </div>{/each}
+            </div>
+            <p class="helper" style="margin-top:20px">
+              Ведущий: {roomState.participants.find((participant) => participant.role === 'host')
+                ?.name}<br />Зрителей: {roomState.participants.filter(
+                (participant) => participant.role === 'spectator'
+              ).length}
+            </p>
+            {#if isHost && invite}<details style="margin-top:20px">
+                <summary>Ссылка приглашения</summary><input
+                  readonly
+                  value={`${location.origin}/rooms/${roomID}#invite=${encodeURIComponent(invite)}`}
+                  aria-label="Ссылка приглашения"
+                  onclick={(event) => event.currentTarget.select()}
+                />
+              </details>{/if}{#if isHost && roomState.phase !== 'finished'}<div
+                style="margin-top:30px"
+              >
+                {#if confirmFinish}<p class="helper">Завершить игру с текущим счётом?</p>
+                  <div class="row">
+                    <button
+                      class="small danger"
+                      disabled={!ready || pending > 0}
+                      onclick={() => {
+                        send('finish');
+                        confirmFinish = false;
+                      }}>Завершить</button
+                    ><button class="small" onclick={() => (confirmFinish = false)}>Отмена</button>
+                  </div>{:else}<button class="small ghost" onclick={() => (confirmFinish = true)}
+                    >Завершить игру</button
+                  >{/if}
+              </div>{/if}
+          </aside>
+        </div>{/if}
+    </div>{/if}
+</section>

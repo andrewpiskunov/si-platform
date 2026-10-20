@@ -8,9 +8,15 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
+	"siplatform/internal/accounts"
+	"siplatform/internal/blob"
+	"siplatform/internal/ingest"
+	"siplatform/internal/library"
 	"siplatform/internal/server"
 	"siplatform/internal/storage/postgres"
 )
@@ -41,7 +47,24 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	app := server.New(store, server.Options{Origin: os.Getenv("ALLOWED_ORIGIN")})
+	origin := os.Getenv("ALLOWED_ORIGIN")
+	dataDir := os.Getenv("DATA_DIR")
+	if dataDir == "" {
+		dataDir = ".local/data"
+	}
+	objects, err := objectStore(ctx, dataDir)
+	if err != nil {
+		return err
+	}
+	auth := accounts.New(pool, accounts.Options{Origin: origin, SecureCookies: strings.HasPrefix(origin, "https://")})
+	lib := library.New(pool)
+	uploads, err := ingest.New(pool, objects, lib, ingest.Options{Directory: filepath.Join(dataDir, "uploads")})
+	if err != nil {
+		return err
+	}
+	uploads.Start(ctx)
+	defer uploads.Close()
+	app := server.New(store, server.Options{Origin: origin, Accounts: auth, Library: lib, Objects: objects, Uploads: uploads})
 	defer app.Close()
 	addr := os.Getenv("LISTEN_ADDR")
 	if addr == "" {
@@ -54,7 +77,7 @@ func run() error {
 	httpServer := &http.Server{Handler: app.Handler(), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	served := make(chan error, 1)
 	go func() { served <- httpServer.Serve(listener) }()
-	log.Printf("game core listening on %s", listener.Addr())
+	log.Printf("SI platform API listening on %s", listener.Addr())
 	var outcome error
 	select {
 	case <-ctx.Done():
@@ -75,4 +98,11 @@ func run() error {
 		}
 	}
 	return outcome
+}
+
+func objectStore(ctx context.Context, dataDir string) (blob.Store, error) {
+	if os.Getenv("S3_BUCKET") == "" {
+		return blob.NewLocal(filepath.Join(dataDir, "objects"))
+	}
+	return blob.NewS3(ctx, blob.S3Config{Endpoint: os.Getenv("S3_ENDPOINT"), Region: os.Getenv("S3_REGION"), Bucket: os.Getenv("S3_BUCKET"), AccessKey: os.Getenv("S3_ACCESS_KEY"), SecretKey: os.Getenv("S3_SECRET_KEY"), SessionToken: os.Getenv("S3_SESSION_TOKEN"), PathStyle: os.Getenv("S3_PATH_STYLE") == "true", TempDir: os.Getenv("TMPDIR")})
 }

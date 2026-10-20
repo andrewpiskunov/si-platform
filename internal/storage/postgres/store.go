@@ -73,6 +73,12 @@ func (s *Store) Authenticate(ctx context.Context, roomID, token string) (string,
 	return id, err
 }
 func (s *Store) Create(ctx context.Context, name string) (Credentials, error) {
+	return s.create(ctx, name, nil)
+}
+func (s *Store) CreateGame(ctx context.Context, name string, setup GameSetup) (Credentials, error) {
+	return s.create(ctx, name, &setup)
+}
+func (s *Store) create(ctx context.Context, name string, setup *GameSetup) (Credentials, error) {
 	if !game.ValidName(name) {
 		return Credentials{}, game.Fault("invalid_name")
 	}
@@ -87,6 +93,11 @@ func (s *Store) Create(ctx context.Context, name string) (Credentials, error) {
 		return Credentials{}, err
 	}
 	defer tx.Rollback(ctx)
+	if setup != nil {
+		if err := setup.authorize(ctx, tx); err != nil {
+			return Credentials{}, err
+		}
+	}
 	q := db.New(tx)
 	if err = s.checkOwner(ctx, q); err != nil {
 		return Credentials{}, err
@@ -109,6 +120,11 @@ func (s *Store) Create(ctx context.Context, name string) (Credentials, error) {
 	}
 	if err = q.AddEvent(ctx, db.AddEventParams{RoomID: c.RoomID, Seq: 1, Kind: "room_created", ActorID: c.ParticipantID, Payload: []byte(`{}`)}); err != nil {
 		return Credentials{}, err
+	}
+	if setup != nil {
+		if err := setup.save(ctx, tx, c.RoomID); err != nil {
+			return Credentials{}, err
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return Credentials{}, err

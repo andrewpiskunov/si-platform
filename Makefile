@@ -16,6 +16,8 @@ build:
 	go build -o bin/server ./cmd/server
 	go build -o bin/migrate ./cmd/migrate
 	go build -o bin/demo ./cmd/demo
+	go build -o bin/siq ./cmd/siq
+	go build -o bin/admin ./cmd/admin
 migrate:
 	go run ./cmd/migrate
 run:
@@ -24,3 +26,11 @@ demo:
 	go run ./cmd/demo
 generate:
 	go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 generate
+
+.PHONY: web-check web-build web-dev
+web-check:
+	cd web && npm run check && npm test
+web-build:
+	cd web && npm run build
+web-dev:
+	cd web && npm run dev

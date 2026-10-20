@@ -12,8 +12,8 @@
 - `Asset{Name,Key,ContentType string; Size int64}` (name — имя файла SIQ, key — SHA256; никакого URL).
 - `Rights{License,SourceURL,Attribution string; AllowDownload,Confirmed bool}`; snake_case JSON. Источник — http(s) URL либо `original` для своего произведения; лицензия/основание и атрибуция обязательны.
 - `Card{ID,Name,OwnerID,Author,Status,Language,Restriction string; Revision,Difficulty,QuestionCount,RoundCount int; SizeBytes int64; HasMedia,AllowDownload bool; Tags []string; Rights Rights; UpdatedAt time.Time}`. snake_case. Public card содержит только опубликованную ревизию. Status=draft/pending/published/rejected/withdrawn/blocked.
-- `Draft{Card Card; Document packs.Document; Assets []Asset; OriginalKey string; Issues []packs.Issue}`. snake_case. Assets/OriginalKey приватны. Issues вычисляет библиотека из Document + дополнительных Issues, полученных от доверенного импортёра. Клиент не задаёт дополнительные Issues напрямую.
-- `Save{Document packs.Document; Assets []Asset; OriginalKey string; Issues []packs.Issue}`. Вход доверенного прикладного слоя, не HTTP DTO.
+- `Draft{Card Card; Document packs.Document; Assets []Asset; OriginalKey string; Issues,AssetIssues []packs.Issue}`. snake_case. Assets/OriginalKey приватны. Issues вычисляет библиотека из Document + дополнительных Issues, полученных от доверенного импортёра. Клиент не задаёт дополнительные Issues напрямую.
+- `Save{Document packs.Document; Assets []Asset; OriginalKey,ImportID string; Issues []packs.Issue}`. Вход доверенного прикладного слоя, не HTTP DTO.
 - `Filter{Query,Language,Tag string; Difficulty *int; HasMedia *bool; MaxBytes int64; Offset,Limit int}`; max limit50, offset max100000.
 - `Report{ID,PackID,ReporterID,Reason,Status string; Revision int; CreatedAt time.Time}`.
 
@@ -54,7 +54,17 @@ Svelte 5 + Kit + TypeScript + adapter-node. SSR публичного катал�
 
 ## Приёмка этапа
 
-- [ ] Library tests/race/vet и self-review.
-- [ ] HTTP integration tests/race/vet и migration.
+- [x] Library tests/race/vet и self-review.
+- [x] HTTP integration tests/race/vet и migration.
 - [ ] web check/test/build и браузерный проход автора/ведущего/игрока.
 - [ ] Независимое ревью, один проход исправлений с регрессиями; общая проверка и перенос этапа в main.
+
+## 4. Возобновляемый импорт (независимый исполнитель)
+
+Только `internal/ingest/**`, `migrations/00005_ingest.sql`. `New(pool,*blob.Store interface actually blob.Store, library *library.Service, Options{Directory string}) (*Service,error)`; точная Go сигнатура `New(pool *pgxpool.Pool, objects blob.Store, lib *library.Service, options Options) (*Service,error)`. `Start(ctx context.Context)` запускает 2 worker; `Close()` отменяет/ждёт. До Start тесты могут контролировать очередь. `Create(ctx, actor accounts.Identity, name string,size int64)(Upload,error)`, `Get(ctx,actor,id string)(Upload,error)`, `Append(ctx,actor,id string,offset int64,body io.Reader,size int64)(Upload,error)`, `Complete(ctx,actor,id string)(Upload,error)`. Upload JSON `{id,offset,size,status,draft_id?,error?}`; экспортируемые ErrUnauthorized/Forbidden/NotFound/Conflict/Invalid/Quota/Unavailable. Scope drafts:write для всех операций, кроме Get (drafts:read OR write). Account identity приходит от доверенного HTTP; перепроверить deleted_at при записи.
+
+`uploads` PostgreSQL: автор, offset, size, name, статус uploading/queued/processing/ready/failed, draft_id, error code, timestamps. Файлы в приватном Directory, имена только случайный ID32hex. Append ≤4MiB, держит rowlock; перед записью truncate к подтверждённому offset (восстанавливает crash после fsync до commit), fsync прежде DB commit. Offset mismatch=Conflict; максимум до size. Не читать неопределённое тело сверх max, фактическая длина обязательна. Два активных задания пользователя/16 всего под транзакционным advisorylock, active storage ≤4GiB. Срок сутки, просроченные исходники удалить при cleanup (свои ID), никакого удаления пользовательского каталога. Complete повторяемый, только все байты. Start возвращает processing в queued при безопасном единственном владении импортёром через advisory lease; DB lock loss останавливает worker. Claim SKIP LOCKED, фоновая обработка не в HTTP запросе, context + дедлайн5мин.
+
+SIQ импорт: сохранить оригинал SHA256 → bounded siq.Read → assets в blob с проверкой хеша → library.Create с Save.ImportID=id (root добавил контракт идемпотентности библиотеке), OriginalKey и диагностикой. Если сбой между Create/markready, повтор Create ImportID не создаёт дубликат. Невалидный контейнер=failed; диагностируемый документ=ready с ошибками в draft. Asset MIME определять по байтам/типу, не доверять расширению; HTML/SVG остаются attachment/octet-stream и блокируют готовность если используются. Текстовый SIQ без media готов. В этом этапе кодеки/derivatives подключаются следующим модулем; пометить непроверенное audio/video диагностикой `media_pending` (не выдавать за играбельное). Не загружать внешние ссылки. Не буферизовать архив/медиа целиком в RAM. Успешные/failed staged temp удалить после final status; оригинал в blob сохраняется у готового draft. Тесты realPG+localblob: resume/offset/races/cancel/partial/size/quota/foreign/scope, queued import→ready draft+original, malformed→failed, duplicate Complete/ImportID, startup recovery. Root HTTP только вызывает методы и отображает JSON.
+
+Уточнение интеграции: `UpdateDocument(ctx,actor,id,base,doc)` разрешает write-only токену править документ и сохраняет файлы/диагностику из заблокированной ревизии без выдачи draft:read. `Save.ImportID` закрепляет идемпотентность импорта; `Draft.AssetIssues` отделяет внешние проверки файлов от пересчитываемых ошибок документа.

@@ -11,11 +11,21 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"siplatform/internal/accounts"
+	"siplatform/internal/blob"
 	"siplatform/internal/game"
+	"siplatform/internal/ingest"
+	"siplatform/internal/library"
 	"siplatform/internal/storage/postgres"
 )
 
-type Options struct{ Origin string }
+type Options struct {
+	Origin   string
+	Accounts *accounts.Service
+	Library  *library.Service
+	Objects  blob.Store
+	Uploads  *ingest.Service
+}
 type Server struct {
 	store       *postgres.Store
 	options     Options
@@ -26,13 +36,14 @@ type Server struct {
 	rooms       map[string]*room
 	wg          sync.WaitGroup
 	connections chan struct{}
+	exports     chan struct{}
 	httpMu      sync.Mutex
 	httpLimit   *bucket
 }
 
 func New(store *postgres.Store, options Options) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Server{store: store, options: options, ctx: ctx, cancel: cancel, rooms: make(map[string]*room), connections: make(chan struct{}, 10000), httpLimit: newBucket()}
+	return &Server{store: store, options: options, ctx: ctx, cancel: cancel, rooms: make(map[string]*room), connections: make(chan struct{}, 10000), exports: make(chan struct{}, 2), httpLimit: newBucket()}
 }
 func (s *Server) Close() {
 	s.mu.Lock()
@@ -64,6 +75,7 @@ func (s *Server) Handler() http.Handler {
 	})
 	r.Route("/api", func(r chi.Router) {
 		r.Use(s.guard)
+		s.platformRoutes(r)
 		r.Post("/rooms", s.create)
 		r.Post("/rooms/{room}/participants", s.join)
 		r.Get("/rooms/{room}/ws", s.websocket)
@@ -80,6 +92,15 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			httpError(w, game.Fault("forbidden"))
 			return
 		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			// Chunk bodies and editor saves must not hold database locks forever
+			// when the sender stops producing bytes. WebSocket reads use their
+			// own authentication/heartbeat deadlines.
+			_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(30 * time.Second))
+			ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+			defer cancel()
+			r = r.WithContext(ctx)
+		}
 		s.httpMu.Lock()
 		// Global admission limiter: 100 requests/s, burst 200. Participant commands have separate limits.
 		now := time.Now()
@@ -93,10 +114,17 @@ func (s *Server) guard(next http.Handler) http.Handler {
 	})
 }
 func (s *Server) validOrigin(r *http.Request) bool {
-	origin := r.Header.Get("Origin")
-	if origin == "" {
+	if r.Header.Get("Sec-Fetch-Site") == "cross-site" {
+		return false
+	}
+	origins := r.Header.Values("Origin")
+	if len(origins) == 0 {
 		return true
 	} // CLI clients have no browser Origin.
+	if len(origins) != 1 || origins[0] == "" {
+		return false
+	}
+	origin := origins[0]
 	expected := s.options.Origin
 	if expected == "" {
 		scheme := "http"
@@ -137,11 +165,11 @@ func httpError(w http.ResponseWriter, err error) {
 	switch code {
 	case "unauthorized":
 		status = 401
-	case "forbidden":
+	case "forbidden", "blocked":
 		status = 403
 	case "not_found":
 		status = 404
-	case "room_full", "room_limit", "question_in_progress", "finished":
+	case "room_full", "room_limit", "question_in_progress", "finished", "stale_state", "command_conflict", "question_reused":
 		status = 409
 	case "rate_limited", "busy":
 		status = 429
@@ -151,6 +179,10 @@ func httpError(w http.ResponseWriter, err error) {
 	writeJSON(w, status, map[string]string{"error": code})
 }
 func (s *Server) create(w http.ResponseWriter, r *http.Request) {
+	if s.options.Accounts != nil {
+		s.createGame(w, r)
+		return
+	}
 	var req struct {
 		HostName string `json:"host_name"`
 	}

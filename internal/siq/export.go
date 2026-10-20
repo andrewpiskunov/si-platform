@@ -14,6 +14,24 @@ import (
 	"siplatform/internal/packs"
 )
 
+// ValidateDocument checks editable content and references without reading asset
+// bodies. Storage/import must verify the asset bytes separately. A blocking
+// diagnostic makes the document unsuitable for export/publication/play.
+func ValidateDocument(ctx context.Context, doc packs.Document, assets []Asset) ([]packs.Issue, error) {
+	issues := packs.Validate(doc)
+	issues = append(issues, mediaIssues(doc, assets)...)
+	root, err := encodeDocument(ctx, doc)
+	if err != nil {
+		return issues, err
+	}
+	content := []byte(nodeXML(root))
+	if int64(len(content)) > DefaultLimits().XMLBytes {
+		return issues, errors.New("XML size limit exceeded")
+	}
+	_, xmlIssues, err := readXML(ctx, content, DefaultLimits())
+	return append(issues, xmlIssues...), err
+}
+
 // Write emits a v5 archive. Callers must discard partial output on any error.
 func Write(ctx context.Context, output io.Writer, doc packs.Document, assets []Asset) error {
 	if err := ctx.Err(); err != nil {

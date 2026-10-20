@@ -3,14 +3,15 @@ package game
 import "strings"
 
 type Command struct {
-	Version    int    `json:"v"`
-	ID         string `json:"id"`
-	Type       string `json:"type"`
-	QuestionID string `json:"question_id,omitempty"`
-	Text       string `json:"text,omitempty"`
-	Answer     string `json:"answer,omitempty"`
-	Value      int64  `json:"value,omitempty"`
-	Correct    *bool  `json:"correct,omitempty"`
+	Version     int    `json:"v"`
+	ID          string `json:"id"`
+	Type        string `json:"type"`
+	QuestionID  string `json:"question_id,omitempty"`
+	Text        string `json:"text,omitempty"`
+	Answer      string `json:"answer,omitempty"`
+	Value       int64  `json:"value,omitempty"`
+	Correct     *bool  `json:"correct,omitempty"`
+	ExpectedSeq *int64 `json:"expected_seq,omitempty"`
 }
 
 func ValidID(id string) bool {
@@ -27,6 +28,9 @@ func ValidID(id string) bool {
 
 func (c Command) Validate() error {
 	if c.Version != 1 || !ValidID(c.ID) {
+		return Fault("invalid_command")
+	}
+	if c.ExpectedSeq != nil && *c.ExpectedSeq < 1 {
 		return Fault("invalid_command")
 	}
 	switch c.Type {
@@ -65,6 +69,9 @@ func Apply(s State, actorID string, c Command) (State, error) {
 	}
 	if s.Phase == Finished {
 		return s, Fault("finished")
+	}
+	if c.ExpectedSeq != nil && *c.ExpectedSeq != s.Seq {
+		return s, Fault("stale_state")
 	}
 	n := s.Clone()
 	switch c.Type {

@@ -30,10 +30,29 @@ services:
       DATABASE_URL: postgres://si:${POSTGRES_PASSWORD:-local-dev-only}@db:5432/si?sslmode=disable
       LISTEN_ADDR: "0.0.0.0:8080"
       ALLOWED_ORIGIN: ${ALLOWED_ORIGIN:-http://localhost:8080}
-    ports:
-      - "127.0.0.1:${PORT:-8080}:8080"
+    volumes:
+      - app-data:/data
     depends_on:
       migrate:
         condition: service_completed_successfully
+  web:
+    build: ./web
+    environment:
+      API_ORIGIN: http://api:8080
+      ORIGIN: ${ALLOWED_ORIGIN:-http://localhost:8080}
+      HOST: 0.0.0.0
+      PORT: 3000
+    depends_on:
+      - api
+  edge:
+    image: caddy:2.11.7-alpine
+    ports:
+      - "127.0.0.1:${PORT:-8080}:8080"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - api
+      - web
 volumes:
+  app-data:
   postgres-data:
