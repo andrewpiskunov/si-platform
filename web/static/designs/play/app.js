@@ -5,9 +5,14 @@ let state = { stage:'board', mode:'oral', count:3, score:0, blocked:0, paused:fa
 const instance = crypto.randomUUID();
 let introTimer;
 let lastScene = '';
+const defaultRules = {mode:'oral',penalties:true,falseStart:true,blockSeconds:3,introMS:2000};
+state.rules={...defaultRules}; state.activeRules={...defaultRules};
 const channel = new BroadcastChannel('efir-interaction-prototype');
 const names = ['Анна','Михаил','Елена'];
 const avatars = ['anna','mikhail','elena'];
+let preferences={sound:false,volume:50,text:'normal',motion:false};
+try{const saved=JSON.parse(sessionStorage.getItem('efir-prototype-preferences')||'null');if(saved)preferences={sound:saved.sound===true,volume:Number.isFinite(saved.volume)?Math.max(0,Math.min(100,saved.volume)):50,text:saved.text==='large'?'large':'normal',motion:saved.motion===true};}catch{}
+let audioContext;
 const question = 'Какой океан самый большой по площади?';
 let cell = '';
 function publish(){ channel.postMessage({type:'state',state}); }
@@ -18,7 +23,7 @@ channel.onmessage = ({data}) => {
 channel.postMessage({type:'request'});
 function update(change){ Object.assign(state,change); render(); publish(); }
 function button(label, action, cls='primary') { const b=document.createElement('button'); b.textContent=label; b.className=cls; b.disabled=state.paused; b.onclick=action; return b; }
-function showQuestion(id,price,topic){cell=id; update({stage:'intro',topic,price,correct:null,blocked:0,introOwner:instance,introEnd:Date.now()+2000,introRemaining:2000});}
+function showQuestion(id,price,topic){cell=id; const rules={...state.rules}; update({stage:'intro',topic,price,mode:rules.mode,activeRules:rules,correct:null,blocked:0,introOwner:instance,introEnd:Date.now()+rules.introMS,introRemaining:rules.introMS});}
 function scheduleIntro(){
  clearTimeout(introTimer);
  if(state.stage==='intro'&&!state.paused&&state.introOwner===instance){
@@ -27,12 +32,14 @@ function scheduleIntro(){
 }
 function buzz(){
  if(state.paused || state.blocked>Date.now()) return;
- if(state.stage==='reading') update({blocked:Date.now()+3000});
+ if(state.stage==='reading'&&state.activeRules.falseStart) update({blocked:Date.now()+state.activeRules.blockSeconds*1000});
  else if(state.stage==='open') update({stage:'answering'});
 }
-function judge(correct){ if(state.stage!=='answering')return; update({stage:'result',correct,score:state.score+(correct?state.price:-state.price)}); }
+function judge(correct){ if(state.stage!=='answering')return; update({stage:'result',correct,score:state.score+(correct?state.price:state.activeRules.penalties?-state.price:0)}); }
 function next(){ update({stage:'board',blocked:0,correct:null,played:[...state.played,cell]}); }
 function render(){
+ const wasOpen=lastScene==='question'&&$('.stage').classList.contains('open');
+ if(state.stage==='open'&&!state.paused&&!wasOpen&&preferences.sound)playTone();
  scheduleIntro();
  document.body.dataset.role=role;
  document.querySelectorAll('[data-role]').forEach(el=>{if(el.tagName==='BUTTON')el.setAttribute('aria-pressed',String(el.dataset.role===role));});
@@ -60,7 +67,7 @@ function render(){
   const value=document.createElement('p');value.className='announcement-price';value.textContent=`${state.price} очков`;
   card.append(label,heading,value);$('#scene').append(card);
  }else{const h=document.createElement('h2');h.textContent=state.stage==='result'?'Тихий океан':question;$('#scene').append(h);}
- $('#signal').textContent=state.paused?'Пауза':({board:'Выберите стоимость вопроса',intro:'Сейчас появится вопрос',reading:'Ждите сигнала · раннее нажатие — фальстарт',open:'Можно отвечать',answering:'Право ответа у Анны',result:state.correct?`Анна +${state.price}`:`Анна −${state.price}`})[state.stage];
+ $('#signal').textContent=state.paused?'Пауза':({board:'Выберите стоимость вопроса',intro:'Сейчас появится вопрос',reading:state.activeRules.falseStart?'Ждите сигнала · раннее нажатие — фальстарт':'Ждите сигнала · кнопка пока закрыта',open:'Можно отвечать',answering:'Право ответа у Анны',result:state.correct?`Анна +${state.price}`:state.activeRules.penalties?`Анна −${state.price}`:'Анна · без изменения счёта'})[state.stage];
  const panel=$('#console');panel.replaceChildren();
  const title=document.createElement('h2');title.textContent='Пульт ведущего';panel.append(title);
  const hint=document.createElement('p');hint.className='muted';hint.textContent=state.mode==='oral'?'Устная игра · оценивает ведущий':'Ответ проверяет система';panel.append(hint);
@@ -87,17 +94,57 @@ function render(){
  }
  $('#guide').textContent=role==='screen'?'Демонстрационный общий экран · синхронизируется с вкладкой ведущего':role==='host'?'Прототип: все ячейки открывают один демонстрационный вопрос. Для проверки фальстарта переключитесь на «Игрок» до открытия кнопки.':'Прототип: переключайтесь на «Ведущий», чтобы открыть кнопку или оценить устный ответ. Пробел — нажатие кнопки.';
 }
-function updateBuzzer(){const b=$('#buzzer');if(!b)return;const remaining=Math.max(0,state.blocked-Date.now());b.disabled=state.paused||remaining>0||!['reading','open'].includes(state.stage);b.textContent=state.paused?'Пауза':remaining>0?`Фальстарт · ${(remaining/1000).toFixed(1)} с`:({board:'Ждём выбора вопроса',intro:'Объявление темы',reading:'Ждите сигнала',open:'Ответить · пробел',answering:'Вы отвечаете',result:'Ответ раскрыт'})[state.stage];}
+function updateBuzzer(){const b=$('#buzzer');if(!b)return;const remaining=Math.max(0,state.blocked-Date.now());b.disabled=state.paused||remaining>0||!['reading','open'].includes(state.stage)||(state.stage==='reading'&&!state.activeRules.falseStart);b.textContent=state.paused?'Пауза':remaining>0?`Фальстарт · ${(remaining/1000).toFixed(1)} с`:({board:'Ждём выбора вопроса',intro:'Объявление темы',reading:'Ждите сигнала',open:'Ответить · пробел',answering:'Вы отвечаете',result:'Ответ раскрыт'})[state.stage];}
 setInterval(updateBuzzer,100);
 document.querySelectorAll('button[data-role]').forEach(b=>b.onclick=()=>{role=b.dataset.role;render();});
 $('#count').onchange=e=>update({count:Number(e.target.value)});
-$('#mode').onchange=e=>update({mode:e.target.value,stage:'board',blocked:0,correct:null});
+$('#mode').onchange=e=>update({mode:e.target.value,rules:{...state.rules,mode:e.target.value},stage:'board',blocked:0,correct:null});
 $('#reset').onclick=()=>{cell='';update({stage:'board',score:0,blocked:0,paused:false,correct:null,played:[]});};
 $('#pause').onclick=()=>{
  const timing=state.stage==='intro'?(state.paused?{introEnd:Date.now()+state.introRemaining}:{introRemaining:Math.max(0,state.introEnd-Date.now())}):{};
  update({...timing,paused:!state.paused});
 };
-$('#settings').onclick=()=>$('#rules').showModal();
+$('#settings').onclick=openRules;
 $('#display').onclick=()=>window.open('./index.html?role=screen','efir-demo-display');
-document.addEventListener('keydown',e=>{if(e.code==='Space'&&role==='player'&&!['INPUT','SELECT','TEXTAREA','BUTTON'].includes(document.activeElement.tagName)&&!$('#rules').open){e.preventDefault();if(!e.repeat)buzz();}});
+document.addEventListener('keydown',e=>{if(e.code==='Space'&&role==='player'&&!['INPUT','SELECT','TEXTAREA','BUTTON'].includes(document.activeElement.tagName)&&!document.querySelector('dialog[open]')){e.preventDefault();if(!e.repeat)buzz();}});
+function openRules(){
+ const rules=state.rules;
+ $('#rule-mode').value=rules.mode;$('#rule-penalties').checked=rules.penalties;
+ $('#rule-false-start').checked=rules.falseStart;$('#rule-block').value=String(rules.blockSeconds);$('#rule-intro').value=String(rules.introMS);
+ const allowed=role==='host'&&(state.stage==='board'||state.paused);
+ $('#rules-fields').disabled=!allowed;$('#save-rules').disabled=!allowed;
+ $('#rule-block').disabled=!rules.falseStart;
+ $('#rules-notice').textContent=state.stage==='board'?'Изменения применятся к следующему выбранному вопросу.':state.paused?'Изменения вступят в силу со следующего вопроса. Текущий вопрос продолжится по прежним правилам.':'Чтобы изменить правила, поставьте игру на паузу. Сейчас доступен только просмотр.';
+ $('#rules').showModal();
+}
+$('#rule-false-start').onchange=()=>$('#rule-block').disabled=!$('#rule-false-start').checked;
+$('#rules-form').onsubmit=e=>{
+ e.preventDefault();if(role!=='host'||(state.stage!=='board'&&!state.paused))return;
+ const rules={mode:$('#rule-mode').value,penalties:$('#rule-penalties').checked,falseStart:$('#rule-false-start').checked,blockSeconds:Number($('#rule-block').value),introMS:Number($('#rule-intro').value)};
+ update({rules,...(state.stage==='board'?{mode:rules.mode}:{})});$('#rules').close();
+ $('#settings-toast').textContent='Правила сохранены · применятся со следующего вопроса';$('#settings-toast').hidden=false;
+ clearTimeout(window.settingsToastTimer);window.settingsToastTimer=setTimeout(()=>$('#settings-toast').hidden=true,4000);
+};
+function applyPreferences(){
+ document.body.classList.toggle('large-question',preferences.text==='large');document.body.classList.toggle('reduce-motion',preferences.motion);
+ $('#pref-sound').checked=preferences.sound;$('#pref-volume').value=String(preferences.volume);$('#volume-value').textContent=`${preferences.volume}%`;$('#pref-text').value=preferences.text;$('#pref-motion').checked=preferences.motion;
+ try{sessionStorage.setItem('efir-prototype-preferences',JSON.stringify(preferences));}catch{}
+}
+async function playTone(){
+ try{
+  audioContext ||= new AudioContext();await audioContext.resume();
+  const osc=audioContext.createOscillator(),gain=audioContext.createGain(),now=audioContext.currentTime;
+  osc.frequency.value=660;gain.gain.setValueAtTime(0,now);gain.gain.linearRampToValueAtTime(preferences.volume/100*.15,now+.015);gain.gain.exponentialRampToValueAtTime(.001,now+.22);
+  osc.connect(gain);gain.connect(audioContext.destination);osc.start(now);osc.stop(now+.24);osc.onended=()=>{osc.disconnect();gain.disconnect();};
+  $('#sound-status').textContent=preferences.volume?'Звук воспроизведён':'Громкость установлена на ноль';
+ }catch{$('#sound-status').textContent='Не удалось воспроизвести звук в этом браузере';}
+}
+$('#personal').onclick=()=>{$('#sound-status').textContent='';$('#preferences').showModal();};
+$('#pref-sound').onchange=e=>{preferences.sound=e.target.checked;applyPreferences();};
+$('#pref-volume').oninput=e=>{preferences.volume=Number(e.target.value);applyPreferences();};
+$('#pref-text').onchange=e=>{preferences.text=e.target.value;applyPreferences();};
+$('#pref-motion').onchange=e=>{preferences.motion=e.target.checked;applyPreferences();};
+$('#test-sound').onclick=playTone;
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>document.getElementById(b.dataset.close).close());
+applyPreferences();
 render();

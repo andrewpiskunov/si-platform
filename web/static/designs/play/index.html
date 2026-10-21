@@ -1,9 +1,31 @@
 <!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Эфир · игровой сценарий</title><link rel="stylesheet" href="style.css"><script type="module" src="app.js"></script></head><body>
 <div class="prototype"><span>ЭФИР · интерактивный прототип · вымышленные данные</span><a href="/">В приложение</a></div>
 <nav aria-label="Представление"><div class="tabs"><button data-role="host">Ведущий</button><button data-role="player">Игрок</button><button data-role="screen">Большой экран</button></div><label>Режим <select id="mode"><option value="oral">Устная игра</option><option value="auto">Автоматическая проверка</option></select></label><label>Игроков <select id="count"><option value="3">3</option><option value="12">12</option></select></label><button id="reset" class="quiet">Начать заново</button></nav>
-<header><div><span class="eyebrow">Пятничная игра · Раунд 1</span><h1>Разминка перед игрой</h1></div><div class="header-actions"><button id="display">Открыть общий экран ↗</button><button id="settings">Правила</button><button id="pause">Пауза</button></div></header>
+<header><div><span class="eyebrow">Пятничная игра · Раунд 1</span><h1>Разминка перед игрой</h1></div><div class="header-actions"><button id="display">Открыть общий экран ↗</button><button id="settings">Настройки игры</button><button id="pause">Пауза</button></div><button id="personal" class="quiet">Мои настройки</button></header>
 <main><section class="stage" aria-label="Игровая сцена"><div class="stage-status"><span id="status"></span><span id="price"></span></div><div id="scene"></div><div id="signal" aria-live="polite"></div></section><aside id="console" aria-label="Пульт ведущего"></aside></main>
 <section class="players" aria-label="Игроки" id="players"></section><section id="player-controls" aria-label="Действия игрока"></section>
 <footer id="guide"></footer>
-<dialog id="rules"><form method="dialog"><div class="dialog-head"><h2>Правила этого прототипа</h2><button aria-label="Закрыть">×</button></div><p>Устная игра: ведущий открывает кнопку и оценивает ответ.</p><p>Автоматическая проверка: игрок отправляет текст. Здесь демонстрируется только точное совпадение без учёта регистра и крайних пробелов. Правила проверки настоящей игры ещё предстоит определить.</p><p>Раннее нажатие блокирует кнопку на 3 секунды. Это отдельное состояние, а не задержка каждого нажатия.</p><p>QR-приглашение будет в лобби. В этом прототипе сетевой комнаты и действующего приглашения нет.</p><button class="primary">Понятно</button></form></dialog>
+<dialog id="rules" class="drawer" aria-labelledby="rules-title">
+<form id="rules-form"><div class="dialog-head"><div><span class="eyebrow">Для всей комнаты</span><h2 id="rules-title">Настройки игры</h2></div><button type="button" data-close="rules" aria-label="Закрыть настройки игры">×</button></div>
+<p id="rules-notice" class="settings-notice"></p>
+<fieldset id="rules-fields"><legend>Ответы</legend>
+<label>Режим игры<select id="rule-mode"><option value="oral">Устная игра · оценивает ведущий</option><option value="auto">Автоматическая проверка</option></select></label>
+<p class="muted">В прототипе автопроверка сравнивает ответ с двумя допустимыми написаниями. Правила проверки настоящей игры будут шире.</p>
+<label class="check"><input type="checkbox" id="rule-penalties">Снимать очки за неверный ответ</label>
+<h3>Кнопка ответа</h3><label class="check"><input type="checkbox" id="rule-false-start">Штрафовать за раннее нажатие</label>
+<label>Блокировка при фальстарте<select id="rule-block"><option value="1">1 секунда</option><option value="2">2 секунды</option><option value="3">3 секунды</option><option value="4">4 секунды</option><option value="5">5 секунд</option></select></label>
+<p class="muted">Если штраф выключен, кнопка просто недоступна до сигнала.</p>
+<h3>Подача вопроса</h3><label>Объявление темы<select id="rule-intro"><option value="1000">1 секунда</option><option value="2000">2 секунды</option><option value="3000">3 секунды</option><option value="4000">4 секунды</option></select></label>
+</fieldset>
+<div class="drawer-footer"><button type="button" class="quiet" data-close="rules">Отмена</button><button id="save-rules" class="primary">Сохранить</button></div></form></dialog>
+<dialog id="preferences" class="drawer" aria-labelledby="personal-title"><div class="dialog-head"><div><span class="eyebrow">Только на этом экране</span><h2 id="personal-title">Мои настройки</h2></div><button type="button" data-close="preferences" aria-label="Закрыть мои настройки">×</button></div>
+<p class="muted">Применяются сразу. Другие участники и вкладка общего экрана сохраняют свои настройки.</p>
+<label class="check"><input type="checkbox" id="pref-sound">Звук открытия кнопки</label>
+<label>Громкость<input type="range" id="pref-volume" min="0" max="100" step="10"><output id="volume-value"></output></label>
+<button id="test-sound" class="quiet">Проверить звук</button><p id="sound-status" class="muted" role="status"></p>
+<h3>Изображение</h3><label>Размер текста вопроса<select id="pref-text"><option value="normal">Обычный</option><option value="large">Крупный</option></select></label>
+<label class="check"><input type="checkbox" id="pref-motion">Уменьшить анимацию</label>
+<p class="muted">Системная настройка уменьшения движения также учитывается.</p>
+<div class="drawer-footer"><button type="button" class="primary" data-close="preferences">Готово</button></div></dialog>
+<p id="settings-toast" class="settings-toast" role="status" aria-live="polite" hidden></p>
 </body></html>
