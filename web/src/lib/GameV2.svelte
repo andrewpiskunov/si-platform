@@ -424,14 +424,11 @@
     display: none;
   }
   .lobby-options > aside {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: flex;
+    flex-direction: column;
     margin-top: 20px;
-    align-items: start;
+    gap: 12px;
   }
-  @media (max-width: 700px) {
-    .lobby-options > aside {
-      grid-template-columns: 1fr;
-    }
-  }
+  .lobby-options > aside > :global(*) { width: 100%; }
+  .lobby-options :global(section.stack) { gap: 12px; }
 </style>

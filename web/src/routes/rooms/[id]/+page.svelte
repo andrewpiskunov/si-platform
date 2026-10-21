@@ -593,12 +593,13 @@
           Обновление приглашения не закрывает свободный вход в публичную комнату.
         </p>{/if}
       {#if isHost && invite}<details class="invite-details">
-          <summary>Ссылка приглашения</summary><input
-            readonly
-            value={`${location.origin}/rooms/${roomID}#invite=${encodeURIComponent(invite)}`}
-            aria-label="Ссылка приглашения"
-            onclick={(event) => event.currentTarget.select()}
-          />
+          <summary>Ссылка приглашения</summary>
+          <div class="invitation-copy">
+            <input readonly value={`${location.origin}/rooms/${roomID}#invite=${encodeURIComponent(invite)}`}
+              aria-label="Ссылка приглашения" onclick={(event) => event.currentTarget.select()} />
+            <button onclick={share} disabled={rotating}>{copied ? 'Скопировано' : 'Скопировать'}</button>
+          </div>
+          <span class="helper" role="status" aria-live="polite">{copied ? 'Ссылка приглашения скопирована' : ''}</span>
           <p class="helper">
             Обновление приглашения отключает прежнюю ссылку. Участники комнаты сохраняют свои места.
           </p>
@@ -838,3 +839,10 @@
         </div>{/if}
     </div>{/if}
 </section>
+
+<style>
+  .invitation-copy { display: flex; gap: 12px; align-items: center; margin-top: 16px; }
+  .invitation-copy input { flex: 1; min-width: 0; margin: 0; }
+  .invitation-copy button { flex-shrink: 0; }
+  @media (max-width: 600px) { .invitation-copy { flex-direction: column; align-items: stretch; } }
+</style>
