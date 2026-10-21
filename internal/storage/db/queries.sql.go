@@ -49,6 +49,58 @@ func (q *Queries) AddSession(ctx context.Context, arg AddSessionParams) error {
 	return err
 }
 
+const archiveRoomParticipants = `-- name: ArchiveRoomParticipants :exec
+INSERT INTO room_participants(room_id, participant_id, name, role, score, removed)
+SELECT $1::text, p.id, p.name, p.role, p.score, COALESCE(p.removed,false)
+FROM jsonb_to_recordset($2::jsonb) AS p(id text,name text,role text,score bigint,removed boolean)
+ON CONFLICT(room_id,participant_id) DO UPDATE
+SET name=EXCLUDED.name,role=EXCLUDED.role,score=EXCLUDED.score,removed=EXCLUDED.removed
+WHERE (room_participants.name,room_participants.role,room_participants.score,room_participants.removed)
+ IS DISTINCT FROM (EXCLUDED.name,EXCLUDED.role,EXCLUDED.score,EXCLUDED.removed)
+`
+
+type ArchiveRoomParticipantsParams struct {
+	RoomID       string
+	Participants []byte
+}
+
+func (q *Queries) ArchiveRoomParticipants(ctx context.Context, arg ArchiveRoomParticipantsParams) error {
+	_, err := q.db.Exec(ctx, archiveRoomParticipants, arg.RoomID, arg.Participants)
+	return err
+}
+
+const banRoomGuest = `-- name: BanRoomGuest :exec
+INSERT INTO room_guest_bans(room_id,guest_hash) VALUES($1,$2) ON CONFLICT DO NOTHING
+`
+
+type BanRoomGuestParams struct {
+	RoomID    string
+	GuestHash string
+}
+
+func (q *Queries) BanRoomGuest(ctx context.Context, arg BanRoomGuestParams) error {
+	_, err := q.db.Exec(ctx, banRoomGuest, arg.RoomID, arg.GuestHash)
+	return err
+}
+
+const bindRoomGuest = `-- name: BindRoomGuest :execrows
+UPDATE sessions SET guest_hash = $3 WHERE room_id = $1 AND token_hash = $2 AND (guest_hash IS NULL OR guest_hash = $3)
+`
+
+type BindRoomGuestParams struct {
+	RoomID    string
+	TokenHash string
+	GuestHash pgtype.Text
+}
+
+func (q *Queries) BindRoomGuest(ctx context.Context, arg BindRoomGuestParams) (int64, error) {
+	result, err := q.db.Exec(ctx, bindRoomGuest, arg.RoomID, arg.TokenHash, arg.GuestHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countRooms = `-- name: CountRooms :one
 SELECT count(*) FROM rooms
 `
@@ -124,7 +176,11 @@ func (q *Queries) GetRoom(ctx context.Context, id string) (Room, error) {
 }
 
 const getSession = `-- name: GetSession :one
-SELECT participant_id FROM sessions WHERE token_hash = $1 AND room_id = $2
+SELECT s.participant_id FROM sessions s JOIN rooms r ON r.id=s.room_id
+WHERE s.token_hash=$1 AND s.room_id=$2 AND EXISTS (
+ SELECT 1 FROM jsonb_array_elements(r.snapshot->'participants') p
+ WHERE p->>'id'=s.participant_id AND NOT COALESCE((p->>'removed')::boolean,false)
+)
 `
 
 type GetSessionParams struct {
@@ -201,6 +257,20 @@ func (q *Queries) LockRoom(ctx context.Context, id string) (Room, error) {
 	return i, err
 }
 
+const revokeRoomParticipants = `-- name: RevokeRoomParticipants :exec
+DELETE FROM sessions WHERE room_id = $1 AND participant_id = ANY($2::text[])
+`
+
+type RevokeRoomParticipantsParams struct {
+	RoomID string
+	Ids    []string
+}
+
+func (q *Queries) RevokeRoomParticipants(ctx context.Context, arg RevokeRoomParticipantsParams) error {
+	_, err := q.db.Exec(ctx, revokeRoomParticipants, arg.RoomID, arg.Ids)
+	return err
+}
+
 const roomEvents = `-- name: RoomEvents :many
 SELECT seq,kind,actor_id,payload,created_at FROM game_events
 WHERE room_id=$1 AND seq>$2 AND seq<=$3 ORDER BY seq LIMIT $4
@@ -241,6 +311,158 @@ func (q *Queries) RoomEvents(ctx context.Context, arg RoomEventsParams) ([]RoomE
 			&i.ActorID,
 			&i.Payload,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const roomGuestBanned = `-- name: RoomGuestBanned :one
+SELECT EXISTS(SELECT 1 FROM room_guest_bans WHERE room_id = $1 AND guest_hash = $2)::boolean
+`
+
+type RoomGuestBannedParams struct {
+	RoomID    string
+	GuestHash string
+}
+
+func (q *Queries) RoomGuestBanned(ctx context.Context, arg RoomGuestBannedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, roomGuestBanned, arg.RoomID, arg.GuestHash)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const roomGuestHash = `-- name: RoomGuestHash :one
+SELECT guest_hash FROM sessions WHERE room_id = $1 AND participant_id = $2
+`
+
+type RoomGuestHashParams struct {
+	RoomID        string
+	ParticipantID string
+}
+
+func (q *Queries) RoomGuestHash(ctx context.Context, arg RoomGuestHashParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, roomGuestHash, arg.RoomID, arg.ParticipantID)
+	var guest_hash pgtype.Text
+	err := row.Scan(&guest_hash)
+	return guest_hash, err
+}
+
+const roomGuestParticipants = `-- name: RoomGuestParticipants :many
+SELECT participant_id FROM sessions WHERE room_id = $1 AND guest_hash = $2 ORDER BY participant_id
+`
+
+type RoomGuestParticipantsParams struct {
+	RoomID    string
+	GuestHash pgtype.Text
+}
+
+func (q *Queries) RoomGuestParticipants(ctx context.Context, arg RoomGuestParticipantsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, roomGuestParticipants, arg.RoomID, arg.GuestHash)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var participant_id string
+		if err := rows.Scan(&participant_id); err != nil {
+			return nil, err
+		}
+		items = append(items, participant_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const roomRoster = `-- name: RoomRoster :many
+SELECT participant_id,name,role,score,removed FROM room_participants
+WHERE room_id = $1 AND participant_id > $3::text
+ORDER BY participant_id LIMIT $2
+`
+
+type RoomRosterParams struct {
+	RoomID  string
+	Limit   int32
+	AfterID string
+}
+
+type RoomRosterRow struct {
+	ParticipantID string
+	Name          string
+	Role          string
+	Score         int64
+	Removed       bool
+}
+
+func (q *Queries) RoomRoster(ctx context.Context, arg RoomRosterParams) ([]RoomRosterRow, error) {
+	rows, err := q.db.Query(ctx, roomRoster, arg.RoomID, arg.Limit, arg.AfterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RoomRosterRow
+	for rows.Next() {
+		var i RoomRosterRow
+		if err := rows.Scan(
+			&i.ParticipantID,
+			&i.Name,
+			&i.Role,
+			&i.Score,
+			&i.Removed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const roomRosterNames = `-- name: RoomRosterNames :many
+SELECT participant_id,name,role,score,removed FROM room_participants
+WHERE room_id = $1 AND (NOT removed OR participant_id = ANY($2::text[]))
+ORDER BY participant_id
+`
+
+type RoomRosterNamesParams struct {
+	RoomID string
+	Ids    []string
+}
+
+type RoomRosterNamesRow struct {
+	ParticipantID string
+	Name          string
+	Role          string
+	Score         int64
+	Removed       bool
+}
+
+func (q *Queries) RoomRosterNames(ctx context.Context, arg RoomRosterNamesParams) ([]RoomRosterNamesRow, error) {
+	rows, err := q.db.Query(ctx, roomRosterNames, arg.RoomID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RoomRosterNamesRow
+	for rows.Next() {
+		var i RoomRosterNamesRow
+		if err := rows.Scan(
+			&i.ParticipantID,
+			&i.Name,
+			&i.Role,
+			&i.Score,
+			&i.Removed,
 		); err != nil {
 			return nil, err
 		}

@@ -39,7 +39,7 @@ func (s *Server) startRound(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return nil, err
 		}
-		p, ok := state.Participant(actor)
+		p, ok := state.ActiveParticipant(actor)
 		if !ok || p.Role != game.Host {
 			return nil, game.Fault("forbidden")
 		}
@@ -91,7 +91,7 @@ func (r *room) connected(id string) bool {
 }
 func (r *room) hostOnline(state game.State) bool {
 	for _, p := range state.Participants {
-		if p.Role == game.Host && r.connected(p.ID) {
+		if !p.Removed && p.Role == game.Host && r.connected(p.ID) {
 			return true
 		}
 	}
@@ -115,6 +115,9 @@ func (r *room) arm(state game.State) {
 	r.timerC = r.timer.C
 }
 func (r *room) expire(ctx context.Context) error {
+	if err := r.reconcileMembership(ctx); err != nil {
+		return err
+	}
 	if err := r.resolvePause(ctx); err != nil {
 		return err
 	}

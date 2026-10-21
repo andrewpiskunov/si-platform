@@ -41,7 +41,7 @@ func (s *Store) Advance(ctx context.Context, roomID string) (game.State, error) 
 	if err != nil {
 		return state, err
 	}
-	if err = saveState(ctx, q, next, "timer_expired", "system", payload); err != nil {
+	if err = saveState(ctx, q, state, &next, "timer_expired", "system", payload); err != nil {
 		return state, err
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -76,7 +76,13 @@ func publicDelta(before, after game.State) PublicEvent {
 			}
 		}
 	}
+	if before.Gameplay != nil && after.Gameplay != nil && before.Gameplay.ChooserID != after.Gameplay.ChooserID {
+		out.ChooserChange = &ChooserChange{From: before.Gameplay.ChooserID, To: after.Gameplay.ChooserID}
+	}
 	for _, p := range after.Participants {
+		if prior, ok := before.Participant(p.ID); ok && !prior.Removed && p.Removed {
+			out.RemovedIDs = append(out.RemovedIDs, p.ID)
+		}
 		if prior, ok := before.Participant(p.ID); ok && p.Score != prior.Score {
 			out.Changes = append(out.Changes, ScoreChange{ParticipantID: p.ID, Delta: p.Score - prior.Score, Score: p.Score})
 		}

@@ -20,6 +20,7 @@ func setStage(s *State, kind, turn string, now int64, seconds int) {
 		st.DeadlineMS = now + int64(seconds)*1000
 	}
 	g.Stage = st
+	repairChooser(s)
 	if s.Phase != Paused {
 		s.Phase = Running
 	}
@@ -27,7 +28,7 @@ func setStage(s *State, kind, turn string, now int64, seconds int) {
 func playerIDs(s State) []string {
 	ids := []string{}
 	for _, p := range s.Participants {
-		if p.Role == Player {
+		if p.Role == Player && !p.Removed {
 			ids = append(ids, p.ID)
 		}
 	}
@@ -140,7 +141,7 @@ func beginQuestion(s *State, q QuestionSpec, replay bool, now int64) error {
 		return Fault("invalid_phase")
 	}
 	ids := playerIDs(*s)
-	if len(ids) < 2 {
+	if len(ids) < 2 && g.Final == nil {
 		return Fault("not_enough_players")
 	}
 	if len(s.Asked) >= 2000 {
@@ -158,7 +159,7 @@ func beginQuestion(s *State, q QuestionSpec, replay bool, now int64) error {
 		}
 		ids = slices.Clone(g.Final.EligibleIDs)
 	}
-	if g.ChooserID == "" {
+	if g.ChooserID == "" && len(ids) > 0 {
 		g.ChooserID = ids[0]
 	}
 	a := &ActiveQuestion{Spec: q, InstanceID: g.nextID("question"), Rules: g.Rules, RulesVersion: g.RulesVersion, Price: q.Price, ContentIndex: -1, AnswerIndex: -1, ChooserBefore: g.ChooserID, Players: []Submission{}}

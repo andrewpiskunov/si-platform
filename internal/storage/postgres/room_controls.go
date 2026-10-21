@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"github.com/jackc/pgx/v5"
 	"time"
 
 	"siplatform/internal/game"
@@ -28,7 +29,7 @@ func (s *Store) RotateInvite(ctx context.Context, roomID, actorID string) (strin
 	if err != nil {
 		return "", state, err
 	}
-	actor, ok := state.Participant(actorID)
+	actor, ok := state.ActiveParticipant(actorID)
 	if !ok {
 		return "", state, game.Fault("unauthorized")
 	}
@@ -43,7 +44,7 @@ func (s *Store) RotateInvite(ctx context.Context, roomID, actorID string) (strin
 		return "", state, err
 	}
 	state.Seq++
-	if err = saveState(ctx, q, state, "invite_rotated", actorID, []byte(`{}`)); err != nil {
+	if err = saveState(ctx, q, state, &state, "invite_rotated", actorID, []byte(`{}`)); err != nil {
 		return "", state, err
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -57,11 +58,17 @@ type ScoreChange struct {
 	Delta         int64  `json:"delta"`
 	Score         int64  `json:"score"`
 }
+type ChooserChange struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
 type PublicEvent struct {
-	Appeals     []game.Appeal   `json:"appeals"`
-	Decisions   []game.Decision `json:"decisions"`
-	Changes     []ScoreChange   `json:"changes"`
-	RulesChange *RulesChange    `json:"rules_change,omitempty"`
+	RemovedIDs    []string        `json:"removed_ids,omitempty"`
+	ChooserChange *ChooserChange  `json:"chooser_change,omitempty"`
+	Appeals       []game.Appeal   `json:"appeals"`
+	Decisions     []game.Decision `json:"decisions"`
+	Changes       []ScoreChange   `json:"changes"`
+	RulesChange   *RulesChange    `json:"rules_change,omitempty"`
 }
 type RulesChange struct {
 	Version int64      `json:"version"`
@@ -88,7 +95,7 @@ func (s *Store) Results(ctx context.Context, roomID, actorID string, after int64
 	if after < 0 || limit < 1 || limit > 100 {
 		return RoomResults{}, game.Fault("invalid_input")
 	}
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return RoomResults{}, err
 	}
@@ -102,14 +109,14 @@ func (s *Store) Results(ctx context.Context, roomID, actorID string, after int64
 	if err != nil {
 		return RoomResults{}, err
 	}
-	if _, ok := state.Participant(actorID); !ok {
+	if _, ok := state.ActiveParticipant(actorID); !ok {
 		return RoomResults{}, game.Fault("unauthorized")
 	}
 	events, err := q.RoomEvents(ctx, db.RoomEventsParams{RoomID: roomID, Seq: after, Seq_2: state.Seq, Limit: int32(limit + 1)})
 	if err != nil {
 		return RoomResults{}, err
 	}
-	out := RoomResults{RoomID: roomID, Seq: state.Seq, Phase: state.Phase, Participants: state.Participants, Items: []ResultEvent{}}
+	out := RoomResults{RoomID: roomID, Seq: state.Seq, Phase: state.Phase, Participants: []game.Participant{}, Items: []ResultEvent{}}
 	if len(events) > limit {
 		events = events[:limit]
 		out.NextAfterSeq = events[len(events)-1].Seq
@@ -131,6 +138,30 @@ func (s *Store) Results(ctx context.Context, roomID, actorID string, after int64
 			data.Public.Changes = []ScoreChange{}
 		}
 		out.Items = append(out.Items, ResultEvent{Seq: e.Seq, Kind: e.Kind, ActorID: e.ActorID, CreatedAt: e.CreatedAt.Time, PublicEvent: data.Public})
+	}
+	ids := []string{}
+	for _, e := range out.Items {
+		ids = append(ids, e.ActorID)
+		ids = append(ids, e.RemovedIDs...)
+		if e.ChooserChange != nil {
+			ids = append(ids, e.ChooserChange.From, e.ChooserChange.To)
+		}
+		for _, d := range e.Decisions {
+			ids = append(ids, d.ParticipantID)
+		}
+		for _, a := range e.Appeals {
+			ids = append(ids, a.ParticipantID)
+		}
+		for _, c := range e.Changes {
+			ids = append(ids, c.ParticipantID)
+		}
+	}
+	names, err := q.RoomRosterNames(ctx, db.RoomRosterNamesParams{RoomID: roomID, Ids: ids})
+	if err != nil {
+		return RoomResults{}, err
+	}
+	for _, p := range names {
+		out.Participants = append(out.Participants, game.Participant{ID: p.ParticipantID, Name: p.Name, Role: game.Role(p.Role), Score: p.Score, Removed: p.Removed})
 	}
 	return out, nil
 }

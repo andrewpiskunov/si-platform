@@ -18,6 +18,8 @@ func (c Command) Payload() (any, error) {
 	}
 	var p any
 	switch c.Type {
+	case "remove_participant":
+		p = &RemovalPayload{}
 	case "begin_round":
 		p = &BeginRoundPayload{}
 	case "begin_question":
@@ -74,6 +76,8 @@ func (c Command) Payload() (any, error) {
 	}
 	valid := true
 	switch x := p.(type) {
+	case *RemovalPayload:
+		valid = c.ExpectedSeq != nil && ValidID(x.TargetID) && (x.Mode == "kick" || x.Mode == "ban_guest_session")
 	case *SettingsPayload:
 		valid = c.ExpectedSeq != nil && x.Settings.Validate() == nil
 	case *AppearancePayload:

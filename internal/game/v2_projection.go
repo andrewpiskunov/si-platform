@@ -6,6 +6,9 @@ import (
 )
 
 func ProjectAt(s State, id string, nowMS int64) View {
+	if _, ok := s.ActiveParticipant(id); !ok {
+		return View{ID: s.ID, Seq: s.Seq, Phase: s.Phase, You: id}
+	}
 	if s.Gameplay == nil {
 		return projectLegacy(s, id)
 	}
@@ -113,7 +116,7 @@ func allowedActions(s State, id string, now int64) []AllowedAction {
 	if g == nil || s.Phase == Finished {
 		return out
 	}
-	actor, exists := s.Participant(id)
+	actor, exists := s.ActiveParticipant(id)
 	if !exists {
 		return out
 	}
@@ -127,6 +130,17 @@ func allowedActions(s State, id string, now int64) []AllowedAction {
 	bounded := func(t string, minimum, maximum, step int64) {
 		out = append(out, AllowedAction{Type: t, Minimum: intPtr(minimum), Maximum: intPtr(maximum), Step: intPtr(step), RequiresSeq: t != "wager"})
 	}
+	if host {
+		targets := []string{}
+		for _, p := range s.Participants {
+			if !p.Removed && p.Role != Host {
+				targets = append(targets, p.ID)
+			}
+		}
+		if len(targets) > 0 {
+			add("remove_participant", targets...)
+		}
+	}
 	if s.Phase == Paused {
 		if host {
 			add("set_appearance")
@@ -135,7 +149,7 @@ func allowedActions(s State, id string, now int64) []AllowedAction {
 			add("finish")
 			targets := []string{}
 			for _, p := range s.Participants {
-				if p.Role == Spectator {
+				if p.Role == Spectator && !p.Removed {
 					targets = append(targets, p.ID)
 				}
 			}

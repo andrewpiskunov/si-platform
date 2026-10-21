@@ -32,10 +32,11 @@ const (
 )
 
 type Participant struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Role  Role   `json:"role"`
-	Score int64  `json:"score"`
+	Removed bool   `json:"removed,omitempty"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Role    Role   `json:"role"`
+	Score   int64  `json:"score"`
 }
 type Question struct {
 	ID     string `json:"id"`
@@ -128,7 +129,7 @@ func joinRoleError(s State, role Role) error {
 	}
 	count := 0
 	for _, existing := range s.Participants {
-		if existing.Role == role {
+		if existing.Role == role && !existing.Removed {
 			count++
 		}
 	}
@@ -161,6 +162,7 @@ func AddParticipant(s State, p Participant) (State, error) {
 	}
 	n := s.Clone()
 	p.Score = 0
+	p.Removed = false
 	n.Participants = append(n.Participants, p)
 	return n, nil
 }

@@ -3,6 +3,17 @@ package game
 import "slices"
 
 func ApplyAt(s State, actorID string, c Command, nowMS int64, entropy uint64) (State, error) {
+	if c.Type == "remove_participant" && s.Gameplay != nil {
+		p, err := c.Payload()
+		if err != nil {
+			return s, err
+		}
+		x := p.(*RemovalPayload)
+		if x.Mode != "kick" {
+			return s, Fault("invalid_target")
+		}
+		return ApplyRemovalAt(s, actorID, c, []string{x.TargetID}, nowMS)
+	}
 	if s.Gameplay == nil {
 		if c.Version != 1 {
 			return s, Fault("invalid_version")
@@ -13,7 +24,7 @@ func ApplyAt(s State, actorID string, c Command, nowMS int64, entropy uint64) (S
 	if err != nil {
 		return s, err
 	}
-	actor, ok := s.Participant(actorID)
+	actor, ok := s.ActiveParticipant(actorID)
 	if !ok {
 		return s, Fault("unauthorized")
 	}
@@ -198,7 +209,7 @@ func ApplyAt(s State, actorID string, c Command, nowMS int64, entropy uint64) (S
 			err = Fault("invalid_appeal")
 		}
 	case *TransferPayload:
-		target, exists := n.Participant(x.TargetID)
+		target, exists := n.ActiveParticipant(x.TargetID)
 		if !exists || target.Role != Spectator {
 			err = Fault("invalid_target")
 			break
@@ -251,6 +262,7 @@ func ApplyAt(s State, actorID string, c Command, nowMS int64, entropy uint64) (S
 	if err != nil {
 		return s, err
 	}
+	repairChooser(&n)
 	return n, nil
 }
 func PauseAt(s State, nowMS int64) (State, bool) {

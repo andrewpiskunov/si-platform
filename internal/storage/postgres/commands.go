@@ -62,7 +62,7 @@ func (s *Store) execute(ctx context.Context, roomID, actorID string, c game.Comm
 	if err != nil {
 		return Outcome{}, err
 	}
-	if _, ok := state.Participant(actorID); !ok {
+	if _, ok := state.ActiveParticipant(actorID); !ok {
 		return Outcome{}, game.Fault("unauthorized")
 	}
 	previous, err := q.FindCommand(ctx, db.FindCommandParams{RoomID: roomID, ActorID: actorID, CommandID: c.ID})
@@ -81,7 +81,19 @@ func (s *Store) execute(ctx context.Context, roomID, actorID string, c game.Comm
 	var seed [8]byte
 	_, _ = rand.Read(seed[:])
 	entropy := binary.LittleEndian.Uint64(seed[:])
-	next, transitionErr := game.ApplyAt(state, actorID, c, now, entropy)
+	var next game.State
+	var transitionErr error
+	if c.Type == "remove_participant" {
+		next, transitionErr = resolveRemoval(ctx, q, state, actorID, c, now)
+	} else {
+		next, transitionErr = game.ApplyAt(state, actorID, c, now, entropy)
+	}
+	if transitionErr != nil {
+		var fault game.Fault
+		if !errors.As(transitionErr, &fault) {
+			return Outcome{}, transitionErr
+		}
+	}
 	code := game.Code(transitionErr)
 	if transitionErr == nil {
 		if state.Settings.Visibility == "public" && next.Settings.Visibility == "private" {
@@ -110,7 +122,7 @@ func (s *Store) execute(ctx context.Context, roomID, actorID string, c game.Comm
 				return Outcome{}, err
 			}
 		}
-		if err = saveState(ctx, q, next, c.Type, actorID, eventPayload); err != nil {
+		if err = saveState(ctx, q, state, &next, c.Type, actorID, eventPayload); err != nil {
 			return Outcome{}, err
 		}
 	}
@@ -151,7 +163,7 @@ func (s *Store) Pause(ctx context.Context, roomID, reason string) (game.State, e
 	if err != nil {
 		return game.State{}, err
 	}
-	if err = saveState(ctx, q, next, "paused", "system", payload); err != nil {
+	if err = saveState(ctx, q, state, &next, "paused", "system", payload); err != nil {
 		return game.State{}, err
 	}
 	if err = tx.Commit(ctx); err != nil {

@@ -97,6 +97,8 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/rooms/{room}/ws", s.websocket)
 		r.Post("/rooms/{room}/invite", s.rotateInvite)
 		r.Get("/rooms/{room}/results", s.roomResults)
+		r.Get("/rooms/{room}/roster", s.roomRoster)
+		r.Post("/rooms/{room}/session", s.bindRoomSession)
 	})
 	return r
 }
@@ -183,11 +185,11 @@ func httpError(w http.ResponseWriter, err error) {
 	switch code {
 	case "unauthorized":
 		status = 401
-	case "forbidden", "blocked":
+	case "forbidden", "blocked", "guest_banned":
 		status = 403
 	case "not_found":
 		status = 404
-	case "room_full", "room_limit", "question_in_progress", "finished", "stale_state", "command_conflict", "question_reused":
+	case "guest_session_mismatch", "guest_session_unavailable", "room_full", "room_limit", "question_in_progress", "finished", "stale_state", "command_conflict", "question_reused":
 		status = 409
 	case "rate_limited", "busy":
 		status = 429
@@ -210,11 +212,13 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	c, err := s.store.Create(ctx, req.HostName)
+	guest := guestCookie(r)
+	c, err := s.store.CreateWithGuest(ctx, req.HostName, guest)
 	if err != nil {
 		httpError(w, err)
 		return
 	}
+	s.setGuestCookie(w, r, c.RoomID, guest)
 	writeJSON(w, 201, c)
 }
 func (s *Server) join(w http.ResponseWriter, r *http.Request) {
@@ -234,8 +238,9 @@ func (s *Server) join(w http.ResponseWriter, r *http.Request) {
 		httpError(w, err)
 		return
 	}
+	guest := guestCookie(r)
 	value, err := rm.do(ctx, func(ctx context.Context, rm *room) (any, error) {
-		c, err := s.store.Join(ctx, rm.id, req.Invite, req.Name, req.Role)
+		c, err := s.store.JoinWithGuest(ctx, rm.id, req.Invite, req.Name, req.Role, guest)
 		if err != nil {
 			return nil, err
 		}
@@ -250,6 +255,7 @@ func (s *Server) join(w http.ResponseWriter, r *http.Request) {
 		httpError(w, err)
 		return
 	}
+	s.setGuestCookie(w, r, rm.id, guest)
 	writeJSON(w, 201, value)
 }
 func (s *Server) getRoom(ctx context.Context, id string) (*room, error) {

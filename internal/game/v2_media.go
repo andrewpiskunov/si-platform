@@ -69,7 +69,7 @@ func CurrentMedia(s State, id string) (MediaSpec, bool) {
 	if !ok {
 		return MediaSpec{}, false
 	}
-	p, exists := s.Participant(id)
+	p, exists := s.ActiveParticipant(id)
 	if !exists || step.Placement == "replic" && p.Role != Host {
 		return MediaSpec{}, false
 	}
@@ -85,13 +85,17 @@ func prepareContent(s *State, group string, index int, returnStage string, now i
 	step, _ := currentContentStep(*s)
 	if step.Placement == "replic" {
 		for _, p := range s.Participants {
-			if p.Role == Host {
+			if p.Role == Host && !p.Removed {
 				g.Content.Readiness = append(g.Content.Readiness, Readiness{ID: p.ID, Status: "loading"})
 			}
 		}
 	} else {
 		for _, p := range q.Players {
-			g.Content.Readiness = append(g.Content.Readiness, Readiness{ID: p.ID, Status: "loading"})
+			status := "loading"
+			if _, active := s.ActiveParticipant(p.ID); !active {
+				status = "unavailable"
+			}
+			g.Content.Readiness = append(g.Content.Readiness, Readiness{ID: p.ID, Status: status})
 		}
 	}
 	setStage(s, "prepare_content", "", now, 10)

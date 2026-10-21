@@ -74,12 +74,18 @@ func (s *Store) Authenticate(ctx context.Context, roomID, token string) (string,
 	return id, err
 }
 func (s *Store) Create(ctx context.Context, name string) (Credentials, error) {
-	return s.create(ctx, name, nil)
+	return s.create(ctx, name, nil, "")
+}
+func (s *Store) CreateWithGuest(ctx context.Context, name, guest string) (Credentials, error) {
+	return s.create(ctx, name, nil, guest)
 }
 func (s *Store) CreateGame(ctx context.Context, name string, setup GameSetup) (Credentials, error) {
-	return s.create(ctx, name, &setup)
+	return s.create(ctx, name, &setup, "")
 }
-func (s *Store) create(ctx context.Context, name string, setup *GameSetup) (Credentials, error) {
+func (s *Store) CreateGameWithGuest(ctx context.Context, name string, setup GameSetup, guest string) (Credentials, error) {
+	return s.create(ctx, name, &setup, guest)
+}
+func (s *Store) create(ctx context.Context, name string, setup *GameSetup, guest string) (Credentials, error) {
 	if !game.ValidName(name) {
 		return Credentials{}, game.Fault("invalid_name")
 	}
@@ -136,6 +142,12 @@ func (s *Store) create(ctx context.Context, name string, setup *GameSetup) (Cred
 	if err = q.AddSession(ctx, db.AddSessionParams{TokenHash: digest(c.Token), RoomID: c.RoomID, ParticipantID: c.ParticipantID}); err != nil {
 		return Credentials{}, err
 	}
+	if err = bindGuest(ctx, q, c, guest); err != nil {
+		return Credentials{}, err
+	}
+	if err = archiveParticipants(ctx, q, game.State{}, state); err != nil {
+		return Credentials{}, err
+	}
 	if err = q.AddEvent(ctx, db.AddEventParams{RoomID: c.RoomID, Seq: 1, Kind: "room_created", ActorID: c.ParticipantID, Payload: []byte(`{}`)}); err != nil {
 		return Credentials{}, err
 	}
@@ -150,6 +162,9 @@ func (s *Store) create(ctx context.Context, name string, setup *GameSetup) (Cred
 	return c, nil
 }
 func (s *Store) Join(ctx context.Context, roomID, invite, name string, role game.Role) (Credentials, error) {
+	return s.JoinWithGuest(ctx, roomID, invite, name, role, "")
+}
+func (s *Store) JoinWithGuest(ctx context.Context, roomID, invite, name string, role game.Role, guest string) (Credentials, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Credentials{}, err
@@ -178,10 +193,13 @@ func (s *Store) Join(ctx context.Context, roomID, invite, name string, role game
 		return Credentials{}, err
 	}
 	next.Seq++
-	if err = saveState(ctx, q, next, "participant_joined", c.ParticipantID, []byte(`{}`)); err != nil {
+	if err = saveState(ctx, q, state, &next, "participant_joined", c.ParticipantID, []byte(`{}`)); err != nil {
 		return Credentials{}, err
 	}
 	if err = q.AddSession(ctx, db.AddSessionParams{TokenHash: digest(c.Token), RoomID: roomID, ParticipantID: c.ParticipantID}); err != nil {
+		return Credentials{}, err
+	}
+	if err = bindGuest(ctx, q, c, guest); err != nil {
 		return Credentials{}, err
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -189,7 +207,11 @@ func (s *Store) Join(ctx context.Context, roomID, invite, name string, role game
 	}
 	return c, nil
 }
-func saveState(ctx context.Context, q *db.Queries, state game.State, kind, actor string, payload []byte) error {
+func saveState(ctx context.Context, q *db.Queries, before game.State, state *game.State, kind, actor string, payload []byte) error {
+	if err := archiveParticipants(ctx, q, before, *state); err != nil {
+		return err
+	}
+	*state = game.PruneParticipants(*state)
 	b, err := json.Marshal(state)
 	if err != nil {
 		return err

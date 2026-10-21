@@ -17,14 +17,15 @@ type job struct {
 	result chan reply
 }
 type room struct {
-	id           string
-	server       *Server
-	requests     chan job
-	clients      map[*client]struct{}
-	limits       map[string]*bucket
-	pausePending bool
-	timer        *time.Timer
-	timerC       <-chan time.Time
+	id                string
+	server            *Server
+	requests          chan job
+	clients           map[*client]struct{}
+	limits            map[string]*bucket
+	pausePending      bool
+	membershipPending bool
+	timer             *time.Timer
+	timerC            <-chan time.Time
 }
 
 func (r *room) run() {
@@ -69,6 +70,9 @@ func (r *room) run() {
 }
 func (r *room) do(ctx context.Context, run func(context.Context, *room) (any, error)) (any, error) {
 	j := job{ctx: ctx, result: make(chan reply, 1), run: func(ctx context.Context, r *room) (any, error) {
+		if err := r.reconcileMembership(ctx); err != nil {
+			return nil, err
+		}
 		// Every new request, including reconnects and joins, must first make a
 		// previously failed disconnect pause durable. Detach cleanup bypasses do.
 		if err := r.resolvePause(ctx); err != nil {
@@ -109,7 +113,7 @@ func (r *room) attach(ctx context.Context, c *client) error {
 		if err != nil {
 			return nil, err
 		}
-		_, ok := state.Participant(c.id)
+		_, ok := state.ActiveParticipant(c.id)
 		if !ok {
 			return nil, game.Fault("unauthorized")
 		}
@@ -150,7 +154,7 @@ func (r *room) detach(c *client) {
 			}
 			return nil, err
 		}
-		participant, ok := state.Participant(c.id)
+		participant, ok := state.ActiveParticipant(c.id)
 		if !ok || participant.Role != game.Host || r.hostOnline(state) {
 			return nil, nil
 		}
@@ -209,10 +213,20 @@ func (r *room) command(ctx context.Context, c *client, cmd game.Command) error {
 				return nil, game.Fault("target_offline")
 			}
 		}
+		if cmd.Type == "remove_participant" {
+			r.membershipPending = true
+		}
 		out, err := r.server.store.Execute(ctx, r.id, c.id, cmd)
 		if err != nil {
+			if r.membershipPending {
+				if reconcileErr := r.reconcileMembership(ctx); reconcileErr != nil {
+					return nil, reconcileErr
+				}
+			}
 			return nil, err
 		}
+		r.evictInactive(out.State)
+		r.membershipPending = false
 		view := game.ProjectAt(out.State, c.id, time.Now().UnixMilli())
 		c.send(Message{Type: "result", CommandID: cmd.ID, Code: out.Code, ResultSeq: out.Seq, Duplicate: out.Duplicate, State: &view})
 		if out.Code == "ok" {
@@ -225,6 +239,7 @@ func (r *room) command(ctx context.Context, c *client, cmd game.Command) error {
 	return err
 }
 func (r *room) broadcast(state game.State, except *client) {
+	r.evictInactive(state)
 	r.arm(state)
 	for c := range r.clients {
 		if c == except || c.appearanceOnly {

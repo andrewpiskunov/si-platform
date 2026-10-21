@@ -66,11 +66,13 @@ func (s *Server) createGame(w http.ResponseWriter, r *http.Request) {
 		}
 		setup.Revision = d.Card.Revision
 	}
-	c, err := s.store.CreateGame(r.Context(), req.HostName, setup)
+	guest := guestCookie(r)
+	c, err := s.store.CreateGameWithGuest(r.Context(), req.HostName, setup, guest)
 	if err != nil {
 		appError(w, err)
 		return
 	}
+	s.setGuestCookie(w, r, c.RoomID, guest)
 	writeJSON(w, 201, c)
 }
 func (s *Server) roomIdentity(r *http.Request) (string, error) {
@@ -124,7 +126,7 @@ type boardRound struct {
 }
 
 func (s *Server) board(w http.ResponseWriter, r *http.Request) {
-	_, e := s.roomIdentity(r)
+	actor, e := s.roomIdentity(r)
 	if e != nil {
 		appError(w, e)
 		return
@@ -140,6 +142,11 @@ func (s *Server) board(w http.ResponseWriter, r *http.Request) {
 		appError(w, e)
 		return
 	}
+	if _, ok := state.ActiveParticipant(actor); !ok {
+		appError(w, game.Fault("unauthorized"))
+		return
+	}
+
 	rounds := make([]boardRound, 0, len(d.Rounds))
 	for _, round := range d.Rounds {
 		br := boardRound{ID: round.ID, Name: round.Name, Type: round.Type, Themes: []boardTheme{}}
@@ -185,7 +192,7 @@ func (s *Server) selectQuestion(w http.ResponseWriter, r *http.Request) {
 		if e != nil {
 			return nil, e
 		}
-		p, ok := state.Participant(actor)
+		p, ok := state.ActiveParticipant(actor)
 		if !ok || (state.Gameplay == nil && p.Role != game.Host) {
 			return nil, game.Fault("forbidden")
 		}

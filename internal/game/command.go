@@ -68,7 +68,7 @@ func applyLegacy(s State, actorID string, c Command) (State, error) {
 	if err := c.Validate(); err != nil {
 		return s, err
 	}
-	actor, exists := s.Participant(actorID)
+	actor, exists := s.ActiveParticipant(actorID)
 	if !exists {
 		return s, Fault("unauthorized")
 	}
@@ -93,7 +93,7 @@ func applyLegacy(s State, actorID string, c Command) (State, error) {
 		}
 		players := 0
 		for _, p := range s.Participants {
-			if p.Role == Player {
+			if p.Role == Player && !p.Removed {
 				players++
 			}
 		}

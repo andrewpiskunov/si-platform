@@ -62,6 +62,9 @@ func (s *Store) ListPublicRooms(ctx context.Context, after string, limit int) (P
 		item.Phase = state.Phase
 		item.PlayerLimit, item.SpectatorLimit = 12, 20
 		for _, p := range state.Participants {
+			if p.Removed {
+				continue
+			}
 			switch p.Role {
 			case game.Player:
 				item.Players++

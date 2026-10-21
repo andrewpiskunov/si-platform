@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -48,6 +49,7 @@ func (b *outbox) push(data []byte) bool {
 func (b *outbox) sent(size int) { b.mu.Lock(); b.bytes -= size; b.mu.Unlock() }
 
 type client struct {
+	revoked        atomic.Bool
 	appearanceOnly bool
 	id             string
 	ctx            context.Context
@@ -57,7 +59,7 @@ type client struct {
 }
 
 func (c *client) send(m Message) bool {
-	if c.ctx.Err() != nil {
+	if c.ctx.Err() != nil || c.revoked.Load() {
 		return false
 	}
 	m.Version, m.ServerTime = 1, time.Now().UnixMilli()
@@ -68,6 +70,15 @@ func (c *client) send(m Message) bool {
 	}
 	return true
 }
+func (c *client) revoke() {
+	if c.revoked.Swap(true) {
+		return
+	}
+	// Wake the writer; it discards pending frames and sends one terminal error.
+	if !c.out.push([]byte{}) {
+		c.cancel()
+	}
+}
 func (c *client) writer() {
 	for {
 		select {
@@ -75,6 +86,14 @@ func (c *client) writer() {
 			return
 		case b := <-c.out.messages:
 			c.out.sent(len(b))
+			if c.revoked.Load() {
+				terminal, _ := json.Marshal(Message{Version: 1, Type: "error", Code: "unauthorized", ServerTime: time.Now().UnixMilli()})
+				ctx, cancel := context.WithTimeout(c.ctx, time.Second)
+				_ = c.conn.Write(ctx, websocket.MessageText, terminal)
+				cancel()
+				c.cancel()
+				return
+			}
 			ctx, cancel := context.WithTimeout(c.ctx, 5*time.Second)
 			err := c.conn.Write(ctx, websocket.MessageText, b)
 			cancel()

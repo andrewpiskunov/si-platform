@@ -76,7 +76,7 @@ func (s *Server) permittedMedia(ctx context.Context, roomID, actorID, mediaID, i
 	if err != nil {
 		return game.MediaSpec{}, "", err
 	}
-	if _, ok := state.Participant(actorID); !ok || state.Phase == game.Finished {
+	if _, ok := state.ActiveParticipant(actorID); !ok || state.Phase == game.Finished {
 		return game.MediaSpec{}, "", unavailable
 	}
 	view := game.ProjectAt(state, actorID, time.Now().UnixMilli())

@@ -66,6 +66,9 @@ func rejected(t *testing.T, s State, actor, kind string, data any, now int64) {
 	}
 }
 func hasAction(v View, kind string) bool {
+	if v.Gameplay == nil {
+		return false
+	}
 	for _, a := range v.Gameplay.AllowedActions {
 		if a.Type == kind {
 			return true

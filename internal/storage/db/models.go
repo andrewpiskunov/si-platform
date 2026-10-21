@@ -131,6 +131,11 @@ type Room struct {
 	Visibility pgtype.Text
 }
 
+type RoomGuestBan struct {
+	RoomID    string
+	GuestHash string
+}
+
 type RoomPack struct {
 	RoomID       string
 	OwnerID      string
@@ -139,6 +144,15 @@ type RoomPack struct {
 	Title        string
 	Theme        string
 	DemoDocument []byte
+}
+
+type RoomParticipant struct {
+	RoomID        string
+	ParticipantID string
+	Name          string
+	Role          string
+	Score         int64
+	Removed       bool
 }
 
 type RoomThemePin struct {
@@ -152,6 +166,7 @@ type Session struct {
 	TokenHash     string
 	RoomID        string
 	ParticipantID string
+	GuestHash     pgtype.Text
 }
 
 type Theme struct {

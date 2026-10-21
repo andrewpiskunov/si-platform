@@ -37,7 +37,7 @@ func (s *Server) currentAppearance(r *http.Request) (game.Appearance, error) {
 	if err != nil {
 		return game.Appearance{}, err
 	}
-	if _, ok := state.Participant(actor); !ok {
+	if _, ok := state.ActiveParticipant(actor); !ok {
 		return game.Appearance{}, game.Fault("unauthorized")
 	}
 	if state.Appearance == nil {
@@ -145,7 +145,7 @@ func (s *Server) setAppearance(w http.ResponseWriter, r *http.Request) {
 		if e != nil {
 			return nil, e
 		}
-		p, ok := state.Participant(participant)
+		p, ok := state.ActiveParticipant(participant)
 		if !ok || p.Role != game.Host {
 			return nil, game.Fault("forbidden")
 		}
