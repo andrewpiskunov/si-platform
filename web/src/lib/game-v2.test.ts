@@ -226,3 +226,13 @@ test('removal sends only selected target and valid mode under sequence control',
     /invalid_action_data/
   );
 });
+
+test('lobby readiness is own boolean intent without global sequence or question scope', () => {
+  const game = view([{ type: 'set_ready', requires_seq: false }]);
+  assert.deepEqual(prepareAction(game, 18, 'set_ready', { ready: true }, captureScope(game), 'ready-1'), {
+    v: 2, id: 'ready-1', type: 'set_ready', data: { ready: true }
+  });
+  assert.throws(() => prepareAction(game, 18, 'set_ready', {}));
+  assert.throws(() => prepareAction(game, 18, 'set_ready', {ready: null}));
+  assert.throws(() => prepareAction(game, 18, 'set_ready', {ready: true, target_id: 'other'}));
+});

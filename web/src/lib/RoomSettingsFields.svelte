@@ -14,7 +14,14 @@
 </script>
 
 <fieldset class="stack" {disabled}>
-  <legend>Доступ и голос</legend>
+  <legend>Доступ и начало игры</legend>
+  <label class="row"
+    ><input
+      type="checkbox"
+      checked={!!settings.require_ready}
+      onchange={(event) => onchange({ ...settings, require_ready: event.currentTarget.checked })}
+    />Ждать готовности всех игроков</label
+  >
   <label
     >Доступ в комнату<select
       value={settings.visibility}

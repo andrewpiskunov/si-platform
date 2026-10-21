@@ -114,11 +114,24 @@ try {
       .filter({ hasText: "Собираемся" })
       .waitFor();
   }
-  assert.equal(await owner.locator('.score-item .participant-avatar').count(), 12);
-  for (const avatar of await owner.locator('.score-item .participant-avatar').all()) {
+  assert.equal(await owner.locator('.lobby-seat .participant-avatar').count(), 12);
+  for (const avatar of await owner.locator('.lobby-seat .participant-avatar').all()) {
     await until(() => avatar.evaluate(el => el.complete && el.naturalWidth > 0), 'avatar did not load');
   }
-  await owner.getByRole("button", { name: "Начать раунд", exact: true }).click();
+  const start = owner.getByRole("button", { name: "Начать раунд", exact: true });
+  assert.equal(await start.isDisabled(), true);
+  assert.equal(await owner.locator('.lobby-seat').count(), 12);
+  for (const player of players) await player.getByRole('button', {name: 'Готов к игре', exact: true}).click();
+  await until(() => start.isEnabled(), 'ready players did not unlock start');
+  await players[0].getByRole('button', {name: 'Снять готовность', exact: true}).click();
+  await until(() => start.isDisabled(), 'unready did not lock start');
+  await players[0].getByRole('button', {name: 'Готов к игре', exact: true}).click();
+  await players[0].getByRole('button', {name: 'Снять готовность', exact: true}).waitFor();
+  await players[0].reload();
+  await players[0].getByRole('button', {name: 'Снять готовность', exact: true}).waitFor();
+  await owner.screenshot({path: `${output}/lobby.png`, fullPage: true});
+  await players[0].screenshot({path: `${output}/lobby-mobile.png`, fullPage: true});
+  await start.click();
   await owner.getByRole("status").filter({ hasText: "Идёт игра" }).waitFor();
   await owner
     .getByRole("button", { name: "Новая тема, 100 очков", exact: true })

@@ -199,6 +199,7 @@ try {
   await ownerPage.waitForLoadState('networkidle');
   await ownerPage.getByText('Сыграть в этот пакет', { exact: true }).click();
   await ownerPage.getByLabel('Название комнаты', { exact: true }).fill('Проверка оформления');
+  await ownerPage.getByLabel('Ждать готовности всех игроков', { exact: true }).uncheck();
   await ownerPage.getByLabel('Моя тема', { exact: true }).selectOption(first.card.id);
   const rules = ownerPage.getByText('Правила и таймеры', { exact: true }).locator('..');
   await rules.locator('summary').click();
@@ -222,7 +223,7 @@ try {
   const [mobile, slow, broken] = players;
   await until(() => host.state.participants.filter(p => p.role === 'player').length === 12 && sockets.every(socket => socket.readyState === WebSocket.OPEN), 'room does not have 12 connected players');
   for (const p of players) { await shell(p, 'custom'); await decorLoaded(p.page); }
-  assert.equal(await mobile.page.locator('.score-item').count(), 12);
+  assert.equal(await mobile.page.locator('.lobby-seat:not(.empty)').count(), 12);
   assert.equal(await mobile.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'mobile room overflows');
   assert.ok(mobile.assetRequests.every(r => r.quality === 'economy'), 'mobile did not default to economy');
   const participantArchive = await mobile.page.request.get(`${base}/api/themes/${first.card.id}/archive?revision=1`, { headers: { Authorization: `Bearer ${mobile.credentials.token}` } });

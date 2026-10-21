@@ -12,28 +12,31 @@ import (
 
 // RoomSettings controls admission and an optional external voice-room link.
 type RoomSettings struct {
-	Visibility string `json:"visibility"`
-	VoiceURL   string `json:"voice_url"`
+	RequireReady bool   `json:"require_ready,omitempty"`
+	Visibility   string `json:"visibility"`
+	VoiceURL     string `json:"voice_url"`
 }
 
 // UnmarshalJSON distinguishes omitted optional strings from explicit null and
 // keeps nested settings strict even when decoded through an outer HTTP payload.
 func (s *RoomSettings) UnmarshalJSON(raw []byte) error {
 	visibility, voice := "", ""
+	ready := false
 	fields := struct {
-		Visibility *string `json:"visibility"`
-		VoiceURL   *string `json:"voice_url"`
-	}{Visibility: &visibility, VoiceURL: &voice}
+		RequireReady *bool   `json:"require_ready"`
+		Visibility   *string `json:"visibility"`
+		VoiceURL     *string `json:"voice_url"`
+	}{Visibility: &visibility, VoiceURL: &voice, RequireReady: &ready}
 	data := bytes.TrimSpace(raw)
 	if len(data) == 0 || data[0] != '{' {
 		return Fault("invalid_settings")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&fields) != nil || decoder.Decode(new(any)) != io.EOF || fields.Visibility == nil || fields.VoiceURL == nil {
+	if decoder.Decode(&fields) != nil || decoder.Decode(new(any)) != io.EOF || fields.Visibility == nil || fields.VoiceURL == nil || fields.RequireReady == nil {
 		return Fault("invalid_settings")
 	}
-	*s = RoomSettings{Visibility: *fields.Visibility, VoiceURL: *fields.VoiceURL}
+	*s = RoomSettings{Visibility: *fields.Visibility, VoiceURL: *fields.VoiceURL, RequireReady: *fields.RequireReady}
 	return nil
 }
 
@@ -67,4 +70,24 @@ func (s RoomSettings) Validate() error {
 
 type SettingsPayload struct {
 	Settings RoomSettings `json:"settings"`
+}
+
+type LobbyReadyPayload struct {
+	Ready *bool `json:"ready"`
+}
+
+func lobbyCanStart(s State) bool {
+	if s.Phase != Lobby || !s.Settings.RequireReady {
+		return true
+	}
+	count := 0
+	for _, p := range s.Participants {
+		if p.Role == Player && !p.Removed {
+			count++
+			if !p.Ready {
+				return false
+			}
+		}
+	}
+	return count >= 2
 }

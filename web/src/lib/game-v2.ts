@@ -128,6 +128,7 @@ export function actionFor(view: SessionView, type: string): AllowedAction | unde
   return view.allowed_actions?.find((action) => action.type === type);
 }
 const fields: Record<string, string[]> = {
+  set_ready: ['ready'],
   media_ready: ['status'],
   continue_media: [],
   wait_media: [],
@@ -210,6 +211,7 @@ export function prepareAction(
     throw new Error('stale_stage');
   if (Object.keys(input).some((key) => !fields[type].includes(key)))
     throw new Error('invalid_action_data');
+  if (type === 'set_ready' && typeof input.ready !== 'boolean') throw new Error('invalid_action_data');
   const data: Record<string, unknown> = {};
   if (staged.has(type)) data.stage_id = scope.stage_id;
   if (instanced.has(type)) {

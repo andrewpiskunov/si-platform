@@ -128,7 +128,7 @@ test('voice links accept only bounded explicit HTTPS destinations without creden
     validRoomSettings({ visibility: 'private', voice_url: '', unexpected: true }),
     false
   );
-  assert.deepEqual(normalizedSettings(undefined), { visibility: 'private', voice_url: '' });
+  assert.deepEqual(normalizedSettings(undefined), { visibility: 'private', voice_url: '', require_ready: false });
 });
 test('public room query accepts only bounded cursor and limit and never sends appearance context', () => {
   const cursor = 'a'.repeat(32);
@@ -169,4 +169,12 @@ test('room settings command uses the existing v2 sequenced payload and rejects i
     () => prepareAction(view, 7, 'set_room_settings', { settings: { visibility: 'public' } }),
     /invalid_action_data/
   );
+});
+
+test('saving readiness off acknowledges the server echo without false conflict', () => {
+  let form = createForm(normalizedSettings({visibility:'private',voice_url:'',require_ready:true}));
+  form = submitForm(editForm(form, {...form.value, require_ready:false}));
+  form = observeForm(form, normalizedSettings({visibility:'private',voice_url:''}));
+  assert.equal(form.dirty, false);
+  assert.equal(form.conflict, false);
 });

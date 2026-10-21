@@ -4,6 +4,7 @@ import type { Appearance } from './appearance.ts';
 import type { SessionView, V2Command } from './game-v2.ts';
 import type { RoomSettings } from './types.ts';
 export interface Participant {
+  ready?: boolean;
   id: string;
   name: string;
   role: 'host' | 'player' | 'spectator';

@@ -31,7 +31,7 @@ func ApplyAt(s State, actorID string, c Command, nowMS int64, entropy uint64) (S
 	if s.Phase == Finished {
 		return s, Fault("finished")
 	}
-	if c.ExpectedSeq != nil && *c.ExpectedSeq != s.Seq && c.Type != "buzz" && c.Type != "answer" && c.Type != "wager" && c.Type != "media_ready" {
+	if c.ExpectedSeq != nil && *c.ExpectedSeq != s.Seq && c.Type != "buzz" && c.Type != "answer" && c.Type != "wager" && c.Type != "media_ready" && c.Type != "set_ready" {
 		return s, Fault("stale_state")
 	}
 	allowed := false
@@ -101,6 +101,12 @@ func ApplyAt(s State, actorID string, c Command, nowMS int64, entropy uint64) (S
 	n := s.Clone()
 	g := n.Gameplay
 	switch x := p.(type) {
+	case *LobbyReadyPayload:
+		for i := range n.Participants {
+			if n.Participants[i].ID == actorID {
+				n.Participants[i].Ready = *x.Ready
+			}
+		}
 	case *BeginRoundPayload:
 		err = beginRound(&n, x.Round, nowMS)
 	case *BeginQuestionPayload:

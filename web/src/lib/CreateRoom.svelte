@@ -13,7 +13,10 @@
   import type { Appearance } from './appearance.ts';
   let appearance = $state<Appearance>({ builtin: 'classic' });
   let rules = $state<Rules>(classicRules());
-  let settings = $state(normalizedSettings());
+  let settings = $state({
+    ...normalizedSettings(),
+    require_ready: true
+  } as import('./types.ts').RoomSettings);
   let mounted = $state(false);
   onMount(() => {
     mounted = true;

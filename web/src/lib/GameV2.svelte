@@ -1,5 +1,6 @@
 <script lang="ts">
   import Avatar from './Avatar.svelte';
+  import Lobby from './Lobby.svelte';
   import {
     actionFor,
     captureScope,
@@ -105,32 +106,33 @@
 </script>
 
 <div class="game-v2">
-  <div class="row between section-head">
-    <div>
-      <p class="eyebrow">
-        {view.round?.name || 'Лобби'} · {room.phase === 'paused'
-          ? 'Пауза'
-          : stageNames[view.stage.kind] || 'Игра'}
-      </p>
-      <h2>
-        {room.phase === 'finished'
-          ? 'Итоги игры'
-          : view.question
-            ? questionTypes[view.question.type] || 'Вопрос'
-            : 'Готовы сыграть?'}
-      </h2>
-      <p class="helper">
-        Выбирает {name(view.chooser_id)}{view.stage.turn_id
-          ? ` · Сейчас ходит ${name(view.stage.turn_id)}`
-          : ''}
-      </p>
+  {#if room.phase !== 'lobby'}<div class="row between section-head">
+      <div>
+        <p class="eyebrow">
+          {view.round?.name || 'Лобби'} · {room.phase === 'paused'
+            ? 'Пауза'
+            : stageNames[view.stage.kind] || 'Игра'}
+        </p>
+        <h2>
+          {room.phase === 'finished'
+            ? 'Итоги игры'
+            : view.question
+              ? questionTypes[view.question.type] || 'Вопрос'
+              : 'Готовы сыграть?'}
+        </h2>
+        <p class="helper">
+          Выбирает {name(view.chooser_id)}{view.stage.turn_id
+            ? ` · Сейчас ходит ${name(view.stage.turn_id)}`
+            : ''}
+        </p>
+      </div>
+      <GameTimer
+        stage={view.stage}
+        serverTime={view.server_time_ms}
+        paused={room.phase === 'paused'}
+      />
     </div>
-    <GameTimer
-      stage={view.stage}
-      serverTime={view.server_time_ms}
-      paused={room.phase === 'paused'}
-    />
-  </div>
+  {/if}
   {#if error}<div class="notice error" role="alert">{error}</div>{/if}
   <div class="row game-controls">
     {#each [{ type: 'pause', label: 'Пауза Ⅱ' }, { type: 'resume', label: 'Продолжить ▶' }, { type: 'advance', label: view.stage.kind === 'present_answer' ? 'Следующий фрагмент ответа' : view.stage.kind === 'collect_answer' ? 'Ответ прозвучал' : view.stage.kind === 'collect_answers' ? 'Закрыть сбор ответов' : 'Продолжить →' }, { type: 'open_buzzer', label: 'Открыть кнопку' }, { type: 'wait_media', label: 'Ждать ещё 10 секунд' }, { type: 'continue_media', label: 'Продолжить без всех' }] as control}{#if actionFor(view, control.type)}<button
@@ -149,10 +151,23 @@
     </p>{:else if view.stage.expired}<p class="notice">
       Время этапа вышло. Ведущий может продолжить игру доступным действием.
     </p>{/if}
-  {#if room.phase === 'lobby'}<SoundCheck />{/if}
-  <div class="room-grid">
+  {#if room.phase === 'lobby'}
+    <Lobby
+      {room}
+      {board}
+      selectedRound={round?.id || ''}
+      {blocked}
+      canStart={!!roundAction}
+      canReady={!!actionFor(view, 'set_ready')}
+      onroundchange={(id) => (selectedRound = id)}
+      onstart={() => round && onround(round.id)}
+      onready={(ready) => send('set_ready', { ready })}
+    />
+    <SoundCheck />
+  {/if}
+  <div class="room-grid" class:lobby-options={room.phase === 'lobby'}>
     <div class="stack">
-      {#if roundAction || choosing}<section class="stack">
+      {#if room.phase !== 'lobby' && (roundAction || choosing)}<section class="stack">
           <div class="row between">
             <label
               >Раунд<select
@@ -310,7 +325,9 @@
                 </p>{/if}
             </div>{/each}
         </section>{/if}
-      {#if !view.question && !roundAction && !choosing && !view.final}<div class="empty">
+      {#if room.phase !== 'lobby' && !view.question && !roundAction && !choosing && !view.final}<div
+          class="empty"
+        >
           <h3>{room.phase === 'finished' ? 'Спасибо за игру' : 'Ждём продолжения'}</h3>
           <p>
             {room.phase === 'finished'
@@ -320,34 +337,35 @@
         </div>{/if}
     </div>
     <aside class="stack">
-      <div>
-        <h3>Игроки · {players.length}/12</h3>
-        <div class="score-list">
-          {#each room.phase === 'finished' ? [...players].sort((a, b) => b.score - a.score) : players as participant}{@const status =
-              view.players?.find((p) => p.id === participant.id)}
-            <div class="score-item" class:winner={view.stage.turn_id === participant.id}>
-              <Avatar identity={participant.id} />
-              <div class="participant-name">
-                {participant.name}{participant.id === room.you ? ' (вы)' : ''}
-                <div class="helper">
-                  {status?.wager_submitted ? 'Ставка принята · ' : ''}{status?.answer_submitted
-                    ? 'Ответ принят'
-                    : status?.attempted
-                      ? 'Попытка использована'
-                      : ''}{status?.judged ? ' · Оценён' : ''}
+      {#if room.phase !== 'lobby'}<div>
+          <h3>Игроки · {players.length}/12</h3>
+          <div class="score-list">
+            {#each room.phase === 'finished' ? [...players].sort((a, b) => b.score - a.score) : players as participant}{@const status =
+                view.players?.find((p) => p.id === participant.id)}
+              <div class="score-item" class:winner={view.stage.turn_id === participant.id}>
+                <Avatar identity={participant.id} />
+                <div class="participant-name">
+                  {participant.name}{participant.id === room.you ? ' (вы)' : ''}
+                  <div class="helper">
+                    {status?.wager_submitted ? 'Ставка принята · ' : ''}{status?.answer_submitted
+                      ? 'Ответ принят'
+                      : status?.attempted
+                        ? 'Попытка использована'
+                        : ''}{status?.judged ? ' · Оценён' : ''}
+                  </div>
                 </div>
+                <strong>{participant.score}</strong>
+              </div>{/each}
+          </div>
+          {#if host}<div class="host-identity">
+              <Avatar identity={host.id} small />
+              <div>
+                <span class="helper">Ведущий</span>
+                <div>{host.name}</div>
               </div>
-              <strong>{participant.score}</strong>
-            </div>{/each}
+            </div>{/if}
         </div>
-        {#if host}<div class="host-identity">
-            <Avatar identity={host.id} small />
-            <div>
-              <span class="helper">Ведущий</span>
-              <div>{host.name}</div>
-            </div>
-          </div>{/if}
-      </div>
+      {/if}
       <RoomParticipants
         {room}
         {view}
@@ -397,3 +415,23 @@
     </aside>
   </div>
 </div>
+
+<style>
+  .room-grid.lobby-options {
+    display: block;
+  }
+  .lobby-options > .stack:empty {
+    display: none;
+  }
+  .lobby-options > aside {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 20px;
+    align-items: start;
+  }
+  @media (max-width: 700px) {
+    .lobby-options > aside {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

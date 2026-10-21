@@ -61,7 +61,8 @@ export function submitForm<T>(form: FormState<T>): FormState<T> {
 export function normalizedSettings(settings?: RoomSettings | null): RoomSettings {
   return {
     visibility: settings?.visibility === 'public' ? 'public' : 'private',
-    voice_url: settings?.voice_url || ''
+    voice_url: settings?.voice_url || '',
+    require_ready: settings?.require_ready === true
   };
 }
 export function voiceDestination(value: string): { href: string; hostname: string } | null {
@@ -81,9 +82,10 @@ export function validRoomSettings(value: unknown): value is RoomSettings {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const settings = value as Record<string, unknown>;
   return (
-    Object.keys(settings).every((key) => ['visibility', 'voice_url'].includes(key)) &&
+    Object.keys(settings).every((key) => ['visibility', 'voice_url', 'require_ready'].includes(key)) &&
     ['private', 'public'].includes(String(settings.visibility)) &&
     typeof settings.voice_url === 'string' &&
+    (settings.require_ready === undefined || typeof settings.require_ready === 'boolean') &&
     (settings.voice_url === '' || voiceDestination(settings.voice_url) !== null)
   );
 }

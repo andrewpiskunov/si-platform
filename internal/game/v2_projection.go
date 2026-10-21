@@ -155,10 +155,13 @@ func allowedActions(s State, id string, now int64) []AllowedAction {
 	kind := g.Stage.Kind
 	expired := deadlinePassed(g, now)
 	add := func(t string, targets ...string) {
-		out = append(out, AllowedAction{Type: t, Targets: targets, RequiresSeq: t != "buzz" && t != "answer" && t != "wager" && t != "media_ready"})
+		out = append(out, AllowedAction{Type: t, Targets: targets, RequiresSeq: t != "buzz" && t != "answer" && t != "wager" && t != "media_ready" && t != "set_ready"})
 	}
 	bounded := func(t string, minimum, maximum, step int64) {
 		out = append(out, AllowedAction{Type: t, Minimum: intPtr(minimum), Maximum: intPtr(maximum), Step: intPtr(step), RequiresSeq: t != "wager"})
+	}
+	if s.Phase == Lobby && actor.Role == Player {
+		add("set_ready")
 	}
 	if host {
 		targets := []string{}
@@ -215,7 +218,9 @@ func allowedActions(s State, id string, now int64) []AllowedAction {
 	if betweenQuestions(s) {
 		if host {
 			add("set_rules")
-			add("begin_round")
+			if lobbyCanStart(s) {
+				add("begin_round")
+			}
 			if !wagered(q) {
 				targets := playerIDs(s)
 				add("adjust_score", targets...)

@@ -32,6 +32,7 @@ const (
 )
 
 type Participant struct {
+	Ready   bool   `json:"ready,omitempty"`
 	Removed bool   `json:"removed,omitempty"`
 	ID      string `json:"id"`
 	Name    string `json:"name"`

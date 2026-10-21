@@ -141,6 +141,7 @@ export interface Credentials {
   invite_token?: string;
 }
 export interface RoomSettings {
+  require_ready?: boolean;
   visibility: 'private' | 'public';
   voice_url: string;
 }
