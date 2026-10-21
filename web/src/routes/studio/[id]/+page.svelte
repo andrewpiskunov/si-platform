@@ -9,6 +9,8 @@
   import ReorderControls from '#lib/ReorderControls.svelte';
   import { moveItem, readQuestionSelection, saveQuestionSelection } from '#lib/reorder.ts';
   import QuestionPreview from '#lib/QuestionPreview.svelte';
+  import ModerationHistory from '#lib/ModerationHistory.svelte';
+  import { previewKey } from '#lib/moderation-model.ts';
   import MediaUpload from '#lib/MediaUpload.svelte';
   import MediaLibrary from '#lib/MediaLibrary.svelte';
   import CreateRoom from '#lib/CreateRoom.svelte';
@@ -622,12 +624,12 @@
                 count={selectedPosition.theme.questions.length}
                 onmove={moveQuestion}
               />{/if}
-            {#if preview}<QuestionPreview
-                question={selectedQuestion}
-                assets={draft.assets || []}
-                packId={draft.card.id}
-                {revision}
-              />{:else}<QuestionEditor
+            {#if preview}{#key previewKey(draft.card.id, revision, selectedQuestion.id)}<QuestionPreview
+                  question={selectedQuestion}
+                  assets={draft.assets || []}
+                  packId={draft.card.id}
+                  {revision}
+                />{/key}{:else}<QuestionEditor
                 question={selectedQuestion}
                 assets={draft.assets || []}
                 onchange={updateQuestion}
@@ -658,6 +660,7 @@
                 </li>{/each}
             </ul>
           </details>{/if}
+        {#key draft.card.id}<ModerationHistory packId={draft.card.id} />{/key}
         <details>
           <summary>История версий</summary>
           <div class="list scroll-list">

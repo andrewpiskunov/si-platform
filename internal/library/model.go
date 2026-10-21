@@ -79,12 +79,31 @@ type Filter struct {
 	MaxBytes                  int64
 	Offset, Limit             int
 }
+type DecisionRecord struct {
+	ID        int64     `json:"id"`
+	Revision  int       `json:"revision"`
+	Decision  string    `json:"decision"`
+	Reason    string    `json:"reason"`
+	CreatedAt time.Time `json:"created_at"`
+}
+type DecisionPage struct {
+	Items       []DecisionRecord `json:"items"`
+	NextAfterID int64            `json:"next_after_id,omitempty"`
+}
+type ReportsPage struct {
+	Items     []Report `json:"items"`
+	NextAfter string   `json:"next_after,omitempty"`
+}
 type Report struct {
-	ID         string    `json:"id"`
-	PackID     string    `json:"pack_id"`
-	ReporterID string    `json:"reporter_id"`
-	Reason     string    `json:"reason"`
-	Status     string    `json:"status"`
-	Revision   int       `json:"revision"`
-	CreatedAt  time.Time `json:"created_at"`
+	Resolution       string     `json:"resolution"`
+	ResolutionReason string     `json:"resolution_reason"`
+	ResolvedBy       *string    `json:"resolved_by"`
+	ResolvedAt       *time.Time `json:"resolved_at"`
+	ID               string     `json:"id"`
+	PackID           string     `json:"pack_id"`
+	ReporterID       string     `json:"reporter_id"`
+	Reason           string     `json:"reason"`
+	Status           string     `json:"status"`
+	Revision         int        `json:"revision"`
+	CreatedAt        time.Time  `json:"created_at"`
 }

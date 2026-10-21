@@ -268,7 +268,7 @@ func (s *Service) Decide(ctx context.Context, actor accounts.Identity, packID st
 	if a.pack.blocked {
 		return Card{}, ErrBlocked
 	}
-	if revision <= 0 || len(reason) > 8000 || !utf8.ValidString(reason) || strings.ContainsRune(reason, '\x00') {
+	if revision <= 0 || !validModerationReason(reason, decision != "approve") {
 		return Card{}, ErrInvalid
 	}
 	if decision != "approve" && decision != "reject" && decision != "block" {
@@ -278,8 +278,7 @@ func (s *Service) Decide(ctx context.Context, actor accounts.Identity, packID st
 		return Card{}, ErrInvalid
 	}
 	pending := a.pack.pending != nil && *a.pack.pending == revision
-	published := a.pack.published != nil && *a.pack.published == revision
-	if !pending && !(decision == "block" && published) {
+	if decision != "block" && !pending {
 		return Card{}, ErrConflict
 	}
 	d, err := load(ctx, a.tx, packID, revision)
@@ -317,7 +316,7 @@ func (s *Service) Decide(ctx context.Context, actor accounts.Identity, packID st
 	if _, err = a.tx.Exec(ctx, "INSERT INTO library_decisions(pack_id,revision,moderator_id,decision,reason) VALUES($1,$2,$3,$4,$5)", packID, revision, a.actor.User.ID, decision, reason); err != nil {
 		return Card{}, err
 	}
-	if _, err = a.tx.Exec(ctx, "UPDATE library_reports SET status='resolved' WHERE pack_id=$1 AND revision=$2", packID, revision); err != nil {
+	if _, err = a.tx.Exec(ctx, "UPDATE library_reports SET status='resolved',resolution='decision',resolution_reason=$3,resolved_by=$4,resolved_at=clock_timestamp() WHERE pack_id=$1 AND (revision=$2 OR $5='block') AND status='open'", packID, revision, reason, a.actor.User.ID, decision); err != nil {
 		return Card{}, err
 	}
 	d, err = load(ctx, a.tx, packID, revision)
@@ -367,15 +366,15 @@ func (s *Service) Reports(ctx context.Context, actor accounts.Identity) ([]Repor
 	if !moderator(a.actor) {
 		return nil, ErrForbidden
 	}
-	rows, err := a.tx.Query(ctx, "SELECT id,pack_id,revision,reporter_id,reason,status,created_at FROM library_reports ORDER BY (status='open') DESC,created_at,id LIMIT 200")
+	rows, err := a.tx.Query(ctx, "SELECT "+reportColumns+" FROM library_reports ORDER BY (status='open') DESC,created_at,id LIMIT 200")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	reports := []Report{}
 	for rows.Next() {
-		var r Report
-		if err = rows.Scan(&r.ID, &r.PackID, &r.Revision, &r.ReporterID, &r.Reason, &r.Status, &r.CreatedAt); err != nil {
+		r, err := scanReport(rows)
+		if err != nil {
 			return nil, err
 		}
 		reports = append(reports, r)

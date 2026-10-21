@@ -26,26 +26,26 @@
 
 Files migrations/00013_report_resolution.sql, internal/library/{moderation.go,model.go,publication.go,moderation_test.go}, existing publication tests.
 Interfaces DecisionHistory(ctx,actor,packID,afterID int64,limit int)(DecisionPage,error); ReportPage(ctx,actor,status,after string,limit int)(ReportsPage,error); ResolveReport(ctx,actor,reportID,disposition,reason string)(Report,error). DecisionPage Items []DecisionRecord NextAfterID int64 omitempty. ReportsPage Items []Report NextAfter string omitempty. Preserve existing Reports wrapper semantics for internal compatibility; HTTP adopts bounded new method.
-- [ ] RED realDB history owner/stranger/mod/token scope, pages/cursors; terminal same/conflict/liveauth and rolechange.
-- [ ] Migration adds terminal fields/checks/indexes, legacybackfill/down/up. ExtendReport DTO; implement bounded history and report queries plus immutable resolution with actor+reportlocks.
-- [ ] RED historicblockafternewpub/withdraw, staleapprove/reject, allopenclosedbutalreadyresolvedunchanged, deletedownerresolution, concurrentblock/resolve. Implement blockexistingrevision precondition and open-only auditupdates.
-- [ ] Run library race/vet + migration tests, inspect DB constraints and lock order; scopedcommit.
+- [x] RED realDB history owner/stranger/mod/token scope, pages/cursors; terminal same/conflict/liveauth and rolechange.
+- [x] Migration adds terminal fields/checks/indexes, legacybackfill/down/up. ExtendReport DTO; implement bounded history and report queries plus immutable resolution with actor+reportlocks.
+- [x] RED historicblockafternewpub/withdraw, staleapprove/reject, allopenclosedbutalreadyresolvedunchanged, deletedownerresolution, concurrentblock/resolve. Implement blockexistingrevision precondition and open-only auditupdates.
+- [x] Run library race/vet + migration tests, inspect DB constraints and lock order; scopedcommit.
 
 ## Task2 — HTTP API (root)
 
 Files internal/server/{authoring.go,moderation.go,moderation_test.go}.
-- [ ] RED strictJSON limit/cursor/bodyvalidation, privateACL/role/tokendenial/revocation; history/reportDTO pagination and no authorreporterexposure.
-- [ ] Register /drafts/{id}/decisions, /reports/{id}/resolution, reportsstatus/cursor parsing. Existing identity/appError/no-store conventions; service owns enforcement. UnknownJSON/body rejected.
-- [ ] Full Go race DB/media, vet/build; migration13 localpreview, restartonlyownedAPI.
+- [x] RED strictJSON limit/cursor/bodyvalidation, privateACL/role/tokendenial/revocation; history/reportDTO pagination and no authorreporterexposure.
+- [x] Register /drafts/{id}/decisions, /reports/{id}/resolution, reportsstatus/cursor parsing. Existing identity/appError/no-store conventions; service owns enforcement. UnknownJSON/body rejected.
+- [x] Full Go race DB/media, vet/build; migration13 localpreview, restartonlyownedAPI.
 
 ## Task3 — Author/moderator workflows (independent web worker)
 
 Files web/src/lib/{types.ts,ModerationHistory.svelte,moderation-model.ts,moderation-model.test.ts}, web/src/routes/{moderation/+page.svelte,studio/[id]/+page.svelte}. No Go/e2e/runtime edits.
-- [ ] RED model validation/page merge/selectedrevision/terminalaction guards; implement UIlabels/types after sharedspec.
-- [ ] Add separate private decisionhistory author+moderator with boundednextpage; show reasons/version/date, no fabricated legacyactor/time.
-- [ ] Report open/resolvedfilter+pagination, perreportreason, explicitdismiss/resolve/block, mutationerrorpreservesdraft/list; localreload independent queue/reports.
-- [ ] Reuse keyedQuestionPreview for one selectedquestion, show pinnedrevision/history; explicitmedia only; request generation/abort prevents stale preview or list races.
-- [ ] npm test/check/build; report evidence; no commit/review/service restart.
+- [x] RED model validation/page merge/selectedrevision/terminalaction guards; implement UIlabels/types after sharedspec.
+- [x] Add separate private decisionhistory author+moderator with boundednextpage; show reasons/version/date, no fabricated legacyactor/time.
+- [x] Report open/resolvedfilter+pagination, perreportreason, explicitdismiss/resolve/block, mutationerrorpreservesdraft/list; localreload independent queue/reports.
+- [x] Reuse keyedQuestionPreview for one selectedquestion, show pinnedrevision/history; explicitmedia only; request generation/abort prevents stale preview or list races.
+- [x] npm test/check/build; report evidence; no commit/review/service restart.
 
 ## Task4 — Integrated acceptance (root)
 

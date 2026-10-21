@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node smoke.mjs && node review.mjs && node rules.mjs && node media.mjs && node themes.mjs && node theme-regressions.mjs && node authoring.mjs && node rooms.mjs && node membership.mjs && node membership-recovery.mjs",
+    "test": "node smoke.mjs && node review.mjs && node rules.mjs && node media.mjs && node themes.mjs && node theme-regressions.mjs && node authoring.mjs && node rooms.mjs && node membership.mjs && node membership-recovery.mjs && node moderation.mjs",
     "test:text": "node smoke.mjs && node review.mjs && node rules.mjs",
     "test:media": "node media.mjs",
     "test:themes": "node themes.mjs",
@@ -11,7 +11,8 @@
     "test:authoring": "node authoring.mjs",
     "test:rooms": "node rooms.mjs",
     "test:membership": "node membership.mjs",
-    "test:membership-recovery": "node membership-recovery.mjs"
+    "test:membership-recovery": "node membership-recovery.mjs",
+    "test:moderation": "node moderation.mjs"
   },
   "devDependencies": {
     "playwright": "1.64.1"

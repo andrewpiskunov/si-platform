@@ -178,6 +178,10 @@ export interface Report {
   id: string;
   pack_id: string;
   reporter_id: string;
+  resolution: '' | 'decision' | 'resolved' | 'dismissed' | 'legacy';
+  resolution_reason: string;
+  resolved_by: string | null;
+  resolved_at: string | null;
   reason: string;
   status: string;
   revision: number;
@@ -202,4 +206,20 @@ export interface Upload {
   issues?: { path: string; code: string; message: string }[];
   draft_id?: string;
   error?: string;
+}
+
+export interface DecisionRecord {
+  id: number;
+  revision: number;
+  decision: string;
+  reason: string;
+  created_at: string;
+}
+export interface DecisionPage {
+  items: DecisionRecord[] | null;
+  next_after_id?: number;
+}
+export interface ReportsPage {
+  items: Report[] | null;
+  next_after?: string;
 }

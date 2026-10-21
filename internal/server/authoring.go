@@ -34,6 +34,7 @@ func (s *Server) platformRoutes(r chi.Router) {
 	r.Put("/drafts/{id}", s.updateDraft)
 	r.Delete("/drafts/{id}", s.deleteDraft)
 	r.Get("/drafts/{id}/history", s.history)
+	r.Get("/drafts/{id}/decisions", s.decisionHistory)
 	r.Get("/drafts/{id}/export", s.exportDraft)
 	r.Get("/drafts/{id}/original", s.originalDraft)
 	r.Get("/drafts/{id}/assets/{key}", s.draftAsset)
@@ -43,6 +44,7 @@ func (s *Server) platformRoutes(r chi.Router) {
 	r.Get("/moderation", s.moderation)
 	r.Post("/moderation/{id}", s.decide)
 	r.Get("/reports", s.reports)
+	r.Post("/reports/{id}/resolution", s.resolveReport)
 	r.Post("/catalogue/{id}/reports", s.report)
 	r.Get("/rooms/{room}/board", s.board)
 	r.Post("/rooms/{room}/select", s.selectQuestion)
@@ -332,18 +334,6 @@ func (s *Server) decide(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, c)
-}
-func (s *Server) reports(w http.ResponseWriter, r *http.Request) {
-	a, ok := s.identity(w, r)
-	if !ok {
-		return
-	}
-	v, e := s.options.Library.Reports(r.Context(), a)
-	if e != nil {
-		appError(w, e)
-		return
-	}
-	writeJSON(w, 200, map[string]any{"items": v})
 }
 func (s *Server) report(w http.ResponseWriter, r *http.Request) {
 	a, ok := s.identity(w, r)
