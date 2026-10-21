@@ -20,12 +20,28 @@ const suffix = randomBytes(6).toString("hex"),
 let checkpoint = "setup";
 await mkdir(output, { recursive: true });
 async function api(who, method, path, data) {
-  const r = await who.context.request.fetch(base + "/api" + path, {
-    method,
-    data,
-  });
-  assert.ok(r.ok(), `${method} ${path}: ${r.status()} ${await r.text()}`);
-  return r.status() === 204 ? null : r.json();
+  const deadline = Date.now() + 60000;
+  for (;;) {
+    const r = await who.context.request.fetch(base + "/api" + path, {
+      method,
+      data,
+    });
+    if (
+      r.status() === 429 &&
+      path.startsWith("/account/") &&
+      Date.now() < deadline
+    ) {
+      const seconds = Number(r.headers()["retry-after"]);
+      assert.ok(
+        Number.isFinite(seconds) && seconds > 0 && seconds <= 10,
+        "invalid Retry-After",
+      );
+      await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+      continue;
+    }
+    assert.ok(r.ok(), `${method} ${path}: ${r.status()} ${await r.text()}`);
+    return r.status() === 204 ? null : r.json();
+  }
 }
 async function person(name) {
   const context = await browser.newContext(),
@@ -246,6 +262,7 @@ try {
     ),
   );
   await page.unroute("**/api/usage");
+  owner.needsLogin = true;
   await api(owner, "POST", "/account/logout", {});
   await api(owner, "POST", "/account/login", {
     username: other.username,
@@ -270,22 +287,28 @@ try {
     }),
   );
 } catch (error) {
-  console.error({ checkpoint, errors });
+  console.error({ checkpoint, errors, failure: error.stack });
   throw error;
 } finally {
+  const cleanupErrors = [];
   for (const who of people) {
-    if (who.registered) {
-      await api(who, "POST", "/account/login", {
-        username: who.username,
-        password,
-      });
-      const r = await who.context.request.delete(base + "/api/account/me", {
-        data: { password },
-      });
-      assert.ok(r.ok(), "synthetic cleanup");
+    try {
+      if (who.registered) {
+        if (who.needsLogin)
+          await api(who, "POST", "/account/login", {
+            username: who.username,
+            password,
+          });
+        await api(who, "DELETE", "/account/me", { password });
+      }
+    } catch (error) {
+      cleanupErrors.push(error);
+    } finally {
+      await who.context.close();
     }
-    await who.context.close();
   }
   await browser.close();
   await rm(directory, { recursive: true, force: true });
+  if (cleanupErrors.length)
+    throw new AggregateError(cleanupErrors, "synthetic account cleanup failed");
 }
