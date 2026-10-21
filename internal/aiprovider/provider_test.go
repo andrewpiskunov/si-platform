@@ -30,6 +30,12 @@ func TestPayloadAndUsage(t *testing.T) {
 			t.Error("missing auth")
 		}
 		if strings.HasSuffix(r.URL.Path, "/input_tokens") {
+			for key := range b {
+				if key != "model" && key != "instructions" && key != "input" && key != "text" {
+					http.Error(w, "unsupported field", http.StatusBadRequest)
+					return
+				}
+			}
 			json.NewEncoder(w).Encode(map[string]any{"input_tokens": 123})
 			return
 		}
@@ -45,11 +51,17 @@ func TestPayloadAndUsage(t *testing.T) {
 	if e != nil || !u.Known || u.OutputTokens != 40 || v.Title != "Quiz" {
 		t.Fatalf("generate %v %v %v", v, u, e)
 	}
-	if !reflect.DeepEqual(bodies[0], bodies[1]) {
+	generation := bodies[1]
+	if generation["store"] != false || generation["max_output_tokens"] != float64(256) {
+		t.Fatal("generation options missing")
+	}
+	delete(generation, "store")
+	delete(generation, "max_output_tokens")
+	if !reflect.DeepEqual(bodies[0], generation) {
 		t.Fatalf("count differs from generate: %v", bodies)
 	}
 	b := bodies[0]
-	if b["store"] != false || b["tools"] != nil || b["text"].(map[string]any)["format"].(map[string]any)["strict"] != true {
+	if b["tools"] != nil || b["text"].(map[string]any)["format"].(map[string]any)["strict"] != true {
 		t.Fatal("unsafe payload")
 	}
 }

@@ -112,6 +112,23 @@ try {
     await page.setViewportSize({ width, height: 900 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `overflow ${width}`);
   }
+  checkpoint = 'new pack from existing editor';
+  await editorPanel.getByLabel(/^Что подготовить/).selectOption('pack');
+  await editorPanel.getByLabel('Тема запроса', { exact: true }).fill('Новый пакет из редактора');
+  await new Promise(resolve => setTimeout(resolve, 10500));
+  await editorPanel.getByRole('button', { name: 'Рассчитать оценку', exact: true }).click();
+  await editorPanel.getByRole('button', { name: 'Запустить по оценке', exact: true }).click();
+  await editorPanel.getByLabel('Название предложения', { exact: true }).waitFor();
+  await editorPanel.getByLabel('Название предложения', { exact: true }).fill('Отдельный новый пакет');
+  await editorPanel.getByRole('checkbox').check();
+  const nextResponse = page.waitForResponse(r => r.url().endsWith('/draft') && r.request().method() === 'POST');
+  await editorPanel.getByRole('button', { name: 'Создать частный черновик', exact: true }).click();
+  const nextDraft = await (await nextResponse).json();
+  await page.waitForURL('**/studio/' + nextDraft.card.id);
+  await until(async () => await page.getByLabel('Название', { exact: true }).inputValue() === 'Отдельный новый пакет', 'new URL retained old editor');
+  await page.getByLabel('Название', { exact: true }).fill('Изменён только новый пакет');
+  await until(async () => (await api('GET', '/drafts/' + nextDraft.card.id)).document.name === 'Изменён только новый пакет', 'new editor autosave targeted wrong pack');
+  assert.equal((await api('GET', '/drafts/' + draft.card.id)).document.name, 'Несохранённое название автора');
   checkpoint = 'disabled presentation';
   // UI-only disabled response: production default is separately verified in Go config tests.
   await page.route('**/api/ai/status', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ enabled: false, provider: '', model: '', monthly_limit: 0, spent: 0, reserved: 0, remaining: 0 }) }));
@@ -120,7 +137,7 @@ try {
   await page.getByTestId('ai-disabled').waitFor();
   assert.equal(await page.getByRole('button', { name: 'Рассчитать оценку', exact: true }).isDisabled(), true);
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ ai: 'pass', fixture: true, ambiguous_retry: true, edited_private_draft: true, append_theme: true, in_flight_autosave_preserved: true, disabled_ui_mock: true, responsive: true, page_errors: 0 }));
+  console.log(JSON.stringify({ ai: 'pass', fixture: true, ambiguous_retry: true, edited_private_draft: true, append_theme: true, in_flight_autosave_preserved: true, disabled_ui_mock: true, editor_parameter_navigation: true, responsive: true, page_errors: 0 }));
 } catch (error) {
   console.error({ checkpoint, errors, url: page.url(), message: error.message });
   throw error;

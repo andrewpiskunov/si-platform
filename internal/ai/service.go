@@ -11,7 +11,9 @@ import (
 	"math"
 	"siplatform/internal/accounts"
 	"siplatform/internal/aiformat"
+	"siplatform/internal/aiprovider"
 	"strings"
+	"time"
 )
 
 func cost(tokens, rate int64) (int64, error) {
@@ -59,11 +61,9 @@ func (s *Service) begin(ctx context.Context, a accounts.Identity, guard bool) (p
 	if e != nil {
 		return nil, e
 	}
-	if guard {
+	e = auth(ctx, tx, a)
+	if e == nil && guard {
 		_, e = tx.Exec(ctx, `SELECT id FROM ai_admission WHERE id=1 FOR UPDATE`)
-	}
-	if e == nil {
-		e = auth(ctx, tx, a)
 	}
 	if e != nil {
 		tx.Rollback(ctx)
@@ -116,7 +116,7 @@ func (s *Service) Quote(ctx context.Context, a accounts.Identity, r aiformat.Req
 	}
 	q = Quote{ID: newID(), Request: r, Model: s.options.Model, MaxOutputTokens: s.options.MaxOutputTokens}
 	b, _ := json.Marshal(r)
-	e = tx.QueryRow(ctx, `INSERT INTO ai_quotes(owner_id,id,credential_id,request,model,input_rate,output_rate,max_output_tokens) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(owner_id) DO UPDATE SET id=EXCLUDED.id,credential_id=EXCLUDED.credential_id,request=EXCLUDED.request,model=EXCLUDED.model,input_rate=EXCLUDED.input_rate,output_rate=EXCLUDED.output_rate,max_output_tokens=EXCLUDED.max_output_tokens,input_tokens=NULL,maximum_cost=NULL,created_at=clock_timestamp(),expires_at=clock_timestamp()+interval '5 minutes' RETURNING expires_at`, a.User.ID, q.ID, a.SessionID, b, q.Model, s.options.InputRate, s.options.OutputRate, q.MaxOutputTokens).Scan(&q.ExpiresAt)
+	e = tx.QueryRow(ctx, `INSERT INTO ai_quotes(owner_id,id,credential_id,request,model,input_rate,output_rate,max_output_tokens,provider_id,format_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(owner_id) DO UPDATE SET id=EXCLUDED.id,credential_id=EXCLUDED.credential_id,request=EXCLUDED.request,model=EXCLUDED.model,input_rate=EXCLUDED.input_rate,output_rate=EXCLUDED.output_rate,max_output_tokens=EXCLUDED.max_output_tokens,provider_id=EXCLUDED.provider_id,format_version=EXCLUDED.format_version,input_tokens=NULL,maximum_cost=NULL,created_at=clock_timestamp(),expires_at=clock_timestamp()+interval '5 minutes' RETURNING expires_at`, a.User.ID, q.ID, a.SessionID, b, q.Model, s.options.InputRate, s.options.OutputRate, q.MaxOutputTokens, s.options.ProviderLabel, aiprovider.ContractFingerprint()).Scan(&q.ExpiresAt)
 	if e != nil {
 		return q, e
 	}
@@ -173,6 +173,8 @@ func scanJob(row scanner) (Job, error) {
 	return j, e
 }
 func (s *Service) Start(ctx context.Context, a accounts.Identity, qid, key string) (Job, error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
 	var j Job
 	if key == "" || len(key) > 128 || len(qid) > 128 {
 		return j, ErrInvalid
@@ -203,15 +205,18 @@ func (s *Service) Start(ctx context.Context, a accounts.Identity, qid, key strin
 		return j, ErrDisabled
 	}
 	var req []byte
-	var model string
+	var model, providerID, formatVersion string
 	var ir, or, it, maximum int64
 	var mt int
-	e = tx.QueryRow(ctx, `SELECT request,model,input_rate,output_rate,input_tokens,max_output_tokens,maximum_cost FROM ai_quotes WHERE owner_id=$1 AND id=$2 AND expires_at>clock_timestamp() AND maximum_cost IS NOT NULL FOR UPDATE`, a.User.ID, qid).Scan(&req, &model, &ir, &or, &it, &mt, &maximum)
+	e = tx.QueryRow(ctx, `SELECT request,model,input_rate,output_rate,input_tokens,max_output_tokens,maximum_cost,provider_id,format_version FROM ai_quotes WHERE owner_id=$1 AND id=$2 AND expires_at>clock_timestamp() AND maximum_cost IS NOT NULL FOR UPDATE`, a.User.ID, qid).Scan(&req, &model, &ir, &or, &it, &mt, &maximum, &providerID, &formatVersion)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return j, ErrConflict
 	}
 	if e != nil {
 		return j, e
+	}
+	if providerID != s.options.ProviderLabel || formatVersion != aiprovider.ContractFingerprint() {
+		return j, ErrConflict
 	}
 	var total, own int
 	e = tx.QueryRow(ctx, `SELECT count(*),count(*) FILTER(WHERE owner_id=$1) FROM ai_jobs WHERE status IN ('queued','running')`, a.User.ID).Scan(&total, &own)
@@ -232,7 +237,7 @@ func (s *Service) Start(ctx context.Context, a accounts.Identity, qid, key strin
 	if tag.RowsAffected() != 1 {
 		return j, ErrLimit
 	}
-	j, e = scanJob(tx.QueryRow(ctx, `INSERT INTO ai_jobs(id,owner_id,credential_id,status,request,model,quote_id,idempotency_key,request_hash,month,input_rate,output_rate,input_tokens,max_output_tokens,maximum_cost) VALUES($1,$2,$3,'queued',$4,$5,$6,$7,$8,date_trunc('month',CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date,$9,$10,$11,$12,$13) RETURNING `+columns, newID(), a.User.ID, a.SessionID, req, model, qid, key, h, ir, or, it, mt, maximum))
+	j, e = scanJob(tx.QueryRow(ctx, `INSERT INTO ai_jobs(id,owner_id,credential_id,status,request,model,quote_id,idempotency_key,request_hash,month,input_rate,output_rate,input_tokens,max_output_tokens,maximum_cost,provider_id,format_version) VALUES($1,$2,$3,'queued',$4,$5,$6,$7,$8,date_trunc('month',CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date,$9,$10,$11,$12,$13,$14,$15) RETURNING `+columns, newID(), a.User.ID, a.SessionID, req, model, qid, key, h, ir, or, it, mt, maximum, providerID, formatVersion))
 	if e != nil {
 		return j, e
 	}
@@ -315,6 +320,9 @@ func (s *Service) Cancel(ctx context.Context, a accounts.Identity, id string) (J
 	return j, nil
 }
 func refund(ctx context.Context, tx pgx.Tx, id string) error {
-	_, e := tx.Exec(ctx, `UPDATE ai_monthly_usage u SET reserved=u.reserved-j.maximum_cost FROM ai_jobs j WHERE j.id=$1 AND u.owner_id=j.owner_id AND u.month=j.month`, id)
+	tag, e := tx.Exec(ctx, `UPDATE ai_monthly_usage u SET reserved=u.reserved-j.maximum_cost FROM ai_jobs j WHERE j.id=$1 AND u.owner_id=j.owner_id AND u.month=j.month`, id)
+	if e == nil && tag.RowsAffected() != 1 {
+		return ErrUnavailable
+	}
 	return e
 }

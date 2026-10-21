@@ -73,6 +73,8 @@ type AiJob struct {
 	ActualCost      pgtype.Int8
 	CancelRequested bool
 	Error           string
+	ProviderID      string
+	FormatVersion   string
 }
 
 type AiMonthlyUsage struct {
@@ -96,6 +98,7 @@ type AiQuote struct {
 	CreatedAt       pgtype.Timestamptz
 	ExpiresAt       pgtype.Timestamptz
 	FormatVersion   string
+	ProviderID      string
 }
 
 type CommandResult struct {

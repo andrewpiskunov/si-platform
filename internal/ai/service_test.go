@@ -449,6 +449,9 @@ func TestQueueTwentyAndTwoWorkers(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
+	if _, e = p.Exec(ctx, `UPDATE ai_quotes SET format_version=$1`, aiprovider.ContractFingerprint()); e != nil {
+		t.Fatal(e)
+	}
 	var wg sync.WaitGroup
 	var admitted atomic.Int32
 	for i := 1; i <= 21; i++ {

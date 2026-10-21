@@ -4,6 +4,8 @@ package aiprovider
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -55,6 +57,13 @@ func schema() map[string]any {
 	theme := object(map[string]any{"name": str, "questions": map[string]any{"type": "array", "items": question}}, "name", "questions")
 	return object(map[string]any{"title": str, "themes": map[string]any{"type": "array", "items": theme}}, "title", "themes")
 }
+
+// ContractFingerprint changes whenever counted instructions, schema, or wire contract changes.
+func ContractFingerprint() string {
+	b, _ := json.Marshal(map[string]any{"protocol": "responses-input-v1", "instructions": instructions, "schema": schema(), "format": aiformat.Version})
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
+}
 func payload(r aiformat.Request, model string, max int) ([]byte, error) {
 	if aiformat.ValidateRequest(r) != nil || strings.TrimSpace(model) == "" || max < 256 || max > 64000 {
 		return nil, ErrInvalidOutput
@@ -66,6 +75,18 @@ func (c *client) post(ctx context.Context, path string, r aiformat.Request, mode
 	b, err := payload(r, model, max)
 	if err != nil {
 		return nil, err
+	}
+	if path == "/responses/input_tokens" {
+		var envelope map[string]any
+		if json.Unmarshal(b, &envelope) != nil {
+			return nil, ErrInvalidOutput
+		}
+		delete(envelope, "store")
+		delete(envelope, "max_output_tokens")
+		b, err = json.Marshal(envelope)
+		if err != nil {
+			return nil, ErrInvalidOutput
+		}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint+path, bytes.NewReader(b))
 	if err != nil {

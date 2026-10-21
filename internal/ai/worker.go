@@ -51,12 +51,10 @@ func (s *Service) StartWorkers(ctx context.Context) (func(), error) {
 					return
 				default:
 				}
-				if s.options.Provider != nil {
-					c, e := s.claim(run)
-					if e == nil && c != nil {
-						s.dispatch(c)
-						continue
-					}
+				c, e := s.claim(run)
+				if e == nil && c != nil {
+					s.dispatch(c)
+					continue
 				}
 				select {
 				case <-run.Done():
@@ -83,25 +81,26 @@ func (s *Service) StartWorkers(ctx context.Context) (func(), error) {
 	var once sync.Once
 	return func() { once.Do(func() { cancel(); wg.Wait(); s.mu.Lock(); s.started = false; s.mu.Unlock() }) }, nil
 }
-func (s *Service) claim(ctx context.Context) (*claimed, error) {
+func (s *Service) claim(parent context.Context) (*claimed, error) {
+	ctx, cancelClaim := context.WithTimeout(parent, 2*time.Second)
+	defer cancelClaim()
 	tx, e := s.pool.Begin(ctx)
 	if e != nil {
 		return nil, e
 	}
 	defer tx.Rollback(ctx)
-	if _, e = tx.Exec(ctx, `SELECT id FROM ai_admission WHERE id=1 FOR UPDATE`); e != nil {
-		return nil, e
-	}
 	c := &claimed{}
 	var id string
-	e = tx.QueryRow(ctx, `SELECT id,owner_id,credential_id FROM ai_jobs WHERE status='queued' ORDER BY created_at,id LIMIT 1`).Scan(&id, &c.owner, &c.credential)
+	e = tx.QueryRow(ctx, `SELECT j.id,j.owner_id,j.credential_id FROM ai_jobs j JOIN account_users u ON u.id=j.owner_id
+        WHERE j.status='queued' AND ($1 OR u.deleted_at IS NOT NULL OR NOT EXISTS (
+          SELECT 1 FROM account_credentials c WHERE c.id=j.credential_id AND c.user_id=j.owner_id
+          AND c.revoked_at IS NULL AND c.expires_at>clock_timestamp()
+          AND (c.kind='session' OR 'ai:generate'=ANY(c.scopes))))
+        ORDER BY j.created_at,j.id LIMIT 1 FOR UPDATE OF u SKIP LOCKED`, s.options.Provider != nil).Scan(&id, &c.owner, &c.credential)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if e != nil {
-		return nil, e
-	}
-	if _, e = tx.Exec(ctx, `SELECT id FROM account_users WHERE id=$1 FOR UPDATE`, c.owner); e != nil {
 		return nil, e
 	}
 	a := accounts.Identity{User: accounts.User{ID: c.owner}, SessionID: c.credential}
@@ -109,23 +108,32 @@ func (s *Service) claim(ctx context.Context) (*claimed, error) {
 	if authErr != nil && !errors.Is(authErr, accounts.ErrUnauthorized) && !errors.Is(authErr, accounts.ErrForbidden) {
 		return nil, authErr
 	}
-	var status string
-	e = tx.QueryRow(ctx, `SELECT status FROM ai_jobs WHERE id=$1 FOR UPDATE`, id).Scan(&status)
+	var status, providerID, formatVersion string
+	e = tx.QueryRow(ctx, `SELECT status,provider_id,format_version FROM ai_jobs WHERE id=$1 FOR UPDATE`, id).Scan(&status, &providerID, &formatVersion)
 	if e != nil {
 		return nil, e
 	}
 	if status != "queued" {
 		return nil, nil
 	}
+	reason := ""
 	if authErr != nil {
+		reason = "authorization_revoked"
+	} else if s.options.Provider != nil && (providerID != s.options.ProviderLabel || formatVersion != aiprovider.ContractFingerprint()) {
+		reason = "generation_contract_changed"
+	}
+	if reason != "" {
 		if e = refund(ctx, tx, id); e != nil {
 			return nil, e
 		}
-		_, e = tx.Exec(ctx, `UPDATE ai_jobs SET status='cancelled',actual_cost=0,error='authorization_revoked',completed_at=clock_timestamp() WHERE id=$1`, id)
+		_, e = tx.Exec(ctx, `UPDATE ai_jobs SET status='cancelled',actual_cost=0,error=$2,completed_at=clock_timestamp() WHERE id=$1`, id, reason)
 		if e != nil {
 			return nil, e
 		}
 		return nil, tx.Commit(ctx)
+	}
+	if s.options.Provider == nil {
+		return nil, nil
 	}
 	_, e = tx.Exec(ctx, `UPDATE ai_jobs SET status='running',started_at=clock_timestamp() WHERE id=$1`, id)
 	if e != nil {
@@ -139,7 +147,7 @@ func (s *Service) claim(ctx context.Context) (*claimed, error) {
 	if e != nil {
 		return nil, e
 	}
-	c.ctx, c.cancel = context.WithTimeout(ctx, 180*time.Second)
+	c.ctx, c.cancel = context.WithTimeout(parent, 180*time.Second)
 	s.mu.Lock()
 	s.running[id] = c.cancel
 	s.mu.Unlock()
@@ -207,9 +215,12 @@ func (s *Service) settle(ctx context.Context, c *claimed, result aiformat.Result
 				state, code = "ready", ""
 				body, _ = json.Marshal(result)
 			}
-			_, e = tx.Exec(ctx, `UPDATE ai_monthly_usage u SET reserved=u.reserved-j.maximum_cost,spent=u.spent+$2 FROM ai_jobs j WHERE j.id=$1 AND u.owner_id=j.owner_id AND u.month=j.month`, c.job.ID, v)
-			if e != nil {
-				return e
+			tag, updateErr := tx.Exec(ctx, `UPDATE ai_monthly_usage u SET reserved=u.reserved-j.maximum_cost,spent=u.spent+$2 FROM ai_jobs j WHERE j.id=$1 AND u.owner_id=j.owner_id AND u.month=j.month`, c.job.ID, v)
+			if updateErr != nil {
+				return updateErr
+			}
+			if tag.RowsAffected() != 1 {
+				return ErrUnavailable
 			}
 		}
 	}
@@ -225,7 +236,7 @@ func (s *Service) cleanup(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	s.recoverStale(ctx)
-	categories := []struct{ table, predicate string }{{"ai_quotes", `expires_at<clock_timestamp()`}, {"ai_jobs", `status NOT IN ('queued','running') AND (completed_at<clock_timestamp()-interval '90 days' OR EXISTS(SELECT 1 FROM account_users u WHERE u.id=t.owner_id AND u.deleted_at<clock_timestamp()-interval '30 days'))`}, {"ai_monthly_usage", `month<date_trunc('month',clock_timestamp() AT TIME ZONE 'UTC')::date AND month<((clock_timestamp() AT TIME ZONE 'UTC')::date-90)`}}
+	categories := []struct{ table, predicate string }{{"ai_quotes", `expires_at<clock_timestamp()`}, {"ai_jobs", `status NOT IN ('queued','running') AND (completed_at<clock_timestamp()-interval '90 days' OR EXISTS(SELECT 1 FROM account_users u WHERE u.id=t.owner_id AND u.deleted_at<clock_timestamp()-interval '30 days'))`}, {"ai_monthly_usage", `month<date_trunc('month',clock_timestamp() AT TIME ZONE 'UTC')::date AND month<((clock_timestamp() AT TIME ZONE 'UTC')::date-90) AND NOT EXISTS (SELECT 1 FROM ai_jobs j WHERE j.owner_id=t.owner_id AND j.month=t.month AND j.status IN ('queued','running'))`}}
 	for _, cat := range categories {
 		rows, e := s.pool.Query(ctx, `SELECT DISTINCT owner_id FROM `+cat.table+` t WHERE `+cat.predicate+` LIMIT 25`)
 		if e != nil {
