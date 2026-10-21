@@ -13,7 +13,7 @@ func ProjectAt(s State, id string, nowMS int64) View {
 	g := n.Gameplay
 	p, _ := n.Participant(id)
 	host := p.Role == Host
-	v := View{ID: n.ID, Seq: n.Seq, Phase: n.Phase, Participants: n.Participants, Winner: n.Winner, You: id}
+	v := View{Appearance: n.Appearance, ID: n.ID, Seq: n.Seq, Phase: n.Phase, Participants: n.Participants, Winner: n.Winner, You: id}
 	gv := &SessionView{Version: 2, RulesVersion: g.RulesVersion, Rules: g.Rules, ChooserID: g.ChooserID, ServerTimeMS: nowMS, Stage: g.Stage, Players: []PlayerView{}, Submissions: []SubmissionView{}, Decisions: []Decision{}, Appeals: []Appeal{}, AllowedActions: allowedActions(n, id, nowMS), Readiness: []Readiness{}}
 	v.Gameplay = gv
 	if gv.ChooserID == "" {
@@ -129,6 +129,7 @@ func allowedActions(s State, id string, now int64) []AllowedAction {
 	}
 	if s.Phase == Paused {
 		if host {
+			add("set_appearance")
 			add("resume")
 			add("finish")
 			targets := []string{}
@@ -144,6 +145,9 @@ func allowedActions(s State, id string, now int64) []AllowedAction {
 		return out
 	}
 	if host {
+		if s.Phase == Lobby {
+			add("set_appearance")
+		}
 		add("finish")
 		if s.Phase != Lobby {
 			add("pause")

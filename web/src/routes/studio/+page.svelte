@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { page } from '$app/state';
+  import { contextLink, roomContext } from '#lib/appearance.ts';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { api, APIError, errorText, bytes } from '#lib/api.ts';
@@ -36,7 +38,7 @@
     error = '';
     try {
       const draft = await api<Draft>('/drafts', 'POST', {});
-      await goto(`/studio/${draft.card.id}`);
+      await goto(contextLink(`/studio/${draft.card.id}`, roomContext(page.url)));
     } catch (e) {
       error = errorText(e);
     } finally {
@@ -110,7 +112,7 @@
       }
       if (current.draft_id) {
         sessionStorage.removeItem(key);
-        await goto(`/studio/${current.draft_id}`);
+        await goto(contextLink(`/studio/${current.draft_id}`, roomContext(page.url)));
       }
     } catch (e) {
       error = errorText(e);
@@ -164,6 +166,9 @@
       <details><summary>Быстро попробовать игру</summary><CreateRoom /></details>
     </div>{/if}
   <div class="section-head">
+    <a class="text-link" href={contextLink('/themes', roomContext(page.url))}
+      >Мои темы оформления ↗</a
+    >
     <h2>Мои пакеты <span class="muted">{cards.length || ''}</span></h2>
   </div>
   {#if loading}<p class="loading" role="status">

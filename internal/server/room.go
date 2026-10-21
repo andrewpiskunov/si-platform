@@ -117,6 +117,12 @@ func (r *room) attach(ctx context.Context, c *client) error {
 			return nil, c.ctx.Err()
 		}
 		r.clients[c] = struct{}{}
+		if c.appearanceOnly {
+			if !c.send(Message{Type: "appearance_refresh"}) {
+				return nil, game.Fault("slow_client")
+			}
+			return nil, nil
+		}
 		if r.limits[c.id] == nil {
 			r.limits[c.id] = newBucket()
 		}
@@ -133,6 +139,9 @@ func (r *room) detach(c *client) {
 	// Removal must not be dropped when the ordinary command queue is full.
 	j := job{ctx: r.server.ctx, result: make(chan reply, 1), run: func(ctx context.Context, r *room) (any, error) {
 		delete(r.clients, c)
+		if c.appearanceOnly {
+			return nil, nil
+		}
 		state, err := r.server.store.Load(ctx, r.id)
 		if err != nil {
 			r.pausePending = true
@@ -175,6 +184,9 @@ func (r *room) resolvePause(ctx context.Context) error {
 }
 func (r *room) command(ctx context.Context, c *client, cmd game.Command) error {
 	_, err := r.do(ctx, func(ctx context.Context, r *room) (any, error) {
+		if c.appearanceOnly {
+			return nil, game.Fault("forbidden")
+		}
 		if _, ok := r.clients[c]; !ok {
 			return nil, game.Fault("unauthorized")
 		}
@@ -215,7 +227,7 @@ func (r *room) command(ctx context.Context, c *client, cmd game.Command) error {
 func (r *room) broadcast(state game.State, except *client) {
 	r.arm(state)
 	for c := range r.clients {
-		if c == except {
+		if c == except || c.appearanceOnly {
 			continue
 		}
 		view := game.ProjectAt(state, c.id, time.Now().UnixMilli())

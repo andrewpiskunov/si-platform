@@ -83,7 +83,7 @@ func (s *Server) startRound(w http.ResponseWriter, r *http.Request) {
 }
 func (r *room) connected(id string) bool {
 	for c := range r.clients {
-		if c.id == id && c.ctx.Err() == nil {
+		if c.id == id && !c.appearanceOnly && c.ctx.Err() == nil {
 			return true
 		}
 	}

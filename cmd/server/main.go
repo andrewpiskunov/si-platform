@@ -20,6 +20,7 @@ import (
 	"siplatform/internal/media"
 	"siplatform/internal/server"
 	"siplatform/internal/storage/postgres"
+	"siplatform/internal/themes"
 )
 
 func main() {
@@ -76,7 +77,7 @@ func run() error {
 	}
 	uploads.Start(ctx)
 	defer uploads.Close()
-	app := server.New(store, server.Options{Origin: origin, Accounts: auth, Library: lib, Objects: objects, Uploads: uploads})
+	app := server.New(store, server.Options{Origin: origin, Accounts: auth, Library: lib, Objects: objects, Uploads: uploads, Themes: themes.New(pool)})
 	defer app.Close()
 	addr := os.Getenv("LISTEN_ADDR")
 	if addr == "" {

@@ -140,7 +140,9 @@ func (s *Service) cleanupObject(ctx context.Context, epoch int64, object failedO
 	var referenced, active, ready bool
 	err = tx.QueryRow(ctx, `SELECT
  EXISTS(SELECT 1 FROM library_revisions WHERE original_key=$1 OR assets @> $2::jsonb
- OR EXISTS(SELECT 1 FROM jsonb_array_elements(assets) a WHERE a->'prepared'->'standard'->>'key'=$1 OR a->'prepared'->'economy'->>'key'=$1)),
+ OR EXISTS(SELECT 1 FROM jsonb_array_elements(assets) a WHERE a->'prepared'->'standard'->>'key'=$1 OR a->'prepared'->'economy'->>'key'=$1))
+ OR EXISTS(SELECT 1 FROM theme_versions WHERE prepared->>'original_key'=$1
+ OR EXISTS(SELECT 1 FROM jsonb_array_elements(prepared->'assets') a WHERE a->'prepared'->'standard'->>'key'=$1 OR a->'prepared'->'economy'->>'key'=$1)),
  EXISTS(SELECT 1 FROM uploads WHERE status IN ('uploading','queued','processing') AND stored_keys @> ARRAY[$1]::text[]),
  EXISTS(SELECT 1 FROM uploads WHERE status='ready' AND stored_keys @> ARRAY[$1]::text[])`, object.key, assetJSON).Scan(&referenced, &active, &ready)
 	if err != nil {

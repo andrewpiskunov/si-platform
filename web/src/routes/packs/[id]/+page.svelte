@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { page } from '$app/state';
+  import { contextLink, roomContext } from '#lib/appearance.ts';
+  const room = $derived(roomContext(page.url));
   import CreateRoom from '#lib/CreateRoom.svelte';
   import { api, bytes, errorText } from '#lib/api.ts';
   import { user } from '#lib/session.ts';
@@ -27,7 +30,7 @@
 
 <svelte:head><title>{data.card?.name || 'Пакет'} — Своя игра</title></svelte:head>
 <section class="page">
-  <div class="breadcrumbs"><a href="/">Каталог</a> / Пакет вопросов</div>
+  <div class="breadcrumbs"><a href={contextLink('/', room)}>Каталог</a> / Пакет вопросов</div>
   {#if data.card}{@const card = data.card}
     <div class="two-columns">
       <div>
@@ -35,8 +38,9 @@
         <h1>{card.name}</h1>
         <p class="muted">{card.author} · версия {card.revision}</p>
         <div class="row">
-          {#each card.tags || [] as tag}<a class="tag" href={`/?tag=${encodeURIComponent(tag)}`}
-              >{tag}</a
+          {#each card.tags || [] as tag}<a
+              class="tag"
+              href={contextLink(`/?tag=${encodeURIComponent(tag)}`, room)}>{tag}</a
             >{/each}{#if card.restriction}<span class="tag">{card.restriction}</span>{/if}
         </div>
         <div class="stat-grid">
@@ -86,6 +90,6 @@
     </div>{:else}<div class="empty">
       <h1>Пакет недоступен</h1>
       <p>{errorText(data.error)}</p>
-      <a class="button" href="/">В каталог</a>
+      <a class="button" href={contextLink('/', room)}>В каталог</a>
     </div>{/if}
 </section>

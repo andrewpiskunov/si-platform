@@ -8,6 +8,8 @@
   import GameResults from '#lib/GameResults.svelte';
   import { actionFor, prepareAction, type V2Command } from '#lib/game-v2.ts';
   import { roomThemeContext, type RoomTheme } from '#lib/room-theme.ts';
+  import ThemeApply from '#lib/ThemeApply.svelte';
+  import { themePreferences } from '#lib/appearance.ts';
   const roomTheme = getContext<RoomTheme>(roomThemeContext);
   let credentials = $state<Credentials | null>(null),
     roomState = $state<RoomState | null>(null),
@@ -36,7 +38,8 @@
     rotating = $state(false);
   let connection: RoomConnection | null = null;
   let roomID = $state('');
-  let boardSeq = -1;
+  let boardKey = '';
+  let boardRequest: AbortController | undefined;
   let alive = true;
   const me = $derived(
     roomState?.participants.find((participant) => participant.id === roomState?.you)
@@ -63,59 +66,84 @@
     finished: 'Игра завершена'
   };
   onMount(() => {
-    roomID = page.params.id || '';
-    roomTheme.select('classic');
-    invite = new URLSearchParams(location.hash.slice(1)).get('invite') || '';
-    try {
-      const value = sessionStorage.getItem(`room:${roomID}`);
-      if (value) {
-        const stored = JSON.parse(value);
-        if (stored.room_id === roomID && typeof stored.token === 'string') credentials = stored;
-      }
-    } catch {
-      /* Storage may be unavailable; joining remains usable. */
-    }
     mounted = true;
-    if (credentials) connect();
     return () => {
       alive = false;
       connection?.close();
-      roomTheme.reset();
+      boardRequest?.abort();
     };
   });
+  $effect(() => {
+    const id = page.params.id || '';
+    if (mounted && id !== roomID) initialize(id);
+  });
+  function initialize(id: string) {
+    connection?.close();
+    boardRequest?.abort();
+    roomID = id;
+    board = null;
+    boardKey = '';
+    roomState = null;
+    ready = false;
+    credentials = null;
+    selection = null;
+    invite = new URLSearchParams(location.hash.slice(1)).get('invite') || '';
+    try {
+      const stored = JSON.parse(sessionStorage.getItem(`room:${roomID}`) || 'null');
+      if (stored?.room_id === roomID && typeof stored.token === 'string') credentials = stored;
+    } catch {}
+    if (credentials) connect();
+  }
   function connect() {
     if (!credentials) return;
     connection?.close();
+    roomTheme.enter(
+      roomID,
+      credentials.token,
+      themePreferences(
+        sessionStorage.getItem(`appearance:${roomID}`),
+        matchMedia('(max-width: 700px)').matches
+      )
+    );
+    const connectedRoom = roomID;
     connection = new RoomConnection(roomID, credentials.token, (protocol, status, code) => {
-      if (!alive) return;
+      if (!alive || connectedRoom !== roomID) return;
       roomState = protocol.state;
       ready = protocol.ready;
       connectionStatus = status;
       pending = protocol.pending.size;
       if (code) error = errorText(code);
-      if (roomState && roomState.seq > boardSeq) {
-        boardSeq = roomState.seq;
-        void loadBoard();
+      roomTheme.observe(roomState?.appearance, protocol.appearanceEpoch, protocol.ready);
+      if (roomState) {
+        const key = `${roomState.gameplay?.round?.id || ''}:${roomState.gameplay?.stage.instance_id || roomState.question?.id || ''}:${roomState.phase}`;
+        if (key !== boardKey) {
+          boardKey = key;
+          void loadBoard();
+        }
       }
     });
     connection.connect();
   }
   async function loadBoard() {
     if (!credentials) return;
+    boardRequest?.abort();
+    const request = new AbortController();
+    boardRequest = request;
+    const loadingRoom = roomID;
     try {
       const result = await api<Board>(
         `/rooms/${roomID}/board`,
         'GET',
         undefined,
-        credentials.token
+        credentials.token,
+        request.signal
       );
-      if (alive) {
+      if (alive && loadingRoom === roomID && !request.signal.aborted) {
         board = result;
-        roomTheme.select(result.theme);
         if (roundIndex >= result.rounds.length) roundIndex = 0;
       }
     } catch (e) {
-      if (alive) error = errorText(e);
+      if (alive && !request.signal.aborted) error = errorText(e);
     }
   }
   async function join(event: SubmitEvent) {
@@ -255,6 +283,7 @@
     connection?.close();
     sessionStorage.removeItem(`room:${roomID}`);
     credentials = null;
+    roomTheme.enter(roomID, '', themePreferences(null));
     roomState = null;
     ready = false;
     resultsOpen = false;
@@ -343,6 +372,15 @@
               onclick={retrySelection}>Повторить действие</button
             >{/if}
         </div>{/if}
+      {#if isHost}<ThemeApply
+          room={roomID}
+          token={credentials.token}
+          seq={roomState.seq}
+          phase={roomState.phase}
+          appearance={roomState.appearance}
+          {ready}
+          onapplied={() => void roomTheme.refresh()}
+        />{/if}
       <GameV2
         room={roomState}
         roomToken={credentials.token}

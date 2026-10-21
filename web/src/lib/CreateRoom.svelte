@@ -5,6 +5,9 @@
   import type { Credentials } from './types';
   import GameRules from './GameRules.svelte';
   import { classicRules, type Rules } from './game-v2.ts';
+  import ThemeChooser from './ThemeChooser.svelte';
+  import type { Appearance } from './appearance.ts';
+  let appearance = $state<Appearance>({ builtin: 'classic' });
   let rules = $state<Rules>(classicRules());
   let {
     packId = '',
@@ -13,7 +16,6 @@
   }: { packId?: string; revision?: number; disabled?: boolean } = $props();
   let host = $state(''),
     title = $state(''),
-    theme = $state('classic'),
     busy = $state(false),
     error = $state('');
   async function create(event: SubmitEvent) {
@@ -27,7 +29,8 @@
         pack_id: packId,
         revision,
         title,
-        theme,
+        theme: appearance.builtin || 'classic',
+        appearance,
         rules
       });
       sessionStorage.setItem(
@@ -67,18 +70,7 @@
       maxlength="32"
     /></label
   >
-  <fieldset>
-    <legend>Настроение вечера</legend>
-    <div class="choices">
-      {#each [{ id: 'classic', name: 'Классика' }, { id: 'pirate', name: 'Пираты' }, { id: 'anime', name: 'Аниме' }] as option}<button
-          type="button"
-          class:selected={theme === option.id}
-          aria-pressed={theme === option.id}
-          onclick={() => (theme = option.id)}
-          ><span class={`swatch ${option.id}`} aria-hidden="true"></span>{option.name}</button
-        >{/each}
-    </div>
-  </fieldset>
+  <ThemeChooser value={appearance} onchange={(value) => (appearance = value)} disabled={busy} />
   <details>
     <summary>Правила и таймеры</summary><GameRules
       {rules}

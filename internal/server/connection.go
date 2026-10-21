@@ -48,11 +48,12 @@ func (b *outbox) push(data []byte) bool {
 func (b *outbox) sent(size int) { b.mu.Lock(); b.bytes -= size; b.mu.Unlock() }
 
 type client struct {
-	id     string
-	ctx    context.Context
-	cancel context.CancelFunc
-	conn   *websocket.Conn
-	out    *outbox
+	appearanceOnly bool
+	id             string
+	ctx            context.Context
+	cancel         context.CancelFunc
+	conn           *websocket.Conn
+	out            *outbox
 }
 
 func (c *client) send(m Message) bool {
@@ -103,6 +104,11 @@ func (c *client) heartbeat() {
 	}
 }
 func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
+	mode := r.URL.Query().Get("appearance_only")
+	if mode != "" && mode != "1" {
+		httpError(w, game.Fault("invalid_input"))
+		return
+	}
 	if !s.track() {
 		httpError(w, game.Fault("unavailable"))
 		return
@@ -154,7 +160,7 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 		_ = wsjson.Write(errorCtx, ws, Message{Version: 1, Type: "error", Code: game.Code(err), ServerTime: time.Now().UnixMilli()})
 		return
 	}
-	c := &client{id: id, ctx: ctx, cancel: cancel, conn: ws, out: newOutbox()}
+	c := &client{appearanceOnly: mode == "1", id: id, ctx: ctx, cancel: cancel, conn: ws, out: newOutbox()}
 	loadCtx, loadCancel := context.WithTimeout(ctx, 5*time.Second)
 	rm, err := s.getRoom(loadCtx, chi.URLParam(r, "room"))
 	if err == nil {
@@ -201,7 +207,7 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		// Configured rooms select immutable package questions on the server.
-		if (s.options.Library != nil && cmd.Type == "open_question") || cmd.Type == "begin_round" || cmd.Type == "begin_question" {
+		if c.appearanceOnly || (s.options.Library != nil && cmd.Type == "open_question") || cmd.Type == "begin_round" || cmd.Type == "begin_question" || cmd.Type == "set_appearance" {
 			c.send(Message{Type: "error", CommandID: cmd.ID, Code: "forbidden"})
 			continue
 		}

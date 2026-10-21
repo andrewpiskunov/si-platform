@@ -302,8 +302,9 @@ func usage(ctx context.Context, tx pgx.Tx, userID string) (int64, error) {
 	return StorageUsage(ctx, tx, userID)
 }
 
-// StorageUsage counts immutable revisions and ready media not yet attached to an
-// active pack. Quota callers must hold the account row lock for their transaction.
+// StorageUsage counts immutable pack revisions, retained theme versions, and
+// ready uploads awaiting attachment. Ordinary theme deletion retains its charge.
+// Quota callers must hold the account row lock for their transaction.
 func StorageUsage(ctx context.Context, tx pgx.Tx, userID string) (int64, error) {
 	var n int64
 	err := tx.QueryRow(ctx, `SELECT
@@ -312,7 +313,11 @@ func StorageUsage(ctx context.Context, tx pgx.Tx, userID string) (int64, error) 
      + COALESCE((u.result_asset->'prepared'->'standard'->>'size')::bigint,0)
      + COALESCE((u.result_asset->'prepared'->'economy'->>'size')::bigint,0))
    FROM uploads u WHERE u.owner_id=$1 AND u.purpose='media' AND u.status='ready'
-   AND NOT EXISTS(SELECT 1 FROM library_media_receipts receipt JOIN library_packs p ON p.id=receipt.pack_id WHERE receipt.upload_id=u.id AND p.deleted_at IS NULL)),0)::bigint`, userID).Scan(&n)
+   AND NOT EXISTS(SELECT 1 FROM library_media_receipts receipt JOIN library_packs p ON p.id=receipt.pack_id WHERE receipt.upload_id=u.id AND p.deleted_at IS NULL)),0)::bigint
+ + COALESCE((SELECT sum(v.size_bytes) FROM theme_versions v JOIN themes t ON t.id=v.theme_id WHERE t.owner_id=$1),0)::bigint
+ + COALESCE((SELECT sum((u.result_theme->>'size_bytes')::bigint) FROM uploads u
+   WHERE u.owner_id=$1 AND u.purpose='theme' AND u.status='ready'
+   AND NOT EXISTS(SELECT 1 FROM theme_receipts receipt WHERE receipt.upload_id=u.id)),0)::bigint`, userID).Scan(&n)
 	return n, err
 }
 func insert(ctx context.Context, tx pgx.Tx, d Draft) error {

@@ -1,10 +1,15 @@
 <script lang="ts">
+  import { page } from '$app/state';
+  import { contextLink, roomContext } from './appearance.ts';
   import type { Card } from './types';
   import { bytes, statusText } from './api';
   let { card, studio = false }: { card: Card; studio?: boolean } = $props();
 </script>
 
-<a class="pack-card" href={studio ? `/studio/${card.id}` : `/packs/${card.id}`}>
+<a
+  class="pack-card"
+  href={contextLink(studio ? `/studio/${card.id}` : `/packs/${card.id}`, roomContext(page.url))}
+>
   <div class="card-symbol">
     <span aria-hidden="true">? / !</span><span class="pill"
       >{studio

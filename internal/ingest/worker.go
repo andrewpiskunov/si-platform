@@ -151,10 +151,10 @@ func (s *Service) claim(ctx context.Context, epoch int64) (job, error) {
 		return job{}, ErrUnavailable
 	}
 	var j job
-	var rawAsset []byte
+	var rawAsset, rawTheme, rawIssues []byte
 	err = tx.QueryRow(ctx, `UPDATE uploads SET status='processing',lease_epoch=$1,updated_at=now()
  WHERE id=(SELECT id FROM uploads WHERE status='queued' AND expires_at>clock_timestamp() ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1)
- RETURNING `+uploadColumns+`,owner_id,credential_id,expires_at,name,media_kind`, epoch).Scan(&j.ID, &j.Offset, &j.Size, &j.Status, &j.DraftID, &j.Error, &j.Purpose, &rawAsset, &j.owner, &j.credential, &j.expires, &j.name, &j.kind)
+ RETURNING `+uploadColumns+`,owner_id,credential_id,expires_at,name,media_kind`, epoch).Scan(&j.ID, &j.Offset, &j.Size, &j.Status, &j.DraftID, &j.Error, &j.Purpose, &rawAsset, &rawTheme, &rawIssues, &j.owner, &j.credential, &j.expires, &j.name, &j.kind)
 	if err != nil {
 		return job{}, err
 	}
@@ -174,6 +174,15 @@ func (s *Service) worker(ctx context.Context, epoch int64) {
 			deadline = j.expires
 		}
 		jobCtx, cancel := context.WithDeadline(ctx, deadline)
+		if j.Purpose == "theme" {
+			theme, issues, code := s.processTheme(jobCtx, j, epoch)
+			cancel()
+			if ctx.Err() != nil {
+				return
+			}
+			s.finishTheme(ctx, j, epoch, theme, issues, code)
+			continue
+		}
 		draftID, asset, code := s.process(jobCtx, j, epoch)
 		cancel()
 		// A canceled lease leaves the processing state for the next lease owner.
@@ -199,6 +208,9 @@ func (s *Service) liveActor(ctx context.Context, j job) (accounts.Identity, erro
 	}
 	a.APIToken = kind == "api"
 	if a.APIToken {
+		if j.Purpose == "theme" {
+			return a, ErrForbidden
+		}
 		allowed := false
 		for _, scope := range a.Scopes {
 			if scope == "drafts:write" {

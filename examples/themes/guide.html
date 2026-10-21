@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Как создать свою тему — Своя игра</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color: #172738; background: #f5f7fa; line-height: 1.6; }
+    body { max-width: 850px; margin: 0 auto; padding: 24px 20px 64px; }
+    h1, h2 { line-height: 1.25; } h1 { font-size: clamp(1.8rem, 5vw, 2.6rem); }
+    h2 { margin-top: 2rem; } a { color: #124a83; text-underline-offset: .2em; }
+    a:focus-visible { outline: 3px solid #124a83; outline-offset: 4px; border-radius: 2px; }
+    code, pre { font-family: ui-monospace, monospace; } code { overflow-wrap: anywhere; }
+    pre { background: #e5ebf2; padding: 16px; border-radius: 8px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    th, td { padding: 10px 8px; border-bottom: 1px solid #748398; text-align: left; vertical-align: top; }
+    th { background: #e5ebf2; } .note { border-left: 4px solid #124a83; padding: 8px 16px; background: #e5ebf2; }
+    li { margin: 8px 0; } .links { display: flex; gap: 16px; flex-wrap: wrap; }
+    @media (max-width: 520px) { body { padding-inline: 12px; } th, td { padding: 8px 5px; } }
+    @media print { body { max-width: none; padding: 0; } a { color: inherit; } }
+  </style>
+</head>
+<body>
+  <header>
+    <p><a href="/themes">← Библиотека тем</a></p>
+    <h1>Как создать свою тему</h1>
+    <p>Измените палитру, форму карточек и декоративные изображения. Тема оформляет страницы в контексте комнаты; правила игры и кнопка ответа остаются под управлением платформы.</p>
+    <p class="links"><a href="/themes/example.zip" download>Скачать пример «Морская карта» (ZIP)</a><a href="#steps">Начать с примера</a></p>
+  </header>
+  <main>
+    <section id="steps" aria-labelledby="steps-title">
+      <h2 id="steps-title">От примера до комнаты</h2>
+      <ol>
+        <li>Скачайте ZIP и распакуйте его. Внутри находятся <code>theme.json</code> и оригинальное изображение <code>assets/compass.png</code>.</li>
+        <li>Откройте <code>theme.json</code> в текстовом редакторе, поменяйте название, автора, сведения о ресурсах и нужные параметры. Сохраните файл в UTF-8. Используйте обычные двойные кавычки; комментарии, повторные ключи и неизвестные поля запрещены.</li>
+        <li>При необходимости замените изображения. Укажите их относительные пути в манифесте и удалите неиспользуемые файлы.</li>
+        <li>Упакуйте <strong>содержимое</strong> папки в ZIP. Файл <code>theme.json</code> должен лежать прямо в корне архива, без дополнительной внешней папки.</li>
+        <li>Войдите в аккаунт, откройте библиотеку тем и загрузите ZIP. Если проверка найдёт ошибку, исправьте указанное поле или изображение и загрузите архив снова.</li>
+        <li>Посмотрите предпросмотр для телефона и компьютера, включая экономное качество. Сохраните результат как новую тему или новую версию существующей.</li>
+        <li>Выберите тему при создании комнаты или примените её как ведущий в лобби либо на паузе. Для своей темы нужна действующая сессия аккаунта её владельца.</li>
+      </ol>
+      <pre aria-label="Структура архива">theme.json
+assets/
+  compass.png</pre>
+    </section>
+    <section aria-labelledby="fields-title">
+      <h2 id="fields-title">Поля манифеста</h2>
+      <table>
+        <thead><tr><th scope="col">Поле</th><th scope="col">Допустимое значение</th></tr></thead>
+        <tbody>
+          <tr><td><code>schema_version</code></td><td>Число <code>1</code>.</td></tr>
+          <tr><td><code>name</code></td><td>Непустое название до 80 символов.</td></tr>
+          <tr><td><code>author</code></td><td>Имя автора до 120 символов.</td></tr>
+          <tr><td><code>provenance</code></td><td>Простой текст до 2000 символов: кто создал ресурсы и на каких условиях их можно использовать. Указанные здесь ссылки не загружаются.</td></tr>
+          <tr><td><code>font</code></td><td><code>sans</code>, <code>serif</code> или <code>mono</code>. Используются системные шрифты; файлы шрифтов в ZIP не нужны.</td></tr>
+          <tr><td><code>cards</code>, <code>buttons</code></td><td>Объекты с <code>radius</code> от 4 до 24 и <code>border_width</code> от 1 до 3. Значения — целые числа в пикселях.</td></tr>
+          <tr><td><code>background</code>, <code>logo</code>, <code>ornament</code></td><td>Необязательные пути к фону, логотипу и угловому декору, например <code>assets/compass.png</code>. Один файл можно использовать в нескольких местах: он готовится один раз.</td></tr>
+        </tbody>
+      </table>
+      <p>Параметры <code>background</code> и <code>palette.background</code> различаются: первый ссылается на декоративную картинку, второй задаёт цвет страницы. В примере используется только изображение логотипа.</p>
+    </section>
+    <section aria-labelledby="palette-title">
+      <h2 id="palette-title">Палитра и читаемость</h2>
+      <p>В объекте <code>palette</code> должны быть все одиннадцать цветов. Формат — непрозрачный <code>#RRGGBB</code>, например <code>#102334</code>. Короткие записи, прозрачность, названия цветов и <code>url(...)</code> не принимаются.</p>
+      <table>
+        <thead><tr><th scope="col">Цвета</th><th scope="col">Назначение</th></tr></thead>
+        <tbody>
+          <tr><td><code>background</code>, <code>surface</code>, <code>surface_alt</code></td><td>Фон страницы и две непрозрачные поверхности.</td></tr>
+          <tr><td><code>text</code>, <code>muted</code></td><td>Основной и второстепенный текст.</td></tr>
+          <tr><td><code>accent</code>, <code>accent_text</code></td><td>Акцентная кнопка и текст на ней.</td></tr>
+          <tr><td><code>danger</code>, <code>success</code></td><td>Сообщения об ошибке и успехе.</td></tr>
+          <tr><td><code>border</code>, <code>focus</code></td><td>Границы элементов и видимый фокус клавиатуры.</td></tr>
+        </tbody>
+      </table>
+      <ul>
+        <li>Для <code>text</code>, <code>muted</code>, <code>danger</code> и <code>success</code> нужен контраст не ниже <strong>4,5:1 на каждой из трёх поверхностей</strong>.</li>
+        <li>Для <code>accent_text</code> на <code>accent</code> нужен контраст не ниже <strong>4,5:1</strong>.</li>
+        <li>Для <code>border</code> и <code>focus</code> на каждой поверхности нужен контраст не ниже <strong>3:1</strong>.</li>
+      </ul>
+      <p>Проверка использует относительную яркость sRGB. Начните с палитры примера: она проходит эти проверки. Если меняете поверхности, проверьте все цвета текста, границы и фокус заново. Это проверка конкретных цветов; дополнительно посмотрите длинные имена, 12 карточек игроков и управление клавиатурой на узком экране.</p>
+    </section>
+    <section aria-labelledby="limits-title">
+      <h2 id="limits-title">Изображения и ограничения</h2>
+      <table>
+        <thead><tr><th scope="col">Что проверяется</th><th scope="col">Предел</th></tr></thead>
+        <tbody>
+          <tr><td>ZIP</td><td>5 МиБ; распакованные данные — 20 МиБ; не более 50 записей, включая каталоги.</td></tr>
+          <tr><td><code>theme.json</code></td><td>64 КиБ.</td></tr>
+          <tr><td>Изображения</td><td>До трёх используемых файлов PNG, JPEG или WebP. Каждый — не более 2 МиБ и 4 000 000 пикселей (ширина × высота).</td></tr>
+          <tr><td>Обычный набор после подготовки</td><td>Суммарно до 2 МиБ.</td></tr>
+          <tr><td>Экономный набор после подготовки</td><td>Суммарно до 1 МиБ.</td></tr>
+          <tr><td>Обработка</td><td>Общий срок задания — до пяти минут.</td></tr>
+          <tr><td>Личная библиотека</td><td>До 100 тем и 100 версий одной темы. Общая квота с пакетами — 10 ГиБ.</td></tr>
+        </tbody>
+      </table>
+      <p>Изображения должны быть статическими и полностью декодироваться. Платформа готовит два проверенных варианта PNG. Маленький исходный JPEG может превратиться в большой PNG; если превышен итоговый бюджет, уменьшите разрешение, число изображений или количество мелких деталей.</p>
+      <p>В ZIP допустимы только манифест, используемые изображения в <code>assets/</code> и каталоги. Удалите служебные файлы редактора и системы. Вложенные архивы, символические ссылки, повторные пути и выход за пределы папки запрещены. Пути должны быть относительными, с обычным <code>/</code>, без <code>..</code>, обратных косых черт и внешних URL.</p>
+      <p>Пользовательские CSS, JavaScript, HTML, SVG и внешние ресурсы не поддерживаются. Декор не перекрывает игровые действия; вопросы, формы и карточки остаются на непрозрачных поверхностях.</p>
+    </section>
+    <section aria-labelledby="versions-title">
+      <h2 id="versions-title">Версии, приватность и настройки участников</h2>
+      <p>Комната закрепляет конкретную версию. Новая версия и обычное удаление темы из библиотеки не меняют уже закреплённую игру. Блокировка темы или удаление аккаунта автора прекращают выдачу её ресурсов; участники получают базовое оформление.</p>
+      <p>Исходный ZIP доступен владельцу. Подготовленные изображения доступны участникам комнаты с закреплённой темой; уже показанную картинку получатель может сохранить. Архив и оба качества учитываются в квоте, включая готовые, ещё не сохранённые загрузки и удерживаемые версии.</p>
+      <p>Участник может локально включить классическое оформление или экономное качество. Это не меняет тему остальных. При ошибке загрузки оформление возвращается к базовому, а кнопка ответа продолжает работать. Учитывается системная настройка уменьшения движения.</p>
+      <p class="note">Манифест и оригинальный компас из примера можно использовать, изменять и распространять на условиях CC0-1.0. При добавлении своих ресурсов обновите <code>author</code> и <code>provenance</code>, указав их действительное происхождение и разрешения.</p>
+    </section>
+  </main>
+</body>
+</html>

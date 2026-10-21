@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { page } from '$app/state';
+  import { contextLink, roomContext } from '#lib/appearance.ts';
+  const room = $derived(roomContext(page.url));
   import PackCard from '#lib/PackCard.svelte';
   let { data } = $props();
 </script>
@@ -12,7 +15,7 @@
       <div class="row">
         <a class="button primary" href="#catalogue"
           >Выбрать пакет <span aria-hidden="true">↓</span></a
-        ><a class="button ghost" href="/studio">Создать свой</a>
+        ><a class="button ghost" href={contextLink('/studio', room)}>Создать свой</a>
       </div>
     </div>
     <div class="hero-board" aria-hidden="true">
@@ -29,9 +32,10 @@
       <h2>Каталог пакетов</h2>
       <p>Готовые вопросы для вашей следующей игры</p>
     </div>
-    <a href="/studio" class="text-link">Авторская мастерская ↗</a>
+    <a href={contextLink('/studio', room)} class="text-link">Авторская мастерская ↗</a>
   </div>
   <form class="filters" action="/" method="GET">
+    {#if room}<input type="hidden" name="room" value={room} />{/if}
     <input
       class="search"
       name="q"
@@ -71,8 +75,9 @@
     </details>
   </form>
   {#if data.failed}<div class="notice error" role="alert">
-      Не удалось загрузить каталог. Проверьте соединение и <a class="text-link" href="/"
-        >попробуйте ещё раз</a
+      Не удалось загрузить каталог. Проверьте соединение и <a
+        class="text-link"
+        href={contextLink('/', room)}>попробуйте ещё раз</a
       >.
     </div>{:else if data.items.length}<div class="card-grid">
       {#each data.items as card}<PackCard {card} />{/each}
@@ -80,12 +85,16 @@
     <div class="row between section-head">
       {#if Number(data.filters.offset || 0) > 0}<a
           class="button"
-          href={`/?${new URLSearchParams({ ...data.filters, offset: String(Math.max(0, Number(data.filters.offset) - 50)) })}`}
-          >← Назад</a
+          href={contextLink(
+            `/?${new URLSearchParams({ ...data.filters, offset: String(Math.max(0, Number(data.filters.offset) - 50)) })}`,
+            room
+          )}>← Назад</a
         >{/if}{#if data.items.length === 50}<a
           class="button"
-          href={`/?${new URLSearchParams({ ...data.filters, offset: String(Number(data.filters.offset || 0) + 50) })}`}
-          >Ещё пакеты →</a
+          href={contextLink(
+            `/?${new URLSearchParams({ ...data.filters, offset: String(Number(data.filters.offset || 0) + 50) })}`,
+            room
+          )}>Ещё пакеты →</a
         >{/if}
     </div>{:else}<div class="empty">
       <div class="empty-symbol" aria-hidden="true">? / !</div>
@@ -99,7 +108,9 @@
           ? 'Попробуйте другое название или ослабьте фильтры.'
           : 'Пока в каталоге нет опубликованных пакетов. Создайте свой в мастерской и предложите его для публикации.'}
       </p>
-      <a class="button primary" href={Object.values(data.filters).some(Boolean) ? '/' : '/studio'}
+      <a
+        class="button primary"
+        href={contextLink(Object.values(data.filters).some(Boolean) ? '/' : '/studio', room)}
         >{Object.values(data.filters).some(Boolean) ? 'Сбросить фильтры' : 'Открыть мастерскую'}</a
       >
     </div>{/if}

@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "name": "Морская карта",
+  "author": "Команда платформы",
+  "provenance": "Оригинальная геометрическая иллюстрация компаса создана программно для этого примера. Манифест и иллюстрацию разрешено использовать, изменять и распространять на условиях CC0-1.0.",
+  "font": "sans",
+  "palette": {
+    "background": "#102334",
+    "surface": "#162D45",
+    "surface_alt": "#1E3852",
+    "border": "#8EA9C2",
+    "text": "#F5F8FF",
+    "muted": "#CCD7E5",
+    "accent": "#FFE08A",
+    "accent_text": "#102334",
+    "danger": "#FFB3AD",
+    "success": "#A7E3B1",
+    "focus": "#FFE08A"
+  },
+  "cards": { "radius": 12, "border_width": 1 },
+  "buttons": { "radius": 12, "border_width": 2 },
+  "logo": "assets/compass.png"
+}

@@ -18,6 +18,7 @@ import (
 	"siplatform/internal/ingest"
 	"siplatform/internal/library"
 	"siplatform/internal/storage/postgres"
+	"siplatform/internal/themes"
 )
 
 type Options struct {
@@ -26,21 +27,24 @@ type Options struct {
 	Library  *library.Service
 	Objects  blob.Store
 	Uploads  *ingest.Service
+	Themes   *themes.Service
 }
 type Server struct {
-	store       *postgres.Store
-	options     Options
-	ctx         context.Context
-	cancel      context.CancelFunc
-	mu          sync.Mutex
-	closed      bool
-	rooms       map[string]*room
-	wg          sync.WaitGroup
-	connections chan struct{}
-	exports     chan struct{}
-	httpMu      sync.Mutex
-	httpLimit   *bucket
-	mediaSecret [32]byte
+	store           *postgres.Store
+	options         Options
+	ctx             context.Context
+	cancel          context.CancelFunc
+	mu              sync.Mutex
+	closed          bool
+	rooms           map[string]*room
+	wg              sync.WaitGroup
+	connections     chan struct{}
+	exports         chan struct{}
+	httpMu          sync.Mutex
+	httpLimit       *bucket
+	mediaSecret     [32]byte
+	appearanceMu    sync.Mutex
+	appearanceKnown map[string]string
 }
 
 func New(store *postgres.Store, options Options) *Server {
@@ -49,6 +53,11 @@ func New(store *postgres.Store, options Options) *Server {
 	// Tickets are short lived and intentionally expire on a server restart.
 	// crypto/rand.Read is guaranteed to fill the buffer or terminate in Go 1.24+.
 	_, _ = rand.Read(s.mediaSecret[:])
+	s.appearanceKnown = make(map[string]string)
+	if options.Themes != nil {
+		s.wg.Add(1)
+		go s.watchAppearances()
+	}
 	return s
 }
 func (s *Server) Close() {

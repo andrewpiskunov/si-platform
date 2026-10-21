@@ -94,6 +94,9 @@ func ApplyAt(s State, actorID string, c Command, nowMS int64, entropy uint64) (S
 		err = beginRound(&n, x.Round, nowMS)
 	case *BeginQuestionPayload:
 		err = beginQuestion(&n, x.Question, x.Replay, nowMS)
+	case *AppearancePayload:
+		a := x.Appearance
+		n.Appearance = &a
 	case *RulesPayload:
 		if err = x.Rules.Validate(); err == nil {
 			g.Rules = x.Rules

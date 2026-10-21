@@ -3,9 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node smoke.mjs && node review.mjs && node rules.mjs && node media.mjs",
+    "test": "node smoke.mjs && node review.mjs && node rules.mjs && node media.mjs && node themes.mjs",
     "test:text": "node smoke.mjs && node review.mjs && node rules.mjs",
-    "test:media": "node media.mjs"
+    "test:media": "node media.mjs",
+    "test:themes": "node themes.mjs"
   },
   "devDependencies": {
     "playwright": "1.64.1"

@@ -22,6 +22,7 @@ import (
 	"siplatform/internal/blob"
 	"siplatform/internal/library"
 	"siplatform/internal/media"
+	"siplatform/internal/themes"
 )
 
 var (
@@ -36,21 +37,23 @@ var (
 
 const maxUpload int64 = 250 << 20
 const maxChunk int64 = 4 << 20
-const uploadColumns = `id,offset_bytes,size,status,draft_id,error,purpose,result_asset`
+const uploadColumns = `id,offset_bytes,size,status,draft_id,error,purpose,result_asset,result_theme,diagnostic_issues`
 
 type Options struct {
 	Directory string
 	Media     *media.Processor
 }
 type Upload struct {
-	ID      string         `json:"id"`
-	Offset  int64          `json:"offset"`
-	Size    int64          `json:"size"`
-	Status  string         `json:"status"`
-	DraftID string         `json:"draft_id,omitempty"`
-	Error   string         `json:"error,omitempty"`
-	Purpose string         `json:"purpose"`
-	Asset   *library.Asset `json:"asset,omitempty"`
+	ID      string           `json:"id"`
+	Offset  int64            `json:"offset"`
+	Size    int64            `json:"size"`
+	Status  string           `json:"status"`
+	DraftID string           `json:"draft_id,omitempty"`
+	Error   string           `json:"error,omitempty"`
+	Purpose string           `json:"purpose"`
+	Asset   *library.Asset   `json:"asset,omitempty"`
+	Theme   *themes.Prepared `json:"theme,omitempty"`
+	Issues  []themes.Issue   `json:"issues,omitempty"`
 }
 type Service struct {
 	pool            *pgxpool.Pool
@@ -142,10 +145,16 @@ func validName(name string) bool {
 }
 func scanUpload(row pgx.Row) (Upload, error) {
 	var u Upload
-	var asset []byte
-	err := row.Scan(&u.ID, &u.Offset, &u.Size, &u.Status, &u.DraftID, &u.Error, &u.Purpose, &asset)
+	var asset, theme, issues []byte
+	err := row.Scan(&u.ID, &u.Offset, &u.Size, &u.Status, &u.DraftID, &u.Error, &u.Purpose, &asset, &theme, &issues)
 	if err == nil && len(asset) > 0 {
 		err = json.Unmarshal(asset, &u.Asset)
+	}
+	if err == nil && len(theme) > 0 {
+		err = json.Unmarshal(theme, &u.Theme)
+	}
+	if err == nil && len(issues) > 0 {
+		err = json.Unmarshal(issues, &u.Issues)
 	}
 	return u, err
 }
@@ -240,6 +249,11 @@ func (s *Service) create(ctx context.Context, actor accounts.Identity, name stri
 		return Upload{}, err
 	}
 	defer tx.Rollback(context.Background())
+	if purpose == "theme" {
+		if err = requireThemeSession(ctx, tx, actor, purpose); err != nil {
+			return Upload{}, err
+		}
+	}
 	// All instances share the same quota lock, scoped to this database/schema.
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended(current_database()||':'||current_schema()||':si-ingest-quota',0))`); err != nil {
 		return Upload{}, safeError(ctx, err)
@@ -304,6 +318,9 @@ func (s *Service) Get(ctx context.Context, actor accounts.Identity, id string) (
 	if err != nil {
 		return Upload{}, err
 	}
+	if err = requireThemeSession(ctx, tx, actor, u.Purpose); err != nil {
+		return Upload{}, err
+	}
 	return u, safeError(ctx, tx.Commit(ctx))
 }
 func (s *Service) openFile(id string, flag int) (*os.File, error) {
@@ -349,6 +366,9 @@ func (s *Service) Append(ctx context.Context, actor accounts.Identity, id string
 	defer tx.Rollback(context.Background())
 	u, err := owned(ctx, tx, actor.User.ID, id)
 	if err != nil {
+		return Upload{}, err
+	}
+	if err = requireThemeSession(ctx, tx, actor, u.Purpose); err != nil {
 		return Upload{}, err
 	}
 	if err = active(ctx, tx, u); err != nil {
@@ -404,6 +424,9 @@ func (s *Service) Complete(ctx context.Context, actor accounts.Identity, id stri
 	defer tx.Rollback(context.Background())
 	u, err := owned(ctx, tx, actor.User.ID, id)
 	if err != nil {
+		return Upload{}, err
+	}
+	if err = requireThemeSession(ctx, tx, actor, u.Purpose); err != nil {
 		return Upload{}, err
 	}
 	if u.Status == "uploading" {

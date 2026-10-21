@@ -112,7 +112,7 @@ try {
       .isDisabled(),
     true,
   );
-  // Full session shell shares the room palette, and SPA navigation resets it.
+  // Room navigation preserves explicit context; a direct visit resets it.
   const room = await request("POST", "/rooms", {
     host_name: "Ведущий",
     theme: "pirate",
@@ -143,7 +143,9 @@ try {
     .getByRole("navigation", { name: "Основная навигация" })
     .getByRole("link", { name: "Мастерская", exact: true })
     .click();
-  await page.waitForURL("**/studio");
+  await page.waitForURL(url => url.pathname === "/studio" && url.searchParams.get("room") === room.room_id);
+  await until(async () => (await page.locator(".app-shell").getAttribute("data-theme")) === "pirate");
+  await visit("/studio");
   await until(
     async () =>
       (await page
@@ -160,6 +162,7 @@ try {
       withdraw_after_edit: true,
       engine_diagnostics: true,
       whole_session_theme: true,
+      contextual_navigation: true,
       theme_reset: true,
       page_errors: 0,
     }),

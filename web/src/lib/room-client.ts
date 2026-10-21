@@ -1,3 +1,4 @@
+import type { Appearance } from './appearance.ts';
 import type { SessionView, V2Command } from './game-v2.ts';
 export interface Participant {
   id: string;
@@ -8,6 +9,7 @@ export interface Participant {
 export interface RoomState {
   room_id: string;
   seq: number;
+  appearance?: Appearance;
   gameplay?: SessionView;
   phase: 'running' | 'lobby' | 'open' | 'answering' | 'resolved' | 'paused' | 'finished';
   participants: Participant[];
@@ -36,6 +38,7 @@ export class RoomProtocol {
   token: string;
   state: RoomState | null = null;
   ready = false;
+  appearanceEpoch = 0;
   pending = new Map<string, Command>();
   private known = new Map<string, string>();
   constructor(token: string) {
@@ -77,6 +80,10 @@ export class RoomProtocol {
   }
   receive(message: Message): Command[] {
     if (message.v !== 1 && message.v !== 2) return [];
+    if (message.type === 'appearance_refresh') {
+      this.appearanceEpoch++;
+      return [];
+    }
     if (message.state && (!this.state || message.state.seq >= this.state.seq))
       this.state = message.state;
     if (

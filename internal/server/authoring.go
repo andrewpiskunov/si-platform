@@ -12,11 +12,15 @@ import (
 	"siplatform/internal/ingest"
 	"siplatform/internal/library"
 	"siplatform/internal/packs"
+	"siplatform/internal/themes"
 )
 
 func (s *Server) platformRoutes(r chi.Router) {
 	if s.options.Accounts != nil {
 		r.Mount("/account", s.options.Accounts.Handler())
+	}
+	if s.options.Themes != nil {
+		s.themeRoutes(r)
 	}
 	if s.options.Library == nil {
 		return
@@ -78,19 +82,19 @@ func (s *Server) optionalIdentity(w http.ResponseWriter, r *http.Request) (accou
 func appError(w http.ResponseWriter, err error) {
 	status, code := 503, "unavailable"
 	switch {
-	case errors.Is(err, accounts.ErrUnauthorized), errors.Is(err, library.ErrUnauthorized), errors.Is(err, ingest.ErrUnauthorized):
+	case errors.Is(err, accounts.ErrUnauthorized), errors.Is(err, library.ErrUnauthorized), errors.Is(err, themes.ErrUnauthorized), errors.Is(err, ingest.ErrUnauthorized):
 		status, code = 401, "unauthorized"
-	case errors.Is(err, accounts.ErrForbidden), errors.Is(err, library.ErrForbidden), errors.Is(err, ingest.ErrForbidden):
+	case errors.Is(err, accounts.ErrForbidden), errors.Is(err, library.ErrForbidden), errors.Is(err, themes.ErrForbidden), errors.Is(err, ingest.ErrForbidden):
 		status, code = 403, "forbidden"
-	case errors.Is(err, library.ErrNotFound), errors.Is(err, ingest.ErrNotFound):
+	case errors.Is(err, library.ErrNotFound), errors.Is(err, themes.ErrNotFound), errors.Is(err, ingest.ErrNotFound):
 		status, code = 404, "not_found"
-	case errors.Is(err, library.ErrConflict), errors.Is(err, ingest.ErrConflict):
+	case errors.Is(err, library.ErrConflict), errors.Is(err, themes.ErrConflict), errors.Is(err, ingest.ErrConflict):
 		status, code = 409, "conflict"
-	case errors.Is(err, library.ErrBlocked):
+	case errors.Is(err, library.ErrBlocked), errors.Is(err, themes.ErrBlocked):
 		status, code = 403, "blocked"
-	case errors.Is(err, library.ErrQuota), errors.Is(err, ingest.ErrQuota):
+	case errors.Is(err, library.ErrQuota), errors.Is(err, themes.ErrQuota), errors.Is(err, ingest.ErrQuota):
 		status, code = 429, "quota"
-	case errors.Is(err, library.ErrInvalid), errors.Is(err, ingest.ErrInvalid), errors.Is(err, accounts.ErrInvalidInput):
+	case errors.Is(err, library.ErrInvalid), errors.Is(err, themes.ErrInvalid), errors.Is(err, ingest.ErrInvalid), errors.Is(err, accounts.ErrInvalidInput):
 		status, code = 400, "invalid_input"
 	default:
 		if c := game.Code(err); c != "unavailable" {

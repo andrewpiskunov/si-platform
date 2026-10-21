@@ -1,3 +1,4 @@
+import type { PreparedTheme } from './appearance.ts';
 export interface User {
   id: string;
   username: string;
@@ -178,6 +179,8 @@ export interface Upload {
   status: string;
   purpose?: string;
   asset?: Asset;
+  theme?: PreparedTheme;
+  issues?: { path: string; code: string; message: string }[];
   draft_id?: string;
   error?: string;
 }

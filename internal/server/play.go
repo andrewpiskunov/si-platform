@@ -27,12 +27,13 @@ func (s *Server) createGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		HostName string      `json:"host_name"`
-		PackID   string      `json:"pack_id"`
-		Revision int         `json:"revision"`
-		Title    string      `json:"title"`
-		Theme    string      `json:"theme"`
-		Rules    *game.Rules `json:"rules,omitempty"`
+		HostName   string           `json:"host_name"`
+		PackID     string           `json:"pack_id"`
+		Revision   int              `json:"revision"`
+		Title      string           `json:"title"`
+		Theme      string           `json:"theme"`
+		Rules      *game.Rules      `json:"rules,omitempty"`
+		Appearance *game.Appearance `json:"appearance,omitempty"`
 	}
 	if err := readJSON(w, r, &req); err != nil {
 		appError(w, err)
@@ -46,7 +47,7 @@ func (s *Server) createGame(w http.ResponseWriter, r *http.Request) {
 		appError(w, err)
 		return
 	}
-	setup := postgres.GameSetup{Rules: &rules, ActorID: a.User.ID, CredentialID: a.SessionID, PackID: req.PackID, Revision: req.Revision, Title: strings.TrimSpace(req.Title), Theme: req.Theme}
+	setup := postgres.GameSetup{Appearance: req.Appearance, Rules: &rules, ActorID: a.User.ID, CredentialID: a.SessionID, PackID: req.PackID, Revision: req.Revision, Title: strings.TrimSpace(req.Title), Theme: req.Theme}
 	if setup.Title == "" {
 		setup.Title = "Своя игра"
 	}
@@ -150,7 +151,7 @@ func (s *Server) board(w http.ResponseWriter, r *http.Request) {
 		}
 		rounds = append(rounds, br)
 	}
-	writeJSON(w, 200, map[string]any{"title": pin.Title, "theme": pin.Theme, "pack_name": d.Name, "rounds": rounds})
+	writeJSON(w, 200, map[string]any{"title": pin.Title, "theme": pin.Theme, "appearance": pin.Appearance, "pack_name": d.Name, "rounds": rounds})
 }
 func (s *Server) selectQuestion(w http.ResponseWriter, r *http.Request) {
 	actor, e := s.roomIdentity(r)

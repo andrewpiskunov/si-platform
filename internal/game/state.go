@@ -44,6 +44,7 @@ type Question struct {
 	Value  int64  `json:"value"`
 }
 type State struct {
+	Appearance   *Appearance   `json:"appearance,omitempty"`
 	Gameplay     *Session      `json:"gameplay,omitempty"`
 	ID           string        `json:"room_id"`
 	Seq          int64         `json:"seq"`
@@ -55,6 +56,7 @@ type State struct {
 	Asked        []string      `json:"asked,omitempty"`
 }
 type View struct {
+	Appearance   *Appearance   `json:"appearance,omitempty"`
 	Gameplay     *SessionView  `json:"gameplay,omitempty"`
 	ID           string        `json:"room_id"`
 	Seq          int64         `json:"seq"`
@@ -79,6 +81,10 @@ func Code(err error) string {
 	return "unavailable"
 }
 func (s State) Clone() State {
+	if s.Appearance != nil {
+		a := *s.Appearance
+		s.Appearance = &a
+	}
 	if s.Gameplay != nil {
 		b, _ := json.Marshal(s.Gameplay)
 		var g Session
@@ -146,7 +152,7 @@ func projectLegacy(s State, id string) View {
 	if n.Question != nil && p.Role != Host && n.Phase != Resolved && n.Phase != Finished {
 		n.Question.Answer = ""
 	}
-	return View{ID: n.ID, Seq: n.Seq, Phase: n.Phase, Participants: n.Participants, Question: n.Question, Winner: n.Winner, You: id}
+	return View{Appearance: n.Appearance, ID: n.ID, Seq: n.Seq, Phase: n.Phase, Participants: n.Participants, Question: n.Question, Winner: n.Winner, You: id}
 }
 
 // Pause suspends only an active question; safe to call repeatedly on disconnect/restart.

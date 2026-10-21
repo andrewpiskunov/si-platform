@@ -20,14 +20,16 @@ type GameSetup struct {
 	Title, Theme          string
 	DemoDocument          *packs.Document
 	Rules                 *game.Rules
+	Appearance            *game.Appearance
 }
 
 func (g GameSetup) authorize(ctx context.Context, tx pgx.Tx) error {
 	if utf8.RuneCountInString(g.Title) < 1 || utf8.RuneCountInString(g.Title) > 80 || strings.ContainsFunc(g.Title, unicode.IsControl) {
 		return game.Fault("invalid_title")
 	}
-	if g.Theme != "classic" && g.Theme != "pirate" && g.Theme != "anime" {
-		return game.Fault("invalid_theme")
+	appearance := g.selectedAppearance()
+	if err := appearance.Validate(); err != nil {
+		return err
 	}
 	var user string
 	err := tx.QueryRow(ctx, "SELECT id FROM account_users WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", g.ActorID).Scan(&user)
@@ -41,6 +43,9 @@ func (g GameSetup) authorize(ctx context.Context, tx pgx.Tx) error {
 	}
 	if !valid {
 		return game.Fault("unauthorized")
+	}
+	if err = authorizeAppearance(ctx, tx, AppearanceActor{UserID: user, CredentialID: g.CredentialID}, appearance); err != nil {
+		return err
 	}
 	if g.PackID != "" {
 		// Lock the pack through commit: moderation cannot invalidate permission
@@ -78,8 +83,16 @@ func (g GameSetup) save(ctx context.Context, tx pgx.Tx, room string) error {
 			return err
 		}
 	}
-	_, err := tx.Exec(ctx, "INSERT INTO room_packs(room_id,owner_id,pack_id,revision,title,theme,demo_document) VALUES($1,$2,$3,$4,$5,$6,$7)", room, g.ActorID, pack, revision, g.Title, g.Theme, demo)
-	return err
+	appearance := g.selectedAppearance()
+	builtin := appearance.Builtin
+	if builtin == "" {
+		builtin = "classic"
+	}
+	_, err := tx.Exec(ctx, "INSERT INTO room_packs(room_id,owner_id,pack_id,revision,title,theme,demo_document) VALUES($1,$2,$3,$4,$5,$6,$7)", room, g.ActorID, pack, revision, g.Title, builtin, demo)
+	if err != nil {
+		return err
+	}
+	return saveAppearance(ctx, tx, room, appearance)
 }
 
 type GamePin struct {
@@ -87,14 +100,23 @@ type GamePin struct {
 	Revision     int
 	Title, Theme string
 	DemoDocument *packs.Document
+	Appearance   *game.Appearance
 }
 
 func (s *Store) GamePin(ctx context.Context, id string) (GamePin, error) {
 	var p GamePin
-	var data []byte
-	err := s.pool.QueryRow(ctx, "SELECT COALESCE(pack_id,''),COALESCE(revision,0),title,theme,demo_document FROM room_packs WHERE room_id=$1", id).Scan(&p.PackID, &p.Revision, &p.Title, &p.Theme, &data)
+	var data, appearance []byte
+	err := s.pool.QueryRow(ctx, "SELECT COALESCE(pack_id,''),COALESCE(revision,0),title,theme,demo_document,r.snapshot->'appearance' FROM room_packs p JOIN rooms r ON r.id=p.room_id WHERE room_id=$1", id).Scan(&p.PackID, &p.Revision, &p.Title, &p.Theme, &data, &appearance)
 	if err != nil {
 		return p, normalize(err)
+	}
+	if len(appearance) > 0 {
+		if err = json.Unmarshal(appearance, &p.Appearance); err != nil {
+			return p, err
+		}
+	}
+	if p.Appearance == nil {
+		p.Appearance = &game.Appearance{Builtin: p.Theme}
 	}
 	if len(data) > 0 {
 		var doc packs.Document

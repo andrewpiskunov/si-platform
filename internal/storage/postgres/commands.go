@@ -21,6 +21,13 @@ type Outcome struct {
 }
 
 func (s *Store) Execute(ctx context.Context, roomID, actorID string, c game.Command) (Outcome, error) {
+	if c.Type == "set_appearance" {
+		return Outcome{}, game.Fault("forbidden")
+	}
+	return s.execute(ctx, roomID, actorID, c, nil)
+}
+
+func (s *Store) execute(ctx context.Context, roomID, actorID string, c game.Command, themeActor *AppearanceActor) (Outcome, error) {
 	if err := c.Validate(); err != nil {
 		return Outcome{}, err
 	}
@@ -34,6 +41,15 @@ func (s *Store) Execute(ctx context.Context, roomID, actorID string, c game.Comm
 		return Outcome{}, err
 	}
 	defer tx.Rollback(ctx)
+	var appearance *game.Appearance
+	if themeActor != nil {
+		p, _ := c.Payload()
+		a := p.(*game.AppearancePayload).Appearance
+		if err = authorizeAppearance(ctx, tx, *themeActor, a); err != nil {
+			return Outcome{}, err
+		}
+		appearance = &a
+	}
 	q := db.New(tx)
 	if err = s.checkOwner(ctx, q); err != nil {
 		return Outcome{}, err
@@ -68,6 +84,11 @@ func (s *Store) Execute(ctx context.Context, roomID, actorID string, c game.Comm
 	next, transitionErr := game.ApplyAt(state, actorID, c, now, entropy)
 	code := game.Code(transitionErr)
 	if transitionErr == nil {
+		if appearance != nil {
+			if err = saveAppearance(ctx, tx, roomID, *appearance); err != nil {
+				return Outcome{}, err
+			}
+		}
 		next.Seq++
 		eventPayload := payload
 		if c.Version == 2 {

@@ -1174,3 +1174,199 @@ details[open] > summary {
     align-items: flex-start;
   }
 }
+
+/* Theme values come from a fixed manifest-to-variable mapping. */
+.app-shell,
+.theme-preview {
+  position: relative;
+  isolation: isolate;
+  font-family: var(--theme-font, Inter, 'Segoe UI', Arial, sans-serif);
+  background: var(--bg);
+  color: var(--text);
+}
+.app-shell > header,
+.app-shell > main,
+.app-shell > footer {
+  position: relative;
+  z-index: 1;
+}
+.theme-background {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  z-index: 0;
+}
+.theme-ornament {
+  position: absolute;
+  right: 8px;
+  top: 125px;
+  width: min(22vw, 240px);
+  max-height: 260px;
+  object-fit: contain;
+  pointer-events: none;
+  z-index: 0;
+}
+.builtin-art {
+  opacity: 0.55;
+}
+.theme-logo {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  pointer-events: none;
+}
+.theme-context-bar {
+  max-width: 1264px;
+  margin: 20px auto 0;
+  padding: 14px 24px;
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 20px;
+  background: var(--surface);
+  border: var(--card-border, 1px) solid var(--line);
+  border-radius: var(--card-radius, 12px);
+}
+.theme-preferences {
+  max-width: 580px;
+}
+.theme-preferences .row {
+  margin-top: 14px;
+}
+.theme-preferences p {
+  margin: 12px 0 0;
+}
+.theme-fallback {
+  max-width: 1264px;
+  margin: 16px auto;
+}
+.theme-apply {
+  margin: 20px 0;
+}
+.theme-apply > .stack {
+  margin-top: 18px;
+}
+.theme-library-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.theme-library-list button {
+  display: grid;
+  justify-content: start;
+  text-align: left;
+}
+.theme-library-list .selected {
+  border-color: var(--accent);
+}
+.theme-upload {
+  margin-bottom: 32px;
+}
+.theme-provenance {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.theme-issues {
+  margin: 0;
+  padding-left: 22px;
+  overflow-wrap: anywhere;
+}
+.theme-preview {
+  width: 900px;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.theme-preview.mobile {
+  width: 390px;
+}
+.theme-preview-content {
+  position: relative;
+  z-index: 1;
+  padding: 24px;
+  display: grid;
+  gap: 20px;
+}
+.theme-preview-content > .row,
+.theme-preview-content > label {
+  background: var(--surface);
+  padding: 12px;
+  border-radius: var(--card-radius);
+}
+.theme-preview-players {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.theme-preview-players .panel {
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+.theme-preview.mobile .theme-preview-players {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+[data-theme='custom']
+  :is(.panel, .pack-card, .notice, .question-stage, .room, .empty, details, .player) {
+  border-radius: var(--card-radius);
+  border-width: var(--card-border);
+  background: var(--surface);
+}
+[data-theme='custom'] :is(button, .button, input, select, textarea) {
+  border-radius: var(--button-radius);
+  border-width: var(--button-border);
+}
+[data-theme='custom'] :is(.topbar, .site-footer, .page) {
+  background: var(--bg);
+}
+[data-theme='custom'] :is(.hero-board, .hero-board-cells span, .card-symbol) {
+  background: var(--surface-2);
+}
+[data-theme='custom'] .notice.error {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--surface);
+}
+[data-theme='custom'] .notice.success {
+  color: var(--success);
+  border-color: var(--success);
+  background: var(--surface);
+}
+[data-theme='custom'] input::placeholder,
+[data-theme='custom'] textarea::placeholder {
+  color: var(--muted);
+}
+[data-theme='custom'] :focus-visible {
+  outline-color: var(--focus);
+}
+@media (max-width: 700px) {
+  .theme-context-bar {
+    margin: 12px;
+    padding: 12px;
+    display: grid;
+    gap: 12px;
+  }
+  .theme-preview-content {
+    padding: 16px;
+  }
+  .theme-preview-players {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .theme-version {
+    padding: 18px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}
