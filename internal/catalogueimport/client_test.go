@@ -120,7 +120,7 @@ func TestInvalidManifestVariantsAndEndpoints(t *testing.T) {
 				raw = []byte(`{"items":[],"token":"secret"}`)
 			}
 			os.WriteFile(name, raw, 0600)
-			if _, e := Check(name); e == nil {
+			if _, e := Check(context.Background(), name); e == nil {
 				t.Fatal("accepted", mode)
 			}
 		})

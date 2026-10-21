@@ -287,9 +287,9 @@ func (s *Service) create(ctx context.Context, actor accounts.Identity, name stri
 	if err != nil {
 		return Upload{}, ErrUnavailable
 	}
-	committed := false
+	commitAttempted := false
 	defer func() {
-		if !committed {
+		if !commitAttempted {
 			_ = s.root.Remove(id)
 		}
 	}()
@@ -316,10 +316,12 @@ func (s *Service) create(ctx context.Context, actor accounts.Identity, name stri
 			return Upload{}, err
 		}
 	}
+	// Commit may succeed even if its acknowledgement is lost. Preserve staging
+	// once attempted; cleanupOrphans removes files only after proving no DB row.
+	commitAttempted = true
 	if err = tx.Commit(ctx); err != nil {
 		return Upload{}, safeError(ctx, err)
 	}
-	committed = true
 	return u, nil
 }
 func (s *Service) Get(ctx context.Context, actor accounts.Identity, id string) (Upload, error) {

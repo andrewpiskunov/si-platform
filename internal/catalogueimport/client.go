@@ -37,14 +37,17 @@ type Result struct {
 	Error      string `json:"error,omitempty"`
 }
 
-func readManifest(name string) (*os.Root, Manifest, error) {
+func readManifest(ctx context.Context, name string) (*os.Root, Manifest, error) {
 	var m Manifest
-	f, e := os.Open(name)
+	if e := ctx.Err(); e != nil {
+		return nil, m, e
+	}
+	f, e := openRegular(nil, name)
 	if e != nil {
 		return nil, m, errors.New("manifest_unavailable")
 	}
 	defer f.Close()
-	raw, e := io.ReadAll(io.LimitReader(f, (1<<20)+1))
+	raw, e := io.ReadAll(io.LimitReader(contextReader{ctx, f}, (1<<20)+1))
 	if e != nil || len(raw) > 1<<20 {
 		return nil, m, errors.New("manifest_too_large")
 	}
@@ -62,9 +65,13 @@ func readManifest(name string) (*os.Root, Manifest, error) {
 	}
 	keys := map[string]bool{}
 	for i := range m.Items {
+		if e := ctx.Err(); e != nil {
+			root.Close()
+			return nil, m, e
+		}
 		v := &m.Items[i]
 		v.Name = filepath.Base(v.File)
-		f, e := root.Open(v.File)
+		f, e := openRegular(root, v.File)
 		if e != nil {
 			root.Close()
 			return nil, m, fmt.Errorf("item_%d_file_unavailable", i+1)
@@ -77,7 +84,7 @@ func readManifest(name string) (*os.Root, Manifest, error) {
 		}
 		v.Size = stat.Size()
 		if e = v.Validate(); e == nil {
-			e = verify(f, *v)
+			e = verify(ctx, f, *v)
 		}
 		f.Close()
 		key := v.Namespace + "\x00" + v.ExternalID
@@ -89,13 +96,31 @@ func readManifest(name string) (*os.Root, Manifest, error) {
 	}
 	return root, m, nil
 }
-func verify(f *os.File, v Item) error {
+
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r contextReader) Read(p []byte) (int, error) {
+	if e := r.ctx.Err(); e != nil {
+		return 0, e
+	}
+	if len(p) > 32<<10 {
+		p = p[:32<<10]
+	}
+	return r.reader.Read(p)
+}
+func verify(ctx context.Context, f *os.File, v Item) error {
+	if e := ctx.Err(); e != nil {
+		return e
+	}
 	stat, e := f.Stat()
 	if e != nil || !stat.Mode().IsRegular() || stat.Size() != v.Size {
 		return errors.New("file_changed")
 	}
 	h := sha256.New()
-	n, e := io.Copy(h, io.LimitReader(f, v.Size+1))
+	n, e := io.Copy(h, io.LimitReader(contextReader{ctx, f}, v.Size+1))
 	if e != nil || n != v.Size || hex.EncodeToString(h.Sum(nil)) != v.SHA256 {
 		return errors.New("checksum_mismatch")
 	}
@@ -104,8 +129,8 @@ func verify(f *os.File, v Item) error {
 }
 
 // Check validates every local archive before any network mutation.
-func Check(name string) (int, error) {
-	r, m, e := readManifest(name)
+func Check(ctx context.Context, name string) (int, error) {
+	r, m, e := readManifest(ctx, name)
 	if e != nil {
 		return 0, e
 	}
@@ -163,12 +188,12 @@ func (c client) call(ctx context.Context, method, path string, body []byte, offs
 	return u, nil
 }
 func (c client) item(ctx context.Context, root *os.Root, v Item) (ingest.Upload, error) {
-	f, e := root.Open(v.File)
+	f, e := openRegular(root, v.File)
 	if e != nil {
 		return ingest.Upload{}, errors.New("file_unavailable")
 	}
 	defer f.Close()
-	if e = verify(f, v); e != nil {
+	if e = verify(ctx, f, v); e != nil {
 		return ingest.Upload{}, errors.New("file_changed")
 	}
 	raw, _ := json.Marshal(v.CatalogueInput)
@@ -187,7 +212,7 @@ func (c client) item(ctx context.Context, root *os.Root, v Item) (ingest.Upload,
 		for u.Offset < v.Size {
 			n := min(int64(4<<20), v.Size-u.Offset)
 			chunk := make([]byte, n)
-			if _, e = io.ReadFull(f, chunk); e != nil {
+			if _, e = io.ReadFull(contextReader{ctx, f}, chunk); e != nil {
 				return u, errors.New("file_changed")
 			}
 			before := u.Offset
@@ -229,6 +254,8 @@ func (c client) item(ctx context.Context, root *os.Root, v Item) (ingest.Upload,
 
 // Run is sequential and repeatable. Redirects are never followed with credentials.
 func Run(ctx context.Context, name, base, token string) ([]Result, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Hour)
+	defer cancel()
 	base, e := endpoint(base)
 	if e != nil {
 		return nil, e
@@ -236,17 +263,20 @@ func Run(ctx context.Context, name, base, token string) ([]Result, error) {
 	if len(token) < 1 || strings.ContainsAny(token, "\r\n") {
 		return nil, errors.New("missing_or_invalid_token")
 	}
-	root, m, e := readManifest(name)
+	root, m, e := readManifest(ctx, name)
 	if e != nil {
 		return nil, e
 	}
 	defer root.Close()
-	ctx, cancel := context.WithTimeout(ctx, time.Hour)
-	defer cancel()
 	c := client{base: base, token: token, http: &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 	out := make([]Result, 0, len(m.Items))
 	failed := false
 	for _, v := range m.Items {
+		if ctx.Err() != nil {
+			failed = true
+			out = append(out, Result{Namespace: v.Namespace, ExternalID: v.ExternalID, Status: "not_attempted", Error: "cancelled_or_timeout"})
+			continue
+		}
 		u, e := c.item(ctx, root, v)
 		r := Result{Namespace: v.Namespace, ExternalID: v.ExternalID, UploadID: u.ID, DraftID: u.DraftID, Status: u.Status}
 		if e != nil {
@@ -258,9 +288,6 @@ func Run(ctx context.Context, name, base, token string) ([]Result, error) {
 			}
 		}
 		out = append(out, r)
-		if ctx.Err() != nil {
-			break
-		}
 	}
 	if failed {
 		return out, errors.New("batch_incomplete: inspect report and rerun unchanged manifest for uncertain network outcomes")

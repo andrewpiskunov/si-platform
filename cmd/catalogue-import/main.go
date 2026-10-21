@@ -19,8 +19,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: catalogue-import -manifest manifest.json [-check]")
 		os.Exit(2)
 	}
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
 	if *check {
-		n, e := catalogueimport.Check(*manifest)
+		n, e := catalogueimport.Check(ctx, *manifest)
 		if e != nil {
 			fmt.Fprintln(os.Stderr, e)
 			os.Exit(1)
@@ -28,8 +30,6 @@ func main() {
 		json.NewEncoder(os.Stdout).Encode(map[string]int{"validated": n})
 		return
 	}
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
 	report, e := catalogueimport.Run(ctx, *manifest, os.Getenv("SI_API_URL"), os.Getenv("SI_API_TOKEN"))
 	if report != nil {
 		json.NewEncoder(os.Stdout).Encode(report)
