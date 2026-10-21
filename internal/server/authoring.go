@@ -61,6 +61,7 @@ func (s *Server) platformRoutes(r chi.Router) {
 	r.Get("/rooms/{room}/media/{media}", s.roomMedia)
 	r.Head("/rooms/{room}/media/{media}", s.roomMedia)
 	if s.options.Uploads != nil {
+		r.Post("/catalogue-imports", s.catalogueImport)
 		r.Post("/media-uploads", s.mediaUploadCreate)
 		r.Post("/drafts/{id}/assets", s.attachMedia)
 		r.Post("/uploads", s.uploadCreate)

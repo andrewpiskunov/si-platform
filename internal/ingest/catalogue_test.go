@@ -110,3 +110,43 @@ func TestCatalogueChecksumFailureIsTerminal(t *testing.T) {
 		t.Fatal(n, e)
 	}
 }
+
+func TestCatalogueLiveAuthorizationAndValidation(t *testing.T) {
+	for _, mode := range []string{"scope", "revoked", "demoted", "invalid_url", "empty_permission"} {
+		t.Run(mode, func(t *testing.T) {
+			f := setup(t)
+			data := archive(t, textXML, nil)
+			in := catalogueInput(data)
+			if _, e := f.pool.Exec(bg, `UPDATE account_users SET role='admin' WHERE id=$1`, f.owner.User.ID); e != nil {
+				t.Fatal(e)
+			}
+			a := actor(t, f.pool, "owner", "api", "drafts:read", "drafts:write")
+			if _, e := f.service.CreateCatalogue(bg, a, in); e != nil {
+				t.Fatal(e)
+			}
+			want := ErrForbidden
+			switch mode {
+			case "scope":
+				a = actor(t, f.pool, "owner", "api", "drafts:read")
+			case "revoked":
+				if _, e := f.pool.Exec(bg, `UPDATE account_credentials SET revoked_at=now() WHERE id=$1`, a.SessionID); e != nil {
+					t.Fatal(e)
+				}
+				want = ErrUnauthorized
+			case "demoted":
+				if _, e := f.pool.Exec(bg, `UPDATE account_users SET role='author' WHERE id='owner'`); e != nil {
+					t.Fatal(e)
+				}
+			case "invalid_url":
+				in.SourceURL = "https://secret:password@example.org"
+				want = ErrInvalid
+			case "empty_permission":
+				in.PermissionBasis = " "
+				want = ErrInvalid
+			}
+			if _, e := f.service.CreateCatalogue(bg, a, in); !errors.Is(e, want) {
+				t.Fatal(e, want)
+			}
+		})
+	}
+}
