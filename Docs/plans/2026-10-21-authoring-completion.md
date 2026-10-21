@@ -51,5 +51,5 @@
 - [x] RED Chromium: поиск по теме + age через форму/SSR; pagination preserves query/age/context; invalid API age fails. Показать подсказку «Указано автором; фильтр не проверяет содержание пакета» и все семь вариантов фильтра.
 - [x] Implement SSR allowlist/form and preservation; стандартные фильтры остаются совместимы.
 - [x] RED→GREEN Chromium reordered rounds/themes/questions/question+answer fragments → selected question stable → undo → autosave/reload → exported SIQ/reimport same order. Diagnostic unknown fields/refs retained; mobile overflow absent; keyboard controls work; no page errors. Создавать синтетические пакеты только локально.
-- [ ] Полный Go race с PostgreSQL и MEDIA_INTEGRATION, vet/build; web tests/check/build; существующие шесть e2e (включая theme-regressions) + authoring. Результаты записать, не выдавая их за нагрузочное испытание.
-- [ ] Один свежий обзор всего этапа с Review Focus; Important/Critical — одна проверяемая коррекция. Обновить фактический статус и scoped commits, FF локального main; продолжить остальные P0.
+- [x] Полный Go race с PostgreSQL и MEDIA_INTEGRATION, vet/build; web tests/check/build; существующие шесть e2e (включая theme-regressions) + authoring. Результаты записать, не выдавая их за нагрузочное испытание.
+- [x] Один свежий обзор всего этапа с Review Focus; Important/Critical — одна проверяемая коррекция. Обновить фактический статус и scoped commits, FF локального main; продолжить остальные P0.
