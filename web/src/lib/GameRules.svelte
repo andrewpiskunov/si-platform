@@ -16,11 +16,18 @@
     else onchange(next);
   }
   function change(patch: Partial<Rules>) {
-    onchange({ ...rules, ...patch, preset: 'custom', no_risk_multiplier: 2 });
+    onchange({
+      ...rules,
+      ...patch,
+      auto_open: true,
+      reading_seconds: patch.reading_seconds ?? (rules.reading_seconds || 10),
+      preset: 'custom',
+      no_risk_multiplier: 2
+    });
   }
   const timers: [keyof Rules, string][] = [
     ['selection_seconds', 'Выбор вопроса'],
-    ['answer_seconds', 'Ответ после кнопки'],
+    ['answer_seconds', 'Время на ответ после нажатия'],
     ['special_seconds', 'Спецвопрос'],
     ['wager_seconds', 'Ставка'],
     ['final_seconds', 'Финал']
@@ -35,33 +42,26 @@
       ><option value="custom">Свои настройки</option></select
     ></label
   >
-  <label
-    >Открытие кнопки<select
-      value={rules.auto_open ? 'auto' : 'manual'}
-      onchange={(event) =>
-        change({
-          auto_open: event.currentTarget.value === 'auto',
-          reading_seconds: rules.reading_seconds || 10
-        })}
-      ><option value="auto">Автоматически после показа вопроса</option><option value="manual"
-        >Вручную ведущим</option
-      ></select
-    ></label
-  >
-  {#if rules.auto_open}<label
-      >Время чтения фрагмента, секунд<input
-        type="number"
-        min="1"
-        max="120"
-        required
-        value={rules.reading_seconds || 10}
-        oninput={(event) => change({ reading_seconds: Number(event.currentTarget.value) })}
-      /></label
+  {#if !rules.auto_open}
+    <p class="notice">В этой комнате сохранены старые правила с ручным переходом.</p>
+    <button type="button" onclick={() => change({ auto_open: true })}
+      >Включить автоматический переход</button
     >
-    <p class="helper">
-      После последнего фрагмента откроется кнопка. Длительность из пакета имеет приоритет; медиа без
-      указанной длительности и фрагменты с ожиданием ведущего продолжаются вручную.
-    </p>{/if}
+  {/if}
+  <label
+    >Время чтения фрагмента, секунд<input
+      type="number"
+      min="1"
+      max="120"
+      required
+      value={rules.reading_seconds || 10}
+      oninput={(event) => change({ reading_seconds: Number(event.currentTarget.value) })}
+    /></label
+  >
+  <p class="helper">
+    После последнего фрагмента откроется кнопка. Длительность из пакета имеет приоритет; медиа без
+    указанной длительности и фрагменты с ожиданием ведущего продолжаются вручную.
+  </p>
   <div class="form-grid">
     {#each timers as [key, label]}<label
         >{label}, секунд<input

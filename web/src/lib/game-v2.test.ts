@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { prepareAction, captureScope, timerSeconds, type SessionView } from './game-v2.ts';
+import {
+  prepareAction,
+  captureScope,
+  timerSeconds,
+  classicRules,
+  timerLabel,
+  type SessionView
+} from './game-v2.ts';
 import { RoomProtocol } from './room-client.ts';
 const view = (actions: SessionView['allowed_actions']): SessionView => ({
   version: 2,
@@ -229,18 +236,33 @@ test('removal sends only selected target and valid mode under sequence control',
 
 test('lobby readiness is own boolean intent without global sequence or question scope', () => {
   const game = view([{ type: 'set_ready', requires_seq: false }]);
-  assert.deepEqual(prepareAction(game, 18, 'set_ready', { ready: true }, captureScope(game), 'ready-1'), {
-    v: 2, id: 'ready-1', type: 'set_ready', data: { ready: true }
-  });
+  assert.deepEqual(
+    prepareAction(game, 18, 'set_ready', { ready: true }, captureScope(game), 'ready-1'),
+    {
+      v: 2,
+      id: 'ready-1',
+      type: 'set_ready',
+      data: { ready: true }
+    }
+  );
   assert.throws(() => prepareAction(game, 18, 'set_ready', {}));
-  assert.throws(() => prepareAction(game, 18, 'set_ready', {ready: null}));
-  assert.throws(() => prepareAction(game, 18, 'set_ready', {ready: true, target_id: 'other'}));
+  assert.throws(() => prepareAction(game, 18, 'set_ready', { ready: null }));
+  assert.throws(() => prepareAction(game, 18, 'set_ready', { ready: true, target_id: 'other' }));
 });
 
 test('final question selection retains the board action', async () => {
-  const {isBoardStage} = await import('./game-v2.ts');
-  assert.equal(isBoardStage('select_final'),true);
-  assert.equal(isBoardStage('select_question'),true);
-  assert.equal(isBoardStage('resolved'),true);
-  assert.equal(isBoardStage('present_question'),false);
+  const { isBoardStage } = await import('./game-v2.ts');
+  assert.equal(isBoardStage('select_final'), true);
+  assert.equal(isBoardStage('select_question'), true);
+  assert.equal(isBoardStage('resolved'), true);
+  assert.equal(isBoardStage('present_question'), false);
+});
+
+test('standard rules open answers automatically and name each countdown', () => {
+  assert.equal(classicRules().auto_open, true);
+  assert.equal(classicRules().reading_seconds, 10);
+  assert.equal(timerLabel('present_question'), 'Чтение вопроса');
+  assert.equal(timerLabel('buzz_open'), 'Время на нажатие');
+  assert.equal(timerLabel('collect_answer'), 'Время на ответ');
+  assert.equal(timerLabel('collect_answers'), 'Время на ответы');
 });

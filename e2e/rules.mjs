@@ -490,7 +490,7 @@ try {
   await stage(players[0], "present_question");
   await button(players[0], "Ждите сигнала");
   await until(() => state(players[0]).players.find((p) => p.id === players[0].credentials.participant_id)?.blocked_until_ms > Date.now(), "false-start was not recorded");
-  await button(host, "Открыть кнопку");
+  await button(host, "Продолжить →");
   await stage(players[0], "buzz_open");
   // No commands or reconnect: the server must deliver fresh permission itself.
   await players[0].page.getByRole("button", { name: "Знаю ответ!", exact: true }).waitFor({timeout: 5000});

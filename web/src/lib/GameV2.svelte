@@ -167,7 +167,12 @@
     class:participant-view={!isHost}
   >
     <div class="stack">
-      {#if !isHost && view.stage.kind === 'resolved' && view.question?.answer !== undefined}<section class="notice revealed-answer"><h3>Правильный ответ</h3><p>{view.question.answer}</p></section>{/if}
+      {#if !isHost && view.stage.kind === 'resolved' && view.question?.answer !== undefined}<section
+          class="notice revealed-answer"
+        >
+          <h3>Правильный ответ</h3>
+          <p>{view.question.answer}</p>
+        </section>{/if}
       {#if room.phase !== 'lobby' && showBoard}<section class="stack">
           <div class="row between">
             {#if isHost}<label
@@ -357,7 +362,7 @@
             Сейчас отвечает / действует: <strong>{name(view.stage.turn_id)}</strong>
           </p>{/if}
         <div class="row game-controls">
-          {#each [{ type: 'pause', label: 'Пауза Ⅱ' }, { type: 'resume', label: 'Продолжить ▶' }, { type: 'advance', label: view.stage.kind === 'present_answer' ? 'Следующий фрагмент ответа' : view.stage.kind === 'collect_answer' ? 'Ответ прозвучал' : view.stage.kind === 'collect_answers' ? 'Закрыть сбор ответов' : 'Продолжить →' }, { type: 'open_buzzer', label: 'Открыть кнопку' }, { type: 'wait_media', label: 'Ждать ещё 10 секунд' }, { type: 'continue_media', label: 'Продолжить без всех' }] as control}{#if actionFor(view, control.type)}<button
+          {#each [{ type: 'pause', label: 'Пауза Ⅱ' }, { type: 'resume', label: 'Продолжить ▶' }, { type: 'advance', label: view.stage.kind === 'present_answer' ? 'Следующий фрагмент ответа' : view.stage.kind === 'collect_answer' ? 'Ответ прозвучал' : view.stage.kind === 'collect_answers' ? 'Закрыть сбор ответов' : 'Продолжить →' }, { type: 'wait_media', label: 'Ждать ещё 10 секунд' }, { type: 'continue_media', label: 'Продолжить без всех' }] as control}{#if actionFor(view, control.type)}<button
                 disabled={blocked}
                 onclick={() => send(control.type)}>{control.label}</button
               >{/if}{/each}{#if actionFor(view, 'finish')}{#if finishConfirm}<span

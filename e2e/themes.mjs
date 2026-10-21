@@ -280,7 +280,7 @@ try {
   const hostAssets = host.assetRequests.length, mobileAssets = mobile.assetRequests.length;
   await click(host, 'Начать раунд'); await stage(host, 'select_question');
   await click(host, 'Оформление, 100 очков'); await stage(host, 'present_question');
-  await click(host, 'Открыть кнопку'); await stage(host, 'buzz_open');
+  await click(host, 'Продолжить →'); await stage(host, 'buzz_open');
   await stage(mobile, 'buzz_open');
   assert.equal(slowHeld, true, 'slow fixture released before game check');
   await mobile.page.getByRole('button', { name: 'Знаю ответ!', exact: true }).click();
@@ -338,7 +338,7 @@ try {
   // also revokes the author's pack; already loaded game content remains usable.
   await click(host, 'Продолжить ▶'); await until(() => host.state.phase !== 'paused', 'game did not resume');
   await click(host, 'Оформление, 200 очков'); await stage(host, 'present_question');
-  await click(host, 'Открыть кнопку'); await stage(mobile, 'buzz_open');
+  await click(host, 'Продолжить →'); await stage(mobile, 'buzz_open');
   await click(host, 'Пауза Ⅱ'); await until(() => host.state.phase === 'paused', 'second question did not pause');
 
   at('moderation revokes room and readonly catalogue through WebSocket');

@@ -70,3 +70,27 @@ func TestAutomaticOpeningRulesValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestAutomaticOpeningThenAnswerDeadline(t *testing.T) {
+	s := v2Fixture()
+	s.Gameplay.Rules.AutoOpen = true
+	s.Gameplay.Rules.ReadingSeconds = 5
+	s.Gameplay.Rules.AnswerSeconds = 12
+	s = begin(t, s, "withButton")
+	s, _ = AdvanceAt(s, 6000)
+	if s.Gameplay.Stage.Kind != "buzz_open" {
+		t.Fatal(s.Gameplay.Stage)
+	}
+	winBuzz(&s, s.Participants[1].ID, 6500)
+	if s.Gameplay.Stage.DeadlineMS != 18500 {
+		t.Fatal(s.Gameplay.Stage)
+	}
+	s, _ = AdvanceAt(s, 18499)
+	if s.Gameplay.Stage.Kind != "collect_answer" {
+		t.Fatal("answer closed too early")
+	}
+	s, _ = AdvanceAt(s, 18500)
+	if s.Gameplay.Stage.Kind != "judge" || !s.Gameplay.Question.CollectionClosed {
+		t.Fatal("answer did not close automatically", s.Gameplay.Stage)
+	}
+}

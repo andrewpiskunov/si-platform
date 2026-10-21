@@ -145,6 +145,8 @@ try {
   await owner
     .getByRole("button", { name: "Новая тема, 100 очков", exact: true })
     .click();
+  assert.equal(await owner.getByRole('button', {name: /Открыть кнопку|Можно отвечать/}).count(), 0);
+  await owner.getByRole('timer', {name: /Чтение вопроса/}).waitFor();
   await players[0].getByRole('button',{name:'Ждите сигнала',exact:true}).click();
   await players[0].getByRole('button',{name:/Фальстарт · ещё/}).waitFor();
   // Real server timer opens the buzzer; no host command is sent.
@@ -172,6 +174,8 @@ try {
   await players[0]
     .getByRole("button", { name: "Знаю ответ!", exact: true })
     .click();
+  await owner.getByRole('timer', {name: /Время на ответ/}).waitFor();
+  await players[0].getByRole('timer', {name: /Время на ответ/}).waitFor();
   await owner.getByRole("button", { name: /^✓ Верно/ }).click();
   await players[0].getByText("Четыре", {exact:true}).waitFor();
   await until(

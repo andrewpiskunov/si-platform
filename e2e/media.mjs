@@ -193,7 +193,7 @@ try {
   for (const p of players) assert.equal(game(p).question.answer, undefined, 'answer leaked before reveal');
   await host.page.screenshot({ path: output + '/media-host.png', fullPage: true });
   checkpoint = 'answer media reveal and revocation';
-  await button(host, 'Открыть кнопку'); await stage(host, 'buzz_open');
+  await button(host, 'Продолжить →'); await stage(host, 'buzz_open');
   for (const p of players) {
     await stage(p, 'buzz_open');
     const stop = game(p).question.media.stopped_position_ms;

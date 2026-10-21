@@ -213,7 +213,8 @@ export function prepareAction(
     throw new Error('stale_stage');
   if (Object.keys(input).some((key) => !fields[type].includes(key)))
     throw new Error('invalid_action_data');
-  if (type === 'set_ready' && typeof input.ready !== 'boolean') throw new Error('invalid_action_data');
+  if (type === 'set_ready' && typeof input.ready !== 'boolean')
+    throw new Error('invalid_action_data');
   const data: Record<string, unknown> = {};
   if (staged.has(type)) data.stage_id = scope.stage_id;
   if (instanced.has(type)) {
@@ -328,6 +329,8 @@ export const questionTypes: Record<string, string> = {
 export function classicRules(): Rules {
   return {
     preset: 'classic',
+    auto_open: true,
+    reading_seconds: 10,
     selection_seconds: 30,
     answer_seconds: 10,
     special_seconds: 30,
@@ -358,4 +361,20 @@ export function answerBytes(value: string): number {
   );
 }
 
-export function isBoardStage(kind: string): boolean { return ["select_question", "select_final", "resolved"].includes(kind); }
+export function isBoardStage(kind: string): boolean {
+  return ['select_question', 'select_final', 'resolved'].includes(kind);
+}
+
+export function timerLabel(kind: string): string {
+  const labels: Record<string, string> = {
+    present_question: 'Чтение вопроса',
+    buzz_open: 'Время на нажатие',
+    buzz_window: 'Приём нажатий',
+    collect_answer: 'Время на ответ',
+    collect_answers: 'Время на ответы',
+    collect_wagers: 'Время на ставку',
+    select_question: 'Выбор вопроса',
+    select_final: 'Выбор темы'
+  };
+  return labels[kind] || 'Осталось';
+}

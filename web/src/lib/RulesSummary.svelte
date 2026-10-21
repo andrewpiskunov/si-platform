@@ -6,6 +6,14 @@
 <div class="rules-summary">
   <dl>
     <div>
+      <dt>Чтение вопроса</dt>
+      <dd>
+        {rules.auto_open
+          ? `${rules.reading_seconds} с · переход автоматически`
+          : 'Старые правила · ручной переход'}
+      </dd>
+    </div>
+    <div>
       <dt>Выбор вопроса</dt>
       <dd>{rules.selection_seconds} с</dd>
     </div>
