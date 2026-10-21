@@ -3,6 +3,7 @@
   import { page } from '$app/state';
   import { api, APIError, errorText } from '#lib/api.ts';
   import { RoomConnection, type RoomState } from '#lib/room-client.ts';
+  import { BoardLoader } from '#lib/board-loader.ts';
   import type { Board, Credentials } from '#lib/types.ts';
   import GameV2 from '#lib/GameV2.svelte';
   import GameResults from '#lib/GameResults.svelte';
@@ -14,6 +15,8 @@
   let credentials = $state<Credentials | null>(null),
     roomState = $state<RoomState | null>(null),
     board = $state<Board | null>(null),
+    boardError = $state(''),
+    boardLoading = $state(false),
     name = $state(''),
     role = $state('player'),
     invite = $state(''),
@@ -38,8 +41,7 @@
     rotating = $state(false);
   let connection: RoomConnection | null = null;
   let roomID = $state('');
-  let boardKey = '';
-  let boardRequest: AbortController | undefined;
+  const boardLoader = new BoardLoader<Board>();
   let alive = true;
   const me = $derived(
     roomState?.participants.find((participant) => participant.id === roomState?.you)
@@ -70,7 +72,7 @@
     return () => {
       alive = false;
       connection?.close();
-      boardRequest?.abort();
+      boardLoader.reset();
     };
   });
   $effect(() => {
@@ -79,10 +81,11 @@
   });
   function initialize(id: string) {
     connection?.close();
-    boardRequest?.abort();
+    boardLoader.reset();
     roomID = id;
     board = null;
-    boardKey = '';
+    boardError = '';
+    boardLoading = false;
     roomState = null;
     ready = false;
     credentials = null;
@@ -114,36 +117,32 @@
       pending = protocol.pending.size;
       if (code) error = errorText(code);
       roomTheme.observe(roomState?.appearance, protocol.appearanceEpoch, protocol.ready);
-      if (roomState) {
-        const key = `${roomState.gameplay?.round?.id || ''}:${roomState.gameplay?.stage.instance_id || roomState.question?.id || ''}:${roomState.phase}`;
-        if (key !== boardKey) {
-          boardKey = key;
-          void loadBoard();
-        }
-      }
+      if (roomState && protocol.ready) void loadBoard();
     });
     connection.connect();
   }
-  async function loadBoard() {
-    if (!credentials) return;
-    boardRequest?.abort();
-    const request = new AbortController();
-    boardRequest = request;
+  async function loadBoard(force = false) {
+    if (!credentials || !roomState) return;
     const loadingRoom = roomID;
+    const key = `${loadingRoom}:${roomState.gameplay?.round?.id || ''}:${roomState.gameplay?.stage.instance_id || roomState.question?.id || ''}:${roomState.phase}`;
+    const token = credentials.token;
     try {
-      const result = await api<Board>(
-        `/rooms/${roomID}/board`,
-        'GET',
-        undefined,
-        credentials.token,
-        request.signal
+      const pending = boardLoader.load(
+        key,
+        (signal) => api<Board>(`/rooms/${loadingRoom}/board`, 'GET', undefined, token, signal),
+        force
       );
-      if (alive && loadingRoom === roomID && !request.signal.aborted) {
+      boardLoading = boardLoader.pending;
+      const result = await pending;
+      if (alive && loadingRoom === roomID && result) {
         board = result;
+        boardError = '';
         if (roundIndex >= result.rounds.length) roundIndex = 0;
       }
     } catch (e) {
-      if (alive && !request.signal.aborted) error = errorText(e);
+      if (alive && loadingRoom === roomID) boardError = errorText(e);
+    } finally {
+      if (alive && loadingRoom === roomID) boardLoading = boardLoader.pending;
     }
   }
   async function join(event: SubmitEvent) {
@@ -226,7 +225,7 @@
     try {
       await api(`/rooms/${roomID}/${kind}`, 'POST', selection, credentials.token);
       selection = null;
-      await loadBoard();
+      await loadBoard(true);
     } catch (e) {
       error = errorText(e);
       if (e instanceof APIError && e.status < 500) selection = null;
@@ -281,6 +280,9 @@
   }
   function reset() {
     connection?.close();
+    boardLoader.reset();
+    boardError = '';
+    boardLoading = false;
     sessionStorage.removeItem(`room:${roomID}`);
     credentials = null;
     roomTheme.enter(roomID, '', themePreferences(null));
@@ -300,6 +302,12 @@
   /></svelte:head
 >
 <section class="page">
+  {#if boardError}<div class="notice error board-error" role="alert">
+      <p>{boardError}</p>
+      <button class="small" disabled={boardLoading || !ready} onclick={() => void loadBoard(true)}
+        >Повторить загрузку табло</button
+      >
+    </div>{/if}
   {#if !mounted}<p class="loading" role="status">Открываем комнату…</p>{:else if !credentials}<div
       class="narrow"
       style="margin:auto"

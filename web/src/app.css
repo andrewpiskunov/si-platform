@@ -212,7 +212,7 @@ small,
   height: 36px;
   border: 2px solid var(--accent);
   border-radius: 10px;
-  color: var(--accent);
+  color: var(--accent-foreground, var(--accent));
   font-size: 25px;
   font-weight: 800;
 }
@@ -263,7 +263,7 @@ small,
   max-width: 560px;
 }
 .eyebrow {
-  color: var(--accent);
+  color: var(--accent-foreground, var(--accent));
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 2px;
@@ -281,7 +281,7 @@ small,
   max-width: 650px;
 }
 .hero h1 span {
-  color: var(--accent);
+  color: var(--accent-foreground, var(--accent));
 }
 .hero p {
   max-width: 460px;
@@ -402,7 +402,7 @@ small,
   font-size: 40px;
   font-weight: 300;
   letter-spacing: -3px;
-  color: var(--accent);
+  color: var(--accent-foreground, var(--accent));
 }
 .card-symbol .pill {
   background: var(--bg);
@@ -452,11 +452,11 @@ small,
 }
 .empty-symbol {
   font-size: 42px;
-  color: var(--accent);
+  color: var(--accent-foreground, var(--accent));
   margin-bottom: 18px;
 }
 .text-link {
-  color: var(--accent);
+  color: var(--accent-foreground, var(--accent));
   text-decoration: underline;
   text-underline-offset: 4px;
 }
@@ -607,7 +607,7 @@ small,
   border-radius: 5px;
   text-align: center;
   padding: 17px 5px;
-  color: var(--accent);
+  color: var(--accent-foreground, var(--accent));
   font-size: 22px;
   font-weight: 650;
 }
@@ -686,7 +686,7 @@ small,
 }
 .board-cell {
   min-height: 66px;
-  color: var(--accent);
+  color: var(--accent-foreground, var(--accent));
   font-size: 24px;
 }
 .board-scroll {
@@ -716,7 +716,7 @@ small,
 }
 .question-price {
   font-size: 15px;
-  color: var(--accent);
+  color: var(--accent-foreground, var(--accent));
   margin-bottom: 24px;
 }
 .buzz {
@@ -746,7 +746,7 @@ small,
   border-color: var(--accent);
 }
 .score-item strong {
-  color: var(--accent);
+  color: var(--accent-foreground, var(--accent));
   white-space: nowrap;
 }
 .editor-layout {
@@ -782,7 +782,7 @@ small,
 }
 .question-pills button.selected {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-foreground, var(--accent));
 }
 .editor-toolbar {
   margin-bottom: 24px;
@@ -1022,7 +1022,7 @@ details[open] > summary {
 }
 .game-timer strong {
   display: block;
-  color: var(--accent);
+  color: var(--accent-foreground, var(--accent));
   font-size: 36px;
   line-height: 1.2;
 }
@@ -1369,4 +1369,12 @@ details[open] > summary {
     animation: none !important;
     scroll-behavior: auto !important;
   }
+}
+
+[data-theme='custom'] {
+  --accent-foreground: var(--text);
+}
+[data-theme='custom'] .hero-board-cells span:nth-child(5) {
+  background: var(--accent);
+  color: var(--accent-text);
 }

@@ -83,5 +83,5 @@ Add `ThemeLibrary`, `ThemeUpload`, `ThemePreview`, `ThemeChooser`, `ThemePrefere
 - [x] Add `examples/themes/` JSON/README and deterministic ZIP generator; valid small ownimages sample. Unitvalidateexample. Downloadsameexample fromweb/static, no secrets/thirdpartyassets.
 - [x] RED thenGREEN `e2e/themes.mjs`: ownerimport/validationerror/preview; 12players customtheme; unchangedbuzzerwithslow/brokenassets; pause/switch/reconnect; privateoriginal; pin afternewversion/delete; block→fallback viaWS; cataloguecontext/independenttab; localclassic/economy; mobile12cards/focus/reducedmotion; no unexpectedHTTPexternalrequests orpageerrors.
 - [x] RealPG+actualmedia `go test -race ./...`, vet/build, webcheck/test/build, native12, fullChromiumsuite; recordactualbundle/themebytes andlimitations. Runtimecontainer verificationremainsseparateifDockerabsent.
-- [ ] Onefreshwhole-stage review base da16219; regradeactualeffects; onecorrectionpass RED→GREEN plusrelevantsuites. Docs08/11/16/README updatedwithactualstatus.
-- [ ] Scopedcommits +fastforwardlocalmain; continueAI/MCP,privacy/catalogueandrelease. WholeprojectnotcompleteuntilremainingP0delivered.
+- [x] Onefreshwhole-stage review base da16219; regradeactualeffects; onecorrectionpass RED→GREEN plusrelevantsuites. Docs08/11/16/README updatedwithactualstatus.
+- [x] Scopedcommits +fastforwardlocalmain; continueAI/MCP,privacy/catalogueandrelease. WholeprojectnotcompleteuntilremainingP0delivered.
