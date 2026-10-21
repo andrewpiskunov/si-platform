@@ -7,32 +7,12 @@
 </script>
 
 <section class="page">
-  <div class="hero">
+  <div id="catalogue" class="catalogue-heading row between">
     <div>
-      <p class="eyebrow">Ваши друзья. Ваши вопросы. Ваша игра.</p>
-      <h1>Хороший вечер<br />начинается <span>с вопроса.</span></h1>
-      <p>Выберите пакет, пригласите друзей и выясните, кто сегодня знает чуть больше.</p>
-      <div class="row">
-        <a class="button primary" href="#catalogue"
-          >Выбрать пакет <span aria-hidden="true">↓</span></a
-        ><a class="button ghost" href={contextLink('/studio', room)}>Создать свой</a>
-      </div>
+      <h1>Пакеты для вашей компании</h1>
+      <p class="muted">Выберите вопросы для следующей игры или соберите свой пакет.</p>
     </div>
-    <div class="hero-board" aria-hidden="true">
-      <div class="hero-board-top"><span>СВОЯ ИГРА</span><span>ВЕЧЕР С ДРУЗЬЯМИ</span></div>
-      <div class="hero-board-cells">
-        {#each [100, 100, 100, 200, 200, 200, 300, 300, 300] as value}<span>{value}</span>{/each}
-      </div>
-      <div class="hero-board-caption">Выбирайте тему. Жмите кнопку. Забирайте очки.</div>
-    </div>
-  </div>
-  <div id="catalogue" class="section-head row between">
-    <div>
-      <p class="eyebrow">Есть о чём подумать</p>
-      <h2>Каталог пакетов</h2>
-      <p>Готовые вопросы для вашей следующей игры</p>
-    </div>
-    <a href={contextLink('/studio', room)} class="text-link">Авторская мастерская ↗</a>
+    <a class="button primary" href={contextLink('/studio', room)}>Создать пакет</a>
   </div>
   <form class="filters" action="/" method="GET">
     {#if room}<input type="hidden" name="room" value={room} />{/if}

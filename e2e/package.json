@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node smoke.mjs && node review.mjs && node rules.mjs && node media.mjs && node themes.mjs && node theme-regressions.mjs && node authoring.mjs && node rooms.mjs && node membership.mjs && node membership-recovery.mjs && node moderation.mjs && node usage.mjs && node session-tabs.mjs && AUTH_STORAGE_FALLBACK=1 node session-tabs.mjs && node privacy.mjs && node retention.mjs && node ai.mjs && node mcp.mjs",
+    "test": "node smoke.mjs && node review.mjs && node rules.mjs && node media.mjs && node themes.mjs && node theme-regressions.mjs && node authoring.mjs && node rooms.mjs && node membership.mjs && node membership-recovery.mjs && node moderation.mjs && node usage.mjs && node session-tabs.mjs && AUTH_STORAGE_FALLBACK=1 node session-tabs.mjs && node privacy.mjs && node retention.mjs && node ai.mjs && node mcp.mjs && node broadcast.mjs",
     "test:text": "node smoke.mjs && node review.mjs && node rules.mjs",
     "test:media": "node media.mjs",
     "test:themes": "node themes.mjs",
@@ -18,7 +18,8 @@
     "test:privacy": "node privacy.mjs",
     "test:retention": "node retention.mjs",
     "test:ai": "node ai.mjs",
-    "test:mcp": "node mcp.mjs"
+    "test:mcp": "node mcp.mjs",
+    "test:broadcast": "node broadcast.mjs"
   },
   "devDependencies": {
     "playwright": "1.64.1"

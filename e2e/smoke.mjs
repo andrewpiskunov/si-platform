@@ -86,7 +86,7 @@ try {
   await owner
     .getByLabel("Название комнаты", { exact: true })
     .fill("Браузерная проверка");
-  await owner.getByRole("button", { name: "Пираты", exact: true }).click();
+  await owner.getByRole("button", { name: process.env.SMOKE_THEME === "classic" ? "Эфир" : "Пираты", exact: true }).click();
   await owner
     .getByRole("button", { name: "Создать комнату →", exact: true })
     .click();
@@ -113,6 +113,10 @@ try {
       .getByRole("status")
       .filter({ hasText: "Собираемся" })
       .waitFor();
+  }
+  assert.equal(await owner.locator('.score-item .participant-avatar').count(), 12);
+  for (const avatar of await owner.locator('.score-item .participant-avatar').all()) {
+    await until(() => avatar.evaluate(el => el.complete && el.naturalWidth > 0), 'avatar did not load');
   }
   await owner.getByRole("button", { name: "Начать раунд", exact: true }).click();
   await owner.getByRole("status").filter({ hasText: "Идёт игра" }).waitFor();

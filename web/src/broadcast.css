@@ -1,0 +1,435 @@
+/* Broadcast is the application shell. Room themes still own palette, font and geometry. */
+@font-face {
+  font-family: Golos;
+  src: url('/fonts/golos.ttf') format('truetype');
+  font-weight: 100 900;
+  font-display: swap;
+}
+:root {
+  font-family: Golos, 'Segoe UI', sans-serif;
+  --bg: #10182b;
+  --surface: #19253d;
+  --surface-2: #22324e;
+  --line: #35435d;
+  --text: #f5f7fc;
+  --muted: #a5b2ca;
+  --accent: #f1d694;
+  --accent-text: #262010;
+}
+.app-shell {
+  font-family: var(--theme-font, Golos, 'Segoe UI', sans-serif);
+}
+.app-shell[data-theme='classic'] {
+  --bg: #10182b;
+  --surface: #19253d;
+  --surface-2: #22324e;
+  --line: #35435d;
+  --text: #f5f7fc;
+  --muted: #a5b2ca;
+  --accent: #f1d694;
+  --accent-text: #262010;
+}
+.ui-icon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  vertical-align: middle;
+}
+.topbar {
+  max-width: 1480px;
+  min-height: 94px;
+  padding: 0 40px;
+  gap: 48px;
+}
+.brand {
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.9px;
+}
+.brand-light {
+  font-weight: inherit;
+}
+.brand-mark {
+  border: 0;
+  width: 26px;
+  height: 30px;
+}
+.broadcast-mark {
+  display: grid;
+  grid-template-columns: repeat(2, 9px);
+  gap: 3px;
+  transform: rotate(-8deg);
+}
+.broadcast-mark i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.broadcast-mark i:last-child {
+  opacity: 0.45;
+}
+.topbar nav {
+  gap: 26px;
+}
+.topbar nav a {
+  min-height: 44px;
+  border-bottom-width: 3px;
+}
+.page {
+  max-width: 1320px;
+  margin: auto;
+  padding: 36px 0 60px;
+}
+.site-footer {
+  max-width: 1320px;
+  font-size: 12px;
+}
+h1 {
+  font-weight: 550;
+  letter-spacing: -0.04em;
+}
+h2,
+h3 {
+  font-weight: 550;
+}
+.eyebrow {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 450;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+button,
+.button {
+  min-height: 44px;
+  border-radius: var(--button-radius, 7px);
+  font-weight: 500;
+}
+button.small,
+.button.small {
+  min-height: 36px;
+}
+input,
+select,
+textarea {
+  border-radius: var(--button-radius, 7px);
+}
+.panel,
+details,
+.empty {
+  border-radius: var(--card-radius, 10px);
+}
+.catalogue-heading {
+  gap: 24px;
+  margin: 0 0 30px;
+  align-items: center;
+}
+.catalogue-heading h1 {
+  font-size: clamp(26px, 3vw, 36px);
+  margin: 0 0 12px;
+}
+.catalogue-heading p {
+  font-size: 14px;
+  margin: 0;
+}
+.filters {
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--card-radius, 10px);
+}
+.filters details {
+  padding: 12px 0 0;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+}
+.card-grid {
+  gap: 22px;
+}
+.pack-card {
+  border-radius: var(--card-radius, 10px);
+  overflow: hidden;
+}
+.card-symbol {
+  min-height: 190px;
+  height: auto;
+  padding: 24px;
+  gap: 20px;
+  align-items: flex-start;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.card-symbol > .pack-cover-title:first-child {
+  font-size: 24px;
+  line-height: 1.3;
+  font-weight: 550;
+  letter-spacing: -0.025em;
+  flex-shrink: 0;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.app-shell[data-theme='classic'] .card-symbol:not(.theme-preview *) {
+  background: #1643b5;
+  color: #f1d694;
+}
+.pack-card-foot {
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.pack-card-foot > span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.pack-card-foot .ui-icon {
+  width: 16px;
+  height: 16px;
+}
+.room {
+  padding: 0;
+  margin-top: 20px;
+  border-radius: 0;
+}
+.game-v2 .room-grid {
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 24px;
+}
+.game-v2 aside > div:first-child {
+  background: var(--surface);
+  border: var(--card-border, 1px) solid var(--line);
+  padding: 18px;
+  border-radius: var(--card-radius, 10px);
+}
+.game-v2 aside h3 {
+  font-size: 15px;
+  margin: 0 0 16px;
+}
+.board {
+  gap: 2px;
+}
+.board-row {
+  gap: 2px;
+  grid-template-columns: minmax(100px, 1.65fr) repeat(var(--columns, 5), minmax(44px, 1fr));
+}
+.board-scroll {
+  padding: 4px;
+}
+.board-scroll .board {
+  min-width: 0;
+}
+.board-theme {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 16px;
+  border-radius: var(--card-radius, 4px);
+  overflow-wrap: anywhere;
+}
+.board-cell {
+  min-height: 84px;
+  padding: 18px 3px;
+  font-size: clamp(23px, 2.6vw, 38px);
+  font-weight: 500;
+  font-variant-numeric: lining-nums tabular-nums;
+  border-radius: var(--button-radius, 4px);
+}
+.app-shell[data-theme='classic'] .board-theme:not(.theme-preview *) {
+  background: #102d75;
+  color: #f5f7fc;
+}
+.app-shell[data-theme='classic'] .board-cell:not(.theme-preview *) {
+  background: #1744ae;
+  color: #f1d694;
+  border-color: #345a9e;
+  border-radius: 2px;
+}
+.app-shell[data-theme='classic'] .board-cell:not(.theme-preview *):hover:not(:disabled) {
+  background: #2258c9;
+  border-color: var(--accent);
+}
+.app-shell[data-theme='classic'] .question-stage:not(.theme-preview *) {
+  background: #123783;
+  border-color: #4166a9;
+}
+.app-shell[data-theme='classic'] .question-stage:not(.theme-preview *) h2 {
+  color: #f5f7fc;
+}
+.question-price {
+  font-size: 28px;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.score-list {
+  gap: 9px;
+}
+.score-item {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  column-gap: 12px;
+  row-gap: 7px;
+  align-items: center;
+  padding: 14px 12px;
+  border-radius: var(--card-radius, 8px);
+}
+.score-item > .participant-avatar {
+  grid-column: 1;
+  grid-row: 1/3;
+}
+.score-item .participant-name {
+  grid-column: 2;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.score-item > strong {
+  grid-column: 2;
+  font-size: 24px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+}
+.score-item .helper {
+  font-size: 11px;
+  margin-top: 3px;
+}
+.participant-avatar {
+  display: block;
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 50%;
+  flex: none;
+}
+.participant-avatar.small {
+  width: 32px;
+  height: 32px;
+}
+.host-identity {
+  border-top: 1px solid var(--line);
+  margin-top: 18px;
+  padding-top: 16px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.host-identity > div {
+  min-width: 0;
+}
+.game-controls {
+  flex-wrap: wrap;
+}
+.editor-toolbar {
+  border-bottom: 1px solid var(--line);
+}
+.editor-toolbar h1 {
+  font-weight: 550;
+}
+@media (max-width: 1400px) {
+  .page,
+  .site-footer {
+    margin-left: 40px;
+    margin-right: 40px;
+  }
+}
+@media (max-width: 1100px) {
+  .topbar {
+    height: auto;
+    padding: 20px 28px 0;
+    gap: 18px 28px;
+  }
+  .topbar nav {
+    width: 100%;
+    order: 3;
+    flex-wrap: wrap;
+    gap: 8px 24px;
+  }
+}
+@media (max-width: 950px) {
+  .game-v2 .room-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .score-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 700px) {
+  .topbar {
+    padding: 18px 16px 0;
+  }
+  .topbar nav {
+    gap: 4px 18px;
+    font-size: 12px;
+  }
+  .topbar nav a {
+    min-height: 44px;
+  }
+  .brand {
+    font-size: 22px;
+  }
+  .account-link {
+    font-size: 12px;
+  }
+  .account-link > span:last-child {
+    max-width: 95px;
+  }
+  .page,
+  .site-footer {
+    margin: 0 16px;
+    padding-top: 26px;
+  }
+  .catalogue-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .filters {
+    padding: 14px;
+  }
+  .room {
+    margin: 0;
+    padding: 0;
+  }
+  .board-row {
+    grid-template-columns: minmax(70px, 1.5fr) repeat(var(--columns, 5), minmax(44px, 1fr));
+  }
+  .board-theme {
+    padding: 8px 5px;
+    font-size: 11px;
+  }
+  .board-cell {
+    min-height: 68px;
+    font-size: 22px;
+    padding: 18px 2px;
+  }
+  .score-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .score-item {
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 7px 9px;
+    padding: 12px 9px;
+  }
+  .score-item > .participant-avatar {
+    width: 36px;
+    height: 36px;
+  }
+  .score-item > strong {
+    font-size: 23px;
+  }
+  .question-stage {
+    padding: 24px 18px;
+  }
+  .site-footer {
+    gap: 14px;
+    padding-bottom: 24px;
+  }
+}

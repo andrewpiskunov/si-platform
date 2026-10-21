@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Avatar from '#lib/Avatar.svelte';
   import {
     readRoomCredentials,
     saveRoomCredentials,
@@ -798,7 +799,8 @@
                   class="score-item"
                   class:winner={participant.id === roomState.winner}
                 >
-                  <span>{participant.name}{participant.id === roomState?.you ? ' (вы)' : ''}</span
+                  <Avatar identity={participant.id} /><span class="participant-name"
+                    >{participant.name}{participant.id === roomState?.you ? ' (вы)' : ''}</span
                   ><strong>{participant.score}</strong>
                 </div>{/each}
             </div>

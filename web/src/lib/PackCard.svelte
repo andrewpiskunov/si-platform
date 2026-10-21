@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { page } from '$app/state';
   import { contextLink, roomContext } from './appearance.ts';
   import type { Card } from './types';
@@ -11,7 +12,8 @@
   href={contextLink(studio ? `/studio/${card.id}` : `/packs/${card.id}`, roomContext(page.url))}
 >
   <div class="card-symbol">
-    <span aria-hidden="true">? / !</span><span class="pill"
+    <span class="pack-cover-title" aria-hidden="true">{card.name || 'Новый пакет'}</span><span
+      class="pill"
       >{studio
         ? statusText[card.status] || card.status
         : card.has_media
@@ -30,7 +32,7 @@
   </div>
   <div class="pack-card-foot">
     <span>{card.question_count} вопросов · {card.round_count} раундов</span><span
-      >{bytes(card.size_bytes)} ↗</span
+      >{bytes(card.size_bytes)} <Icon name="arrow" /></span
     >
   </div>
 </a>

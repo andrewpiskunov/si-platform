@@ -20,7 +20,7 @@
           type="checkbox"
           checked={$detail.preferences.classic}
           onchange={(event) => update('classic', event.currentTarget.checked)}
-        />Классическое оформление</label
+        />Базовое оформление «Эфир»</label
       >
       <label class="check"
         ><input

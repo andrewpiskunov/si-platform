@@ -44,7 +44,7 @@
 <fieldset disabled={disabled || busy}>
   <legend>Настроение вечера</legend>
   <div class="choices">
-    {#each [{ id: 'classic', name: 'Классика' }, { id: 'pirate', name: 'Пираты' }, { id: 'anime', name: 'Аниме' }] as option}<button
+    {#each [{ id: 'classic', name: 'Эфир' }, { id: 'pirate', name: 'Пираты' }, { id: 'anime', name: 'Аниме' }] as option}<button
         type="button"
         class:selected={value.builtin === option.id}
         aria-pressed={value.builtin === option.id}

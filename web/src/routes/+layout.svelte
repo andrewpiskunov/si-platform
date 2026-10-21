@@ -1,5 +1,8 @@
 <script lang="ts">
   import '../app.css';
+  import '../broadcast.css'; // Approved Broadcast appearance
+  import Avatar from '#lib/Avatar.svelte';
+  import Icon from '#lib/Icon.svelte';
   import { readRoomCredentials } from '#lib/room-credentials.ts';
   import { onMount, setContext, untrack } from 'svelte';
   import { beforeNavigate } from '$app/navigation';
@@ -76,7 +79,7 @@
 >
 <div
   class="app-shell"
-  data-theme={$roomTheme || ($themeDetail.manifest ? 'custom' : undefined)}
+  data-theme={$roomTheme || ($themeDetail.manifest ? 'custom' : 'classic')}
   style={$themeDetail.style}
 >
   {#if $themeDetail.manifest?.background && $themeDetail.images[$themeDetail.manifest.background]}<img
@@ -104,12 +107,14 @@
             class="theme-logo"
             src={$themeDetail.images[$themeDetail.manifest.logo]}
             alt=""
-          />{:else}С{/if}</span
+          />{:else}<span class="broadcast-mark" aria-hidden="true"
+            ><i></i><i></i><i></i><i></i></span
+          >{/if}</span
       ><span>Своя<span class="brand-light"> игра</span></span></a
     >
     <nav aria-label="Основная навигация">
       <a class:active={page.url.pathname === '/'} href={contextLink('/', context)}>Каталог</a><a
-        class:active={page.url.pathname === '/rooms'}
+        class:active={page.url.pathname.startsWith('/rooms')}
         href={contextLink('/rooms', context)}>Комнаты</a
       ><a
         class:active={page.url.pathname.startsWith('/studio')}
@@ -121,7 +126,7 @@
         >{/if}
     </nav>
     <a class="account-link" href={contextLink($user ? '/account' : '/login', context)}
-      ><span class="avatar">{$user?.display_name?.slice(0, 1) || '↗'}</span><span
+      >{#if $user}<Avatar identity={$user.id} small />{:else}<Icon name="user" />{/if}<span
         >{$user?.display_name || 'Войти'}</span
       ></a
     >

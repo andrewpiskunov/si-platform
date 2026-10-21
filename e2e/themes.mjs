@@ -112,9 +112,13 @@ async function stage(client, kind) {
 async function applyAppearance(host, value) {
   const panel = await details(host.page, '.theme-apply');
   if (value.theme_id) await panel.getByLabel('Моя тема', { exact: true }).selectOption(value.theme_id);
-  else await panel.getByRole('button', { name: { classic: 'Классика', pirate: 'Пираты', anime: 'Аниме' }[value.builtin], exact: true }).click();
+  else await panel.getByRole('button', { name: { classic: 'Эфир', pirate: 'Пираты', anime: 'Аниме' }[value.builtin], exact: true }).click();
   await panel.getByRole('button', { name: 'Применить оформление', exact: true }).click();
-  await until(() => value.theme_id ? host.state?.appearance?.theme_id === value.theme_id : host.state?.appearance?.builtin === value.builtin, 'appearance command did not arrive');
+  try {
+    await until(() => value.theme_id ? host.state?.appearance?.theme_id === value.theme_id : host.state?.appearance?.builtin === value.builtin, 'appearance command did not arrive');
+  } catch (error) {
+    throw new Error(`${error.message}; UI: ${await panel.locator('[role=alert]').allTextContents()}`);
+  }
 }
 async function uploadUI(page, data, name) {
   await page.getByLabel('ZIP темы', { exact: true }).setInputFiles({ name, mimeType: 'application/zip', buffer: data });
@@ -234,10 +238,10 @@ try {
   await until(() => new URL(catalogue.page.url()).searchParams.get('q') === 'ничего', 'catalogue filter did not navigate');
   assert.equal(new URL(catalogue.page.url()).searchParams.get('room'), room, 'catalogue filter lost room context');
   await shell(catalogue, 'custom');
-  await preference(mobile, 'Классическое оформление', true); await shell(mobile, 'classic'); await shell(host, 'custom'); await shell(catalogue, 'custom');
+  await preference(mobile, 'Базовое оформление «Эфир»', true); await shell(mobile, 'classic'); await shell(host, 'custom'); await shell(catalogue, 'custom');
   await preference(mobile, 'Экономное качество оформления', false);
   const beforeStandard = mobile.assetRequests.length;
-  await preference(mobile, 'Классическое оформление', false); await shell(mobile, 'custom'); await decorLoaded(mobile.page);
+  await preference(mobile, 'Базовое оформление «Эфир»', false); await shell(mobile, 'custom'); await decorLoaded(mobile.page);
   assert.ok(mobile.assetRequests.slice(beforeStandard).every(r => r.quality === 'standard'));
   const savedPreferences = await mobile.page.evaluate(id => JSON.parse(sessionStorage.getItem('appearance:' + id)), room);
   assert.deepEqual(savedPreferences, { classic: false, economy: false });

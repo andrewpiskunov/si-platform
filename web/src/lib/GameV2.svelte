@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Avatar from './Avatar.svelte';
   import {
     actionFor,
     captureScope,
@@ -50,6 +51,7 @@
     board?.rounds.find((item) => item.id === (selectedRound || view.round?.id)) || board?.rounds[0]
   );
   const players = $derived(room.participants.filter((p) => p.role === 'player' && !p.removed));
+  const host = $derived(room.participants.find((p) => p.role === 'host' && !p.removed));
   const isHost = $derived(room.participants.some((p) => p.id === room.you && p.role === 'host'));
   const blocked = $derived(!ready || pending > 0);
   const visibleSubmissions = $derived(
@@ -324,7 +326,8 @@
           {#each room.phase === 'finished' ? [...players].sort((a, b) => b.score - a.score) : players as participant}{@const status =
               view.players?.find((p) => p.id === participant.id)}
             <div class="score-item" class:winner={view.stage.turn_id === participant.id}>
-              <div>
+              <Avatar identity={participant.id} />
+              <div class="participant-name">
                 {participant.name}{participant.id === room.you ? ' (вы)' : ''}
                 <div class="helper">
                   {status?.wager_submitted ? 'Ставка принята · ' : ''}{status?.answer_submitted
@@ -337,9 +340,13 @@
               <strong>{participant.score}</strong>
             </div>{/each}
         </div>
-        <p class="helper" style="margin-top:16px">
-          Ведущий: {name(room.participants.find((p) => p.role === 'host')?.id)}
-        </p>
+        {#if host}<div class="host-identity">
+            <Avatar identity={host.id} small />
+            <div>
+              <span class="helper">Ведущий</span>
+              <div>{host.name}</div>
+            </div>
+          </div>{/if}
       </div>
       <RoomParticipants
         {room}
