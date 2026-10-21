@@ -80,3 +80,44 @@ func TestMembershipReconcilesLostDeliveryAndReadFailure(t *testing.T) {
 		}
 	}
 }
+
+func TestMembershipPreauthenticatedAttachIsRejected(t *testing.T) {
+	s, _, store := setup(t)
+	ctx := context.Background()
+	h, err := store.Create(ctx, "Host")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := store.Join(ctx, h.RoomID, h.InviteToken, "Player", game.Player)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, _ := store.Load(ctx, h.RoomID)
+	state.Gameplay = game.NewSession(game.DefaultRules())
+	raw, _ := json.Marshal(state)
+	if _, err = store.Pool().Exec(ctx, "UPDATE rooms SET snapshot=$2 WHERE id=$1", h.RoomID, raw); err != nil {
+		t.Fatal(err)
+	}
+	id, err := store.Authenticate(ctx, h.RoomID, p.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(game.RemovalPayload{TargetID: id, Mode: "kick"})
+	out, err := store.Execute(ctx, h.RoomID, h.ParticipantID, game.Command{Version: 2, ID: "before-attach", Type: "remove_participant", ExpectedSeq: &state.Seq, Data: data})
+	if err != nil || out.Code != "ok" {
+		t.Fatal(out, err)
+	}
+	rm, err := s.getRoom(ctx, h.RoomID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, appearance := range []bool{false, true} {
+		cctx, cancel := context.WithCancel(ctx)
+		c := &client{id: id, appearanceOnly: appearance, ctx: cctx, cancel: cancel, out: newOutbox()}
+		err = rm.attach(ctx, c)
+		cancel()
+		if game.Code(err) != "unauthorized" {
+			t.Fatal("preauthenticated attach", appearance, err)
+		}
+	}
+}
