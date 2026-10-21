@@ -58,9 +58,14 @@ type ScoreChange struct {
 	Score         int64  `json:"score"`
 }
 type PublicEvent struct {
-	Appeals   []game.Appeal   `json:"appeals"`
-	Decisions []game.Decision `json:"decisions"`
-	Changes   []ScoreChange   `json:"changes"`
+	Appeals     []game.Appeal   `json:"appeals"`
+	Decisions   []game.Decision `json:"decisions"`
+	Changes     []ScoreChange   `json:"changes"`
+	RulesChange *RulesChange    `json:"rules_change,omitempty"`
+}
+type RulesChange struct {
+	Version int64      `json:"version"`
+	Rules   game.Rules `json:"rules"`
 }
 type ResultEvent struct {
 	Seq       int64     `json:"seq"`

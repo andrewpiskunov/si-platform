@@ -76,6 +76,13 @@ type LibraryDecision struct {
 	CreatedAt   pgtype.Timestamptz
 }
 
+type LibraryMediaReceipt struct {
+	PackID    string
+	UploadID  string
+	Revision  int32
+	CreatedAt pgtype.Timestamptz
+}
+
 type LibraryPack struct {
 	ID                string
 	OwnerID           string
@@ -111,6 +118,8 @@ type LibraryRevision struct {
 	Status      string
 	Rights      []byte
 	UpdatedAt   pgtype.Timestamptz
+	SearchText  string
+	AgeRating   pgtype.Int2
 }
 
 type Room struct {
@@ -119,6 +128,7 @@ type Room struct {
 	Seq        int64
 	InviteHash string
 	CreatedAt  pgtype.Timestamptz
+	Visibility pgtype.Text
 }
 
 type RoomPack struct {
@@ -131,26 +141,71 @@ type RoomPack struct {
 	DemoDocument []byte
 }
 
+type RoomThemePin struct {
+	RoomID   string
+	ThemeID  string
+	Revision int32
+	Hash     string
+}
+
 type Session struct {
 	TokenHash     string
 	RoomID        string
 	ParticipantID string
 }
 
+type Theme struct {
+	ID              string
+	OwnerID         string
+	CurrentRevision int32
+	Blocked         bool
+	DeletedAt       pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+type ThemeModeration struct {
+	ID        int64
+	ThemeID   string
+	ActorID   string
+	Blocked   bool
+	Reason    string
+	CreatedAt pgtype.Timestamptz
+}
+
+type ThemeReceipt struct {
+	UploadID string
+	ThemeID  string
+	Revision int32
+}
+
+type ThemeVersion struct {
+	ThemeID   string
+	Revision  int32
+	Prepared  []byte
+	SizeBytes int64
+	CreatedAt pgtype.Timestamptz
+}
+
 type Upload struct {
-	ID            string
-	OwnerID       string
-	CredentialID  string
-	Name          string
-	Size          int64
-	OffsetBytes   int64
-	Status        string
-	DraftID       string
-	Error         string
-	LeaseEpoch    int64
-	StagedDeleted bool
-	StoredKeys    []string
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
-	ExpiresAt     pgtype.Timestamptz
+	ID               string
+	OwnerID          string
+	CredentialID     string
+	Name             string
+	Size             int64
+	OffsetBytes      int64
+	Status           string
+	DraftID          string
+	Error            string
+	LeaseEpoch       int64
+	StagedDeleted    bool
+	StoredKeys       []string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	ExpiresAt        pgtype.Timestamptz
+	Purpose          string
+	MediaKind        string
+	ResultAsset      []byte
+	ResultTheme      []byte
+	DiagnosticIssues []byte
 }

@@ -84,6 +84,14 @@ func (s *Store) execute(ctx context.Context, roomID, actorID string, c game.Comm
 	next, transitionErr := game.ApplyAt(state, actorID, c, now, entropy)
 	code := game.Code(transitionErr)
 	if transitionErr == nil {
+		if state.Settings.Visibility == "public" && next.Settings.Visibility == "private" {
+			// No invite secret enters a receipt, event, or broadcast. The host
+			// explicitly issues a fresh link with RotateInvite after closing.
+			// This runs only once: command replay returns above this branch.
+			if err = q.SetInvite(ctx, db.SetInviteParams{ID: roomID, InviteHash: digest(randomHex(32))}); err != nil {
+				return Outcome{}, err
+			}
+		}
 		if appearance != nil {
 			if err = saveAppearance(ctx, tx, roomID, *appearance); err != nil {
 				return Outcome{}, err

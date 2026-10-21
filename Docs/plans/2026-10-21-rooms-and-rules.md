@@ -28,19 +28,19 @@
 **Files:** только internal/game, включая settings.go/test и существующие state/v2_command/v2_engine/v2_projection.
 **Interfaces:** RoomSettings/Normalized/Validate/SettingsPayload{Settings RoomSettings}; State/View.Settings; CanJoinRole(State,Role) bool (same limits/phase as AddParticipant); `set_room_settings` с expected_seq. Не менять storage/web.
 
-- [ ] RED тесты default/projection, URL validation, all role/phase/seq gates, legacy behavior, CanJoinRole limits; `go test ./internal/game` ожидаемый RED absent types/behavior.
-- [ ] Implement минимальный переход и allowed action в lobby/paused; frozen gameplay/rules не меняются; settings в legacy projection тоже. Не расширять допустимость set_rules.
-- [ ] Full `go test -race ./internal/game` → GREEN; return файлы и факты без отдельного commit/reviewer.
+- [x] RED тесты default/projection, URL validation, all role/phase/seq gates, legacy behavior, CanJoinRole limits; `go test ./internal/game` ожидаемый RED absent types/behavior.
+- [x] Implement минимальный переход и allowed action в lobby/paused; frozen gameplay/rules не меняются; settings в legacy projection тоже. Не расширять допустимость set_rules.
+- [x] Full `go test -race ./internal/game` → GREEN; return файлы и факты без отдельного commit/reviewer.
 
 ## Task 2 — PostgreSQL и HTTP (root)
 
 **Files:** migration11/sqlc, storage/postgres settings/list/tests, store/game_setup/commands/room_controls/game_clock, server play/server/room_controls/tests.
 **Consumes:** Task1 RoomSettings; общий CanJoinRole. **Produces:** GET rooms exact DTO, create.settings, public join, rules_change events.
 
-- [ ] RED integration: default migration/public list privacy + limits/cursor, public/private admission, closure/invite replay/retained credential, role/phase/transfer/seq, journal rules change; real PostgreSQL.
-- [ ] Add generated column/index and regenerate sqlc; defaults/validate creation/Load; public DTO query with bounded scan; locked Join decision; invalidate invite only accepted transition, duplicate path unchanged; explicit rules delta.
-- [ ] RED HTTP create/list/join/cache/invalid inputs using existing fixtures, implement routes/fields/error mapping.
-- [ ] Focused then full relevant `go test -race ./internal/storage/postgres ./internal/server ./internal/game`, vet → GREEN, scoped commit including Task1.
+- [x] RED integration: default migration/public list privacy + limits/cursor, public/private admission, closure/invite replay/retained credential, role/phase/transfer/seq, journal rules change; real PostgreSQL.
+- [x] Add generated column/index and regenerate sqlc; defaults/validate creation/Load; public DTO query with bounded scan; locked Join decision; invalidate invite only accepted transition, duplicate path unchanged; explicit rules delta.
+- [x] RED HTTP create/list/join/cache/invalid inputs using existing fixtures, implement routes/fields/error mapping.
+- [x] Focused then full relevant `go test -race ./internal/storage/postgres ./internal/server ./internal/game`, vet → GREEN, scoped commit including Task1.
 
 ## Task 3 — Web UI (independent worker)
 

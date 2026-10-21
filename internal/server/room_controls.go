@@ -4,10 +4,27 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"siplatform/internal/game"
 )
+
+func (s *Server) publicRooms(w http.ResponseWriter, r *http.Request) {
+	limit, err := queryInt(r, "limit", 50)
+	if err != nil {
+		appError(w, err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	out, err := s.store.ListPublicRooms(ctx, r.URL.Query().Get("after"), limit)
+	if err != nil {
+		appError(w, err)
+		return
+	}
+	writeJSON(w, 200, out)
+}
 
 func (s *Server) rotateInvite(w http.ResponseWriter, r *http.Request) {
 	actor, err := s.roomIdentity(r)

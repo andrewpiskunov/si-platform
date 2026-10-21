@@ -47,6 +47,7 @@ func decode(row db.Room) (game.State, error) {
 	if err == nil && (state.ID != row.ID || state.Seq != row.Seq) {
 		err = errors.New("room snapshot sequence mismatch")
 	}
+	state.Settings = state.Settings.Normalized()
 	return state, err
 }
 func normalize(err error) error {
@@ -84,6 +85,13 @@ func (s *Store) create(ctx context.Context, name string, setup *GameSetup) (Cred
 	}
 	c := Credentials{RoomID: randomHex(16), ParticipantID: randomHex(16), Token: randomHex(32), InviteToken: randomHex(32)}
 	state := game.State{ID: c.RoomID, Seq: 1, Phase: game.Lobby, Participants: []game.Participant{{ID: c.ParticipantID, Name: name, Role: game.Host}}}
+	state.Settings = state.Settings.Normalized()
+	if setup != nil && setup.Settings != nil {
+		if err := setup.Settings.Validate(); err != nil {
+			return Credentials{}, err
+		}
+		state.Settings = *setup.Settings
+	}
 	if setup != nil {
 		a := setup.selectedAppearance()
 		state.Appearance = &a
@@ -142,9 +150,6 @@ func (s *Store) create(ctx context.Context, name string, setup *GameSetup) (Cred
 	return c, nil
 }
 func (s *Store) Join(ctx context.Context, roomID, invite, name string, role game.Role) (Credentials, error) {
-	if len(invite) != 64 {
-		return Credentials{}, game.Fault("unauthorized")
-	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Credentials{}, err
@@ -158,12 +163,14 @@ func (s *Store) Join(ctx context.Context, roomID, invite, name string, role game
 	if err != nil {
 		return Credentials{}, normalize(err)
 	}
-	if subtle.ConstantTimeCompare([]byte(row.InviteHash), []byte(digest(invite))) != 1 {
-		return Credentials{}, game.Fault("unauthorized")
-	}
 	state, err := decode(row)
 	if err != nil {
 		return Credentials{}, err
+	}
+	// Admission and membership are decided from the same locked snapshot.
+	// A stale public listing must never bypass a committed privacy change.
+	if state.Settings.Visibility != "public" && (len(invite) != 64 || subtle.ConstantTimeCompare([]byte(row.InviteHash), []byte(digest(invite))) != 1) {
+		return Credentials{}, game.Fault("unauthorized")
 	}
 	c := Credentials{RoomID: roomID, ParticipantID: randomHex(16), Token: randomHex(32)}
 	next, err := game.AddParticipant(state, game.Participant{ID: c.ParticipantID, Name: name, Role: role})

@@ -106,7 +106,7 @@ func (q *Queries) FindCommand(ctx context.Context, arg FindCommandParams) (Comma
 }
 
 const getRoom = `-- name: GetRoom :one
-SELECT id, snapshot, seq, invite_hash, created_at FROM rooms WHERE id = $1
+SELECT id, snapshot, seq, invite_hash, created_at, visibility FROM rooms WHERE id = $1
 `
 
 func (q *Queries) GetRoom(ctx context.Context, id string) (Room, error) {
@@ -118,6 +118,7 @@ func (q *Queries) GetRoom(ctx context.Context, id string) (Room, error) {
 		&i.Seq,
 		&i.InviteHash,
 		&i.CreatedAt,
+		&i.Visibility,
 	)
 	return i, err
 }
@@ -183,7 +184,7 @@ func (q *Queries) LockOwner(ctx context.Context) (int64, error) {
 }
 
 const lockRoom = `-- name: LockRoom :one
-SELECT id, snapshot, seq, invite_hash, created_at FROM rooms WHERE id = $1 FOR UPDATE
+SELECT id, snapshot, seq, invite_hash, created_at, visibility FROM rooms WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockRoom(ctx context.Context, id string) (Room, error) {
@@ -195,6 +196,7 @@ func (q *Queries) LockRoom(ctx context.Context, id string) (Room, error) {
 		&i.Seq,
 		&i.InviteHash,
 		&i.CreatedAt,
+		&i.Visibility,
 	)
 	return i, err
 }

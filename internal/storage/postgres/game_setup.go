@@ -21,6 +21,7 @@ type GameSetup struct {
 	DemoDocument          *packs.Document
 	Rules                 *game.Rules
 	Appearance            *game.Appearance
+	Settings              *game.RoomSettings
 }
 
 func (g GameSetup) authorize(ctx context.Context, tx pgx.Tx) error {

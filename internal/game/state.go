@@ -44,6 +44,7 @@ type Question struct {
 	Value  int64  `json:"value"`
 }
 type State struct {
+	Settings     RoomSettings  `json:"settings"`
 	Appearance   *Appearance   `json:"appearance,omitempty"`
 	Gameplay     *Session      `json:"gameplay,omitempty"`
 	ID           string        `json:"room_id"`
@@ -56,6 +57,7 @@ type State struct {
 	Asked        []string      `json:"asked,omitempty"`
 }
 type View struct {
+	Settings     RoomSettings  `json:"settings"`
 	Appearance   *Appearance   `json:"appearance,omitempty"`
 	Gameplay     *SessionView  `json:"gameplay,omitempty"`
 	ID           string        `json:"room_id"`
@@ -113,6 +115,37 @@ func ValidName(name string) bool {
 	}
 	return !strings.ContainsFunc(name, unicode.IsControl)
 }
+
+// CanJoinRole describes admission using the same phase and seat rules as joining.
+func CanJoinRole(s State, role Role) bool { return joinRoleError(s, role) == nil }
+
+func joinRoleError(s State, role Role) error {
+	if role != Player && role != Spectator {
+		return Fault("invalid_participant")
+	}
+	if s.Phase == Finished {
+		return Fault("finished")
+	}
+	count := 0
+	for _, existing := range s.Participants {
+		if existing.Role == role {
+			count++
+		}
+	}
+	limit := 12
+	if role == Spectator {
+		limit = 20
+	}
+	if count >= limit {
+		return Fault("room_full")
+	}
+	// New players join only between questions. Spectators can join at any phase.
+	if role == Player && !betweenQuestions(s) {
+		return Fault("question_in_progress")
+	}
+	return nil
+}
+
 func AddParticipant(s State, p Participant) (State, error) {
 	if !ValidName(p.Name) || p.ID == "" || (p.Role != Player && p.Role != Spectator) {
 		return s, Fault("invalid_participant")
@@ -123,22 +156,8 @@ func AddParticipant(s State, p Participant) (State, error) {
 	if _, exists := s.Participant(p.ID); exists {
 		return s, Fault("duplicate_participant")
 	}
-	count := 0
-	for _, existing := range s.Participants {
-		if existing.Role == p.Role {
-			count++
-		}
-	}
-	limit := 12
-	if p.Role == Spectator {
-		limit = 20
-	}
-	if count >= limit {
-		return s, Fault("room_full")
-	}
-	// New players join only between questions. Spectators can join at any phase.
-	if p.Role == Player && !betweenQuestions(s) {
-		return s, Fault("question_in_progress")
+	if err := joinRoleError(s, p.Role); err != nil {
+		return s, err
 	}
 	n := s.Clone()
 	p.Score = 0
@@ -152,7 +171,7 @@ func projectLegacy(s State, id string) View {
 	if n.Question != nil && p.Role != Host && n.Phase != Resolved && n.Phase != Finished {
 		n.Question.Answer = ""
 	}
-	return View{Appearance: n.Appearance, ID: n.ID, Seq: n.Seq, Phase: n.Phase, Participants: n.Participants, Question: n.Question, Winner: n.Winner, You: id}
+	return View{Settings: n.Settings.Normalized(), Appearance: n.Appearance, ID: n.ID, Seq: n.Seq, Phase: n.Phase, Participants: n.Participants, Question: n.Question, Winner: n.Winner, You: id}
 }
 
 // Pause suspends only an active question; safe to call repeatedly on disconnect/restart.

@@ -62,6 +62,9 @@ func publicDelta(before, after game.State) PublicEvent {
 		}
 	}
 	if after.Gameplay != nil {
+		if before.Gameplay != nil && after.Gameplay.RulesVersion > before.Gameplay.RulesVersion {
+			out.RulesChange = &RulesChange{Version: after.Gameplay.RulesVersion, Rules: after.Gameplay.Rules}
+		}
 		for _, a := range after.Gameplay.Appeals {
 			if prior, ok := priorAppeals[a.ID]; !ok || prior != a {
 				out.Appeals = append(out.Appeals, a)

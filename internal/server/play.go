@@ -27,13 +27,14 @@ func (s *Server) createGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		HostName   string           `json:"host_name"`
-		PackID     string           `json:"pack_id"`
-		Revision   int              `json:"revision"`
-		Title      string           `json:"title"`
-		Theme      string           `json:"theme"`
-		Rules      *game.Rules      `json:"rules,omitempty"`
-		Appearance *game.Appearance `json:"appearance,omitempty"`
+		HostName   string             `json:"host_name"`
+		PackID     string             `json:"pack_id"`
+		Revision   int                `json:"revision"`
+		Title      string             `json:"title"`
+		Theme      string             `json:"theme"`
+		Rules      *game.Rules        `json:"rules,omitempty"`
+		Appearance *game.Appearance   `json:"appearance,omitempty"`
+		Settings   *game.RoomSettings `json:"settings,omitempty"`
 	}
 	if err := readJSON(w, r, &req); err != nil {
 		appError(w, err)
@@ -47,7 +48,7 @@ func (s *Server) createGame(w http.ResponseWriter, r *http.Request) {
 		appError(w, err)
 		return
 	}
-	setup := postgres.GameSetup{Appearance: req.Appearance, Rules: &rules, ActorID: a.User.ID, CredentialID: a.SessionID, PackID: req.PackID, Revision: req.Revision, Title: strings.TrimSpace(req.Title), Theme: req.Theme}
+	setup := postgres.GameSetup{Settings: req.Settings, Appearance: req.Appearance, Rules: &rules, ActorID: a.User.ID, CredentialID: a.SessionID, PackID: req.PackID, Revision: req.Revision, Title: strings.TrimSpace(req.Title), Theme: req.Theme}
 	if setup.Title == "" {
 		setup.Title = "Своя игра"
 	}

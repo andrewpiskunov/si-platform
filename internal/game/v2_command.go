@@ -26,6 +26,8 @@ func (c Command) Payload() (any, error) {
 		p = &RulesPayload{}
 	case "set_appearance":
 		p = &AppearancePayload{}
+	case "set_room_settings":
+		p = &SettingsPayload{}
 	case "pause", "resume", "finish":
 		p = &EmptyPayload{}
 	case "extend":
@@ -72,6 +74,8 @@ func (c Command) Payload() (any, error) {
 	}
 	valid := true
 	switch x := p.(type) {
+	case *SettingsPayload:
+		valid = c.ExpectedSeq != nil && x.Settings.Validate() == nil
 	case *AppearancePayload:
 		valid = c.ExpectedSeq != nil && x.Appearance.Validate() == nil
 	case *BeginRoundPayload:
