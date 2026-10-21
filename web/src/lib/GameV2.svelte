@@ -40,7 +40,7 @@
     onround: (id: string) => void;
     onselect: (id: string, replay?: boolean) => void;
     onresults: () => void;
-    onunauthorized: () => void;
+    onunauthorized: (room: string, token: string) => void;
   } = $props();
   let error = $state(''),
     selectedRound = $state(''),

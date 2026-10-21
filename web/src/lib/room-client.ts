@@ -1,4 +1,4 @@
-import { clearRoomCredentials } from './room-credentials.ts';
+import { clearRoomCredentials, readRoomCredentials } from './room-credentials.ts';
 import { api, APIError } from './api.ts';
 import type { Appearance } from './appearance.ts';
 import type { SessionView, V2Command } from './game-v2.ts';
@@ -204,17 +204,22 @@ export class RoomConnection {
         socket.close();
     };
     socket.onclose = () => {
+      if (this.stopped || socket !== this.socket) return;
       this.protocol.disconnected();
-      if (this.stopped) return;
       this.update(this.protocol, 'reconnecting');
       this.timer = setTimeout(() => this.connect(), Math.min(1000 * 2 ** this.attempts++, 15000));
     };
     socket.onerror = () => socket.close();
   }
   revoke() {
+    if (this.stopped) return;
+    const token = this.protocol.token;
+    const saved = readRoomCredentials(this.room);
+    const superseded = !!saved && saved.token !== token;
     this.protocol.receive({ v: 1, type: 'error', code: 'unauthorized' });
-    clearRoomCredentials(this.room);
+    clearRoomCredentials(this.room, token);
     this.close();
+    if (superseded) return;
     this.update(this.protocol, 'revoked', 'unauthorized');
   }
   send(type: string, fields: { question_id?: string; correct?: boolean } = {}) {

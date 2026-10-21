@@ -53,3 +53,11 @@ test('revocation shadows stale storage even when removeItem is denied', () => {
     else Reflect.deleteProperty(globalThis, 'sessionStorage');
   }
 });
+test('conditional revocation cannot erase a newer credential for the same room', () => {
+  const fresh = { room_id: 'same-room-generation', participant_id: 'new', token: 'new-token' };
+  saveRoomCredentials(fresh);
+  clearRoomCredentials(fresh.room_id, 'old-token');
+  assert.equal(readRoomCredentials(fresh.room_id)?.token, 'new-token');
+  clearRoomCredentials(fresh.room_id, 'new-token');
+  assert.equal(readRoomCredentials(fresh.room_id), null);
+});

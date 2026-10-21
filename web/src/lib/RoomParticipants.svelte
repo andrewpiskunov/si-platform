@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
+  import { RoomRequestScope } from './room-request.ts';
   import { api, errorText } from './api.ts';
   import { prepareAction, type SessionView, type V2Command } from './game-v2.ts';
   import type { Participant, RoomState } from './room-client.ts';
@@ -16,7 +18,7 @@
     token: string;
     disabled: boolean;
     onsend: (command: V2Command) => void;
-    onunauthorized: () => void;
+    onunauthorized: (room: string, token: string) => void;
   } = $props();
   let target = $state(''),
     confirmation = $state<{ id: string; mode: 'kick' | 'ban_guest_session'; seq: number } | null>(
@@ -49,24 +51,32 @@
       confirmation = null;
     }
   }
+  const requests = new RoomRequestScope();
+  onDestroy(() => requests.dispose());
   async function load(after = '') {
+    const request = requests.begin(room.room_id, token);
+    const current = () => requests.current(request, () => ({ room: room?.room_id, token }));
     loading = true;
     error = '';
     try {
       const result = await api<{ items: Participant[]; next_after?: string }>(
-        `/rooms/${room.room_id}/roster?limit=50${after ? `&after=${encodeURIComponent(after)}` : ''}`,
+        `/rooms/${request.room}/roster?limit=50${after ? `&after=${encodeURIComponent(after)}` : ''}`,
         'GET',
         undefined,
-        token
+        request.token,
+        request.signal
       );
+      if (!current()) return;
       roster = after ? [...roster, ...result.items] : result.items;
       next = result.next_after;
       loaded = true;
     } catch (e) {
-      if (e instanceof Error && e.message === 'unauthorized') onunauthorized();
+      if (!current()) return;
+      if (e instanceof Error && e.message === 'unauthorized')
+        onunauthorized(request.room, request.token);
       else error = errorText(e);
     } finally {
-      loading = false;
+      if (current()) loading = false;
     }
   }
 </script>

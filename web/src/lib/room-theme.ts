@@ -1,4 +1,4 @@
-import { clearRoomCredentials } from './room-credentials.ts';
+import { clearRoomCredentials, readRoomCredentials } from './room-credentials.ts';
 import { writable } from 'svelte/store';
 import { api, APIError } from './api.ts';
 import {
@@ -204,10 +204,7 @@ export class AppearanceConnection {
     } catch (error) {
       if (this.stopped) return;
       if (error instanceof APIError && error.status === 401) {
-        clearRoomCredentials(this.room);
-        this.token = '';
-        this.close();
-        this.revoked();
+        this.revoke();
         return;
       }
       if (!(error instanceof APIError && error.code === 'guest_session_mismatch')) return;
@@ -228,25 +225,31 @@ export class AppearanceConnection {
     };
     socket.onmessage = (event) => {
       try {
-        if (this.stopped) return;
+        if (this.stopped || socket !== this.socket) return;
         const message = JSON.parse(event.data);
         if (message.type === 'appearance_refresh') {
           this.attempts = 0;
           this.refresh();
         }
         if (message.code === 'unauthorized') {
-          clearRoomCredentials(this.room);
-          this.token = '';
-          this.close();
-          this.revoked();
+          this.revoke();
         }
       } catch {}
     };
     socket.onclose = () => {
-      if (!this.stopped)
+      if (!this.stopped && socket === this.socket)
         this.timer = setTimeout(() => this.connect(), Math.min(1000 * 2 ** this.attempts++, 15000));
     };
     socket.onerror = () => socket.close();
+  }
+  private revoke() {
+    if (this.stopped) return;
+    const saved = readRoomCredentials(this.room);
+    const superseded = !!saved && saved.token !== this.token;
+    clearRoomCredentials(this.room, this.token);
+    this.token = '';
+    this.close();
+    if (!superseded) this.revoked();
   }
   close() {
     this.stopped = true;

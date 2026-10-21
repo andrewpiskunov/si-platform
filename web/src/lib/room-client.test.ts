@@ -141,6 +141,15 @@ test('bootstrap precedes socket; revocation clears stored credential and prevent
     await connection.connect();
     assert.equal(sockets.length, 1);
     assert.throws(() => connection.send('pause'), /disconnected/);
+    saveRoomCredentials({ room_id: 'bootstrap', participant_id: 'fresh', token: 'fresh-token' });
+    const updates = statuses.length;
+    sockets[0].onmessage?.({ data: JSON.stringify({ v: 1, type: 'error', code: 'unauthorized' }) });
+    sockets[0].onmessage?.({ data: JSON.stringify({ v: 1, type: 'snapshot', state: state(99) }) });
+    sockets[0].onclose?.();
+    connection.revoke();
+    assert.equal(readRoomCredentials('bootstrap')?.token, 'fresh-token');
+    assert.equal(connection.protocol.state, null);
+    assert.equal(statuses.length, updates, 'stopped socket delivered a late update');
   } finally {
     for (const [key, descriptor] of originals) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
@@ -211,4 +220,22 @@ test('bootstrap failures do not create sockets or schedule automatic retries; mi
       else Reflect.deleteProperty(globalThis, key);
     }
   }
+});
+test('revoking a superseded connection cannot clear the fresh room identity', async () => {
+  const { RoomConnection } = await import('./room-client.ts');
+  const { saveRoomCredentials, readRoomCredentials } = await import('./room-credentials.ts');
+  const statuses: string[] = [];
+  const old = new RoomConnection('rejoined-room', 'old-token', (_, status) =>
+    statuses.push(status)
+  );
+  saveRoomCredentials({ room_id: 'rejoined-room', participant_id: 'fresh', token: 'fresh-token' });
+  old.revoke();
+  assert.equal(readRoomCredentials('rejoined-room')?.token, 'fresh-token');
+  assert.equal(statuses.length, 0);
+  const fresh = new RoomConnection('rejoined-room', 'fresh-token', (_, status) =>
+    statuses.push(status)
+  );
+  fresh.revoke();
+  assert.equal(readRoomCredentials('rejoined-room'), null);
+  assert.deepEqual(statuses, ['revoked']);
 });

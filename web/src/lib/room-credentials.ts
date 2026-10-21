@@ -28,9 +28,12 @@ export function readRoomCredentials(room: string): Credentials | null {
   } catch {}
   return null;
 }
-export function clearRoomCredentials(room: string): void {
+export function clearRoomCredentials(room: string, expectedToken?: string): boolean {
+  if (expectedToken !== undefined && readRoomCredentials(room)?.token !== expectedToken)
+    return false;
   memory.set(room, null);
   try {
     sessionStorage.removeItem(`room:${room}`);
   } catch {}
+  return true;
 }

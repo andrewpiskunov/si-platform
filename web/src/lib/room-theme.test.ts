@@ -111,6 +111,30 @@ test('appearance revocation clears saved credential and releases theme without r
     assert.equal(get(theme), null);
     await connection.connect();
     assert.equal(count, 1);
+    saveRoomCredentials({
+      room_id: 'appearance-revoked',
+      participant_id: 'fresh',
+      token: 'fresh-token'
+    });
+    theme.select('anime');
+    socket?.onmessage?.({ data: JSON.stringify({ v: 1, type: 'error', code: 'unauthorized' }) });
+    assert.equal(get(theme), 'anime');
+    assert.equal(readRoomCredentials('appearance-revoked')?.token, 'fresh-token');
+    const old = new AppearanceConnection(
+      'appearance-revoked',
+      'fresh-token',
+      () => {},
+      () => theme.reset()
+    );
+    await old.connect();
+    saveRoomCredentials({
+      room_id: 'appearance-revoked',
+      participant_id: 'newest',
+      token: 'newest-token'
+    });
+    socket?.onmessage?.({ data: JSON.stringify({ v: 1, type: 'error', code: 'unauthorized' }) });
+    assert.equal(get(theme), 'anime');
+    assert.equal(readRoomCredentials('appearance-revoked')?.token, 'newest-token');
   } finally {
     for (const [key, descriptor] of originals) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);

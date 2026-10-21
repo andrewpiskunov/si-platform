@@ -52,6 +52,33 @@
   let roomID = $state('');
   const boardLoader = new BoardLoader<Board>();
   let alive = true;
+  let generation = 0;
+  function identity() {
+    const epoch = generation,
+      room = roomID,
+      token = credentials?.token,
+      active = connection;
+    return {
+      room,
+      token,
+      active,
+      current: () =>
+        alive &&
+        epoch === generation &&
+        room === roomID &&
+        token === credentials?.token &&
+        active === connection
+    };
+  }
+  function revokeIdentity(room: string, token: string) {
+    if (
+      alive &&
+      room === roomID &&
+      token === credentials?.token &&
+      token === connection?.protocol.token
+    )
+      connection.revoke();
+  }
   const me = $derived(
     roomState?.participants.find((participant) => participant.id === roomState?.you)
   );
@@ -82,6 +109,7 @@
     mounted = true;
     return () => {
       alive = false;
+      generation++;
       connection?.close();
       boardLoader.reset();
     };
@@ -91,6 +119,8 @@
     if (mounted && id !== roomID) initialize(id);
   });
   function initialize(id: string) {
+    generation++;
+    joining = selecting = rotating = false;
     connection?.close();
     boardLoader.reset();
     roomID = id;
@@ -120,9 +150,18 @@
       credentials.token,
       themePreferences(preferences, matchMedia('(max-width: 700px)').matches)
     );
-    const connectedRoom = roomID;
-    connection = new RoomConnection(roomID, credentials.token, (protocol, status, code) => {
-      if (!alive || connectedRoom !== roomID) return;
+    const connectedRoom = roomID,
+      connectedToken = credentials.token,
+      epoch = ++generation;
+    const active = new RoomConnection(roomID, connectedToken, (protocol, status, code) => {
+      if (
+        !alive ||
+        epoch !== generation ||
+        connectedRoom !== roomID ||
+        credentials?.token !== connectedToken ||
+        connection !== active
+      )
+        return;
       if (status === 'revoked') {
         releaseRevoked();
         return;
@@ -148,10 +187,12 @@
       roomTheme.observe(roomState?.appearance, protocol.appearanceEpoch, protocol.ready);
       if (roomState && protocol.ready) void loadBoard();
     });
-    connection.connect();
+    connection = active;
+    active.connect();
   }
   async function loadBoard(force = false) {
     if (!credentials || !roomState) return;
+    const scope = identity();
     const loadingRoom = roomID;
     const key = `${loadingRoom}:${roomState.gameplay?.round?.id || ''}:${roomState.gameplay?.stage.instance_id || roomState.question?.id || ''}:${roomState.phase}`;
     const token = credentials.token;
@@ -163,39 +204,44 @@
       );
       boardLoading = boardLoader.pending;
       const result = await pending;
-      if (alive && loadingRoom === roomID && result) {
+      if (scope.current() && result) {
         board = result;
         boardError = '';
         if (roundIndex >= result.rounds.length) roundIndex = 0;
       }
     } catch (e) {
-      if (alive && loadingRoom === roomID) {
-        if (e instanceof APIError && e.status === 401) connection?.revoke();
+      if (scope.current()) {
+        if (e instanceof APIError && e.status === 401) scope.active?.revoke();
         else boardError = errorText(e);
       }
     } finally {
-      if (alive && loadingRoom === roomID) boardLoading = boardLoader.pending;
+      if (scope.current()) boardLoading = boardLoader.pending;
     }
   }
   async function join(event: SubmitEvent) {
     event.preventDefault();
+    const scope = identity();
     joining = true;
     error = '';
     try {
-      credentials = await api<Credentials>(`/rooms/${roomID}/participants`, 'POST', {
+      const joined = await api<Credentials>(`/rooms/${scope.room}/participants`, 'POST', {
         name: name.trim(),
         role,
         invite_token: invite
       });
-      saveRoomCredentials(credentials);
+      if (!scope.current()) return;
+      credentials = joined;
+      saveRoomCredentials(joined);
+      joining = false;
       connect();
     } catch (e) {
+      if (!scope.current()) return;
       error =
         e instanceof APIError && e.status === 401
           ? 'Приглашение недействительно или устарело. Попросите ведущего прислать новую полную ссылку.'
           : errorText(e);
     } finally {
-      joining = false;
+      if (scope.current()) joining = false;
     }
   }
   function send(type: string, fields: { question_id?: string; correct?: boolean } = {}) {
@@ -247,6 +293,7 @@
       !actionFor(roomState.gameplay, kind === 'select' ? 'begin_question' : 'begin_round')
     )
       return;
+    const scope = identity();
     error = '';
     selecting = true;
     if (!retry)
@@ -258,15 +305,17 @@
         expected_seq: roomState.seq
       };
     try {
-      await api(`/rooms/${roomID}/${kind}`, 'POST', selection, credentials.token);
+      await api(`/rooms/${scope.room}/${kind}`, 'POST', selection, scope.token);
+      if (!scope.current()) return;
       selection = null;
       await loadBoard(true);
     } catch (e) {
-      if (e instanceof APIError && e.status === 401) connection?.revoke();
+      if (!scope.current()) return;
+      if (e instanceof APIError && e.status === 401) scope.active?.revoke();
       else error = errorText(e);
       if (e instanceof APIError && e.status < 500) selection = null;
     } finally {
-      selecting = false;
+      if (scope.current()) selecting = false;
     }
   }
   function choose(questionID: string, retry = false) {
@@ -282,15 +331,17 @@
   }
   async function rotateInvite() {
     if (!credentials || rotating) return;
+    const scope = identity();
     rotating = true;
     error = '';
     try {
       const result = await api<{ invite_token: string }>(
-        `/rooms/${roomID}/invite`,
+        `/rooms/${scope.room}/invite`,
         'POST',
         {},
-        credentials.token
+        scope.token
       );
+      if (!scope.current()) return;
       invite = result.invite_token;
       invitationClosed = false;
       history.replaceState(
@@ -299,25 +350,34 @@
         `${location.pathname}#invite=${encodeURIComponent(invite)}`
       );
     } catch (e) {
-      error = errorText(e);
+      if (!scope.current()) return;
+      if (e instanceof APIError && e.status === 401) scope.active?.revoke();
+      else error = errorText(e);
     } finally {
-      rotating = false;
+      if (scope.current()) rotating = false;
     }
   }
   async function share() {
+    const scope = identity();
     try {
       await navigator.clipboard.writeText(
         `${location.origin}/rooms/${roomID}#invite=${encodeURIComponent(invite)}`
       );
+      if (!scope.current()) return;
       copied = true;
-      setTimeout(() => (copied = false), 3000);
+      setTimeout(() => {
+        if (scope.current()) copied = false;
+      }, 3000);
     } catch {
+      if (!scope.current()) return;
       error = 'Не удалось скопировать ссылку. Скопируйте её из поля приглашения.';
     }
   }
   function releaseRevoked() {
+    generation++;
+    joining = selecting = rotating = false;
     connection?.close();
-    clearRoomCredentials(roomID);
+    if (credentials) clearRoomCredentials(roomID, credentials.token);
     boardLoader.reset();
     roomTheme.reset();
     credentials = null;
@@ -333,11 +393,13 @@
     revoked = true;
   }
   function reset() {
+    generation++;
+    joining = selecting = rotating = false;
     connection?.close();
     boardLoader.reset();
     boardError = '';
     boardLoading = false;
-    clearRoomCredentials(roomID);
+    if (credentials) clearRoomCredentials(roomID, credentials.token);
     revoked = false;
     board = null;
     credentials = null;
@@ -466,31 +528,33 @@
         </div>{/if}
       {#if isHost}<ThemeApply
           room={roomID}
-          token={credentials.token}
+          token={credentials?.token || ''}
           seq={roomState.seq}
           phase={roomState.phase}
           appearance={roomState.appearance}
           {ready}
           onapplied={() => void roomTheme.refresh()}
         />{/if}
-      <GameV2
-        room={roomState}
-        roomToken={credentials.token}
-        view={roomState.gameplay}
-        {board}
-        {ready}
-        pending={pending + (selection || selecting ? 1 : 0)}
-        onsend={sendV2}
-        onunauthorized={() => connection?.revoke()}
-        onround={(id) => roomAction('round', id)}
-        onselect={(id, replay) => roomAction('select', id, false, replay)}
-        onresults={() => (resultsOpen = true)}
-      />
+      {#key credentials?.token}
+        <GameV2
+          room={roomState}
+          roomToken={credentials?.token || ''}
+          view={roomState.gameplay}
+          {board}
+          {ready}
+          pending={pending + (selection || selecting ? 1 : 0)}
+          onsend={sendV2}
+          onunauthorized={revokeIdentity}
+          onround={(id) => roomAction('round', id)}
+          onselect={(id, replay) => roomAction('select', id, false, replay)}
+          onresults={() => (resultsOpen = true)}
+        />
+      {/key}
       {#if resultsOpen}<GameResults
           {roomID}
-          token={credentials.token}
+          token={credentials?.token || ''}
           onclose={() => (resultsOpen = false)}
-          onunauthorized={() => connection?.revoke()}
+          onunauthorized={revokeIdentity}
         />{/if}
     </div>{:else}<div class="room">
       {#if roomState}<VoiceLink value={normalizedSettings(roomState.settings).voice_url} />{/if}

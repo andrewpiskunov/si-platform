@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { RoomRequestScope } from './room-request.ts';
+  import { onMount, onDestroy } from 'svelte';
   import { api, errorText } from './api.ts';
   import type { Participant } from './room-client.ts';
   import type { Decision, Appeal, Rules } from './game-v2.ts';
@@ -28,7 +29,12 @@
     token,
     onclose,
     onunauthorized
-  }: { roomID: string; token: string; onclose: () => void; onunauthorized: () => void } = $props();
+  }: {
+    roomID: string;
+    token: string;
+    onclose: () => void;
+    onunauthorized: (room: string, token: string) => void;
+  } = $props();
   let entries = $state<Results['items']>([]),
     participants = $state<Participant[]>([]),
     next = $state<number | undefined>(),
@@ -66,26 +72,34 @@
   function name(id: string) {
     return participants.find((p) => p.id === id)?.name || 'Система';
   }
+  const requests = new RoomRequestScope();
+  onDestroy(() => requests.dispose());
   async function load(after = 0) {
+    const request = requests.begin(roomID, token);
+    const current = () => requests.current(request, () => ({ room: roomID, token }));
     busy = true;
     error = '';
     try {
       const result = await api<Results>(
-        `/rooms/${roomID}/results?after_seq=${after}&limit=100`,
+        `/rooms/${request.room}/results?after_seq=${after}&limit=100`,
         'GET',
         undefined,
-        token
+        request.token,
+        request.signal
       );
+      if (!current()) return;
       participants = after
         ? [...new Map([...participants, ...result.participants].map((p) => [p.id, p])).values()]
         : result.participants;
       entries = after ? [...entries, ...result.items] : result.items;
       next = result.next_after_seq;
     } catch (e) {
-      if (e instanceof Error && e.message === 'unauthorized') onunauthorized();
+      if (!current()) return;
+      if (e instanceof Error && e.message === 'unauthorized')
+        onunauthorized(request.room, request.token);
       else error = errorText(e);
     } finally {
-      busy = false;
+      if (current()) busy = false;
     }
   }
   onMount(() => {

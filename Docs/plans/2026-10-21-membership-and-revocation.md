@@ -71,7 +71,7 @@
 
 **Files:** e2e/membership.mjs + package.json, Docs11/19/13/README, ledger.
 
-- [ ] Real Chromium kick/rejoin zero score, ban across browser tabs/other room unaffected, host-group rejection, active removal paused/frozen outcomes, stale media/appearance/credentials stop, roster pagination and disabled storage host; keyboard/mobile390/820/1440.
-- [ ] Full Go race with DB/media, web tests/check/build, all9 browser scenarios. Assert no page errors and no secret/hash in public data. Fresh source builds/services only, tests use synthetic own data.
-- [ ] One fresh strongest-model whole-stage review with spec/plan/ledger/base..head. One Important/Critical correction pass with regression; rule on every declined-to-judge; defer Minor explicitly, no re-review.
-- [ ] Update actual status, commit/FF main, continue remaining P0 moderation/quotas/privacy/AI/MCP/import/operations. Do not claim complete product or external verification.
+- [x] Real Chromium kick/rejoin zero score, ban across browser tabs/other room unaffected, host-group rejection, active removal paused/frozen outcomes, stale media/appearance/credentials stop, roster pagination and disabled storage host; keyboard/mobile390/820/1440.
+- [x] Full Go race with DB/media, web tests/check/build, all10 browser scenarios. Assert no page errors and no secret/hash in public data. Fresh source builds/services only, tests use synthetic own data.
+- [x] One fresh strongest-model whole-stage review with spec/plan/ledger/base..head. One Important/Critical correction pass with regression; rule on every declined-to-judge; defer Minor explicitly, no re-review.
+- [x] Update actual status, commit/FF main, continue remaining P0 moderation/quotas/privacy/AI/MCP/import/operations. Do not claim complete product or external verification.

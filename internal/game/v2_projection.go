@@ -1,6 +1,7 @@
 package game
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 )
@@ -94,6 +95,35 @@ func ProjectAt(s State, id string, nowMS int64) View {
 	for i := range gv.Appeals {
 		gv.Appeals[i].Reason = displayReason(gv.Appeals[i].Reason)
 		gv.Appeals[i].Resolution = displayReason(gv.Appeals[i].Resolution)
+	}
+	v.Participants = projectedParticipants(n, gv)
+	// Leave room for the transport envelope and future additive metadata. Only
+	// optional historical summaries shrink; active/frozen gameplay stays complete.
+	encoded, _ := json.Marshal(v)
+	if len(encoded) > 59*1024 {
+		decisions, appeals := gv.Decisions, gv.Appeals
+		retain := func(count int) {
+			d := min(len(decisions), (count+1)/2)
+			a := min(len(appeals), count-d)
+			d = min(len(decisions), count-a)
+			gv.Decisions = decisions[len(decisions)-d:]
+			gv.Appeals = appeals[len(appeals)-a:]
+			v.Participants = projectedParticipants(n, gv)
+		}
+		// Removing oldest summaries is monotonic in encoded size. Binary search
+		// bounds worst-case serialization work to six probes for the forty items.
+		low, high := 0, len(decisions)+len(appeals)-1
+		for low < high {
+			mid := (low + high + 1) / 2
+			retain(mid)
+			encoded, _ = json.Marshal(v)
+			if len(encoded) <= 59*1024 {
+				low = mid
+			} else {
+				high = mid - 1
+			}
+		}
+		retain(low)
 	}
 	return v
 }
@@ -345,6 +375,58 @@ func allowedActions(s State, id string, now int64) []AllowedAction {
 	case "resolved":
 		if host && q.Shown && !q.AnswerRevealed && q.Spec.Type != "stakeAll" {
 			add("reveal")
+		}
+	}
+	return out
+}
+
+// projectedParticipants includes names needed by this view, without sending the
+// larger durable roster retained for private corrections and paginated history.
+func projectedParticipants(s State, view *SessionView) []Participant {
+	keep := map[string]bool{}
+	mark := func(ids ...string) {
+		for _, id := range ids {
+			keep[id] = true
+		}
+	}
+	mark(s.Winner, view.ChooserID, view.Stage.TurnID)
+	for _, p := range view.Players {
+		mark(p.ID)
+	}
+	for _, p := range view.Submissions {
+		mark(p.ID)
+	}
+	for _, p := range view.Readiness {
+		mark(p.ID)
+	}
+	for _, d := range view.Decisions {
+		mark(d.ParticipantID)
+	}
+	for _, a := range view.Appeals {
+		mark(a.ParticipantID)
+	}
+	for _, a := range view.AllowedActions {
+		mark(a.Targets...)
+	}
+	if a := view.Auction; a != nil {
+		mark(a.LeaderID)
+		mark(a.ActiveIDs...)
+	}
+	if f := view.Final; f != nil {
+		mark(f.EligibleIDs...)
+		mark(f.Order...)
+	}
+	if q := s.Gameplay.Question; q != nil {
+		mark(q.ChooserBefore, q.RecipientID, q.AfterAnswerTurn)
+		mark(q.Candidates...)
+		if a := q.Auction; a != nil {
+			mark(a.Order...)
+		}
+	}
+	out := make([]Participant, 0, len(s.Participants))
+	for _, p := range s.Participants {
+		if !p.Removed || keep[p.ID] {
+			out = append(out, p)
 		}
 	}
 	return out
