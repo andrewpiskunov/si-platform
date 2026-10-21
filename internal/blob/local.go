@@ -75,6 +75,11 @@ func (s *localStore) Put(ctx context.Context, key string, body io.Reader, size i
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	unlock, err := lockLocalMutation(ctx, s.root)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if err := s.root.Rename(name, key); err != nil {
 		return ErrStorage
 	}
@@ -169,11 +174,25 @@ func (s *localStore) Get(ctx context.Context, key string, offset, length int64) 
 }
 
 func (s *localStore) Delete(ctx context.Context, key string) error {
+	return s.DeleteGuarded(ctx, key, nil)
+}
+
+func (s *localStore) DeleteGuarded(ctx context.Context, key string, guard func(context.Context) error) error {
 	if err := validateKey(key); err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	unlock, err := lockLocalMutation(ctx, s.root)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if guard != nil {
+		if err = guard(ctx); err != nil {
+			return err
+		}
 	}
 	info, err := s.root.Lstat(key)
 	if errors.Is(err, os.ErrNotExist) {

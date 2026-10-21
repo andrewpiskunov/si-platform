@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 	"github.com/aws/smithy-go/logging"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
@@ -27,12 +28,15 @@ import (
 type S3Config struct {
 	Endpoint, Region, Bucket, AccessKey, SecretKey, SessionToken string
 	PathStyle                                                    bool
-	TempDir                                                      string
+	// Required by the server: safe retention needs immutable, non-null versions.
+	RequireVersioning bool
+	TempDir           string
 }
 
 type s3Store struct {
-	client          *s3.Client
-	bucket, tempDir string
+	client            *s3.Client
+	bucket, tempDir   string
+	requireVersioning bool
 }
 
 func NewS3(ctx context.Context, cfg S3Config) (Store, error) {
@@ -73,7 +77,17 @@ func NewS3(ctx context.Context, cfg S3Config) (Store, error) {
 		// algorithms unsupported by some S3-compatible providers.
 		options.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
 	})
-	return &s3Store{client: client, bucket: cfg.Bucket, tempDir: cfg.TempDir}, nil
+	store := &s3Store{client: client, bucket: cfg.Bucket, tempDir: cfg.TempDir, requireVersioning: cfg.RequireVersioning}
+	if cfg.RequireVersioning {
+		versioning, err := client.GetBucketVersioning(ctx, &s3.GetBucketVersioningInput{Bucket: aws.String(cfg.Bucket)})
+		if err != nil {
+			return nil, s3Error(ctx, err)
+		}
+		if versioning.Status != types.BucketVersioningStatusEnabled {
+			return nil, ErrStorage
+		}
+	}
+	return store, nil
 }
 
 func (s *s3Store) Put(ctx context.Context, key string, body io.Reader, size int64, contentType string) error {
@@ -96,12 +110,20 @@ func (s *s3Store) Put(ctx context.Context, key string, body io.Reader, size int6
 		return ErrStorage
 	}
 	digest, _ := hex.DecodeString(key)
-	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
+	output, err := s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(s.bucket), Key: aws.String(key), Body: file,
 		ContentLength: aws.Int64(size), ContentType: aws.String(contentType),
 		ChecksumSHA256: aws.String(base64.StdEncoding.EncodeToString(digest)),
 	})
-	return s3Error(ctx, err)
+	if err != nil {
+		return s3Error(ctx, err)
+	}
+	// A suspended bucket must not report successful publication of a mutable
+	// null version. This also detects incompatible providers after startup.
+	if s.requireVersioning && (output.VersionId == nil || *output.VersionId == "" || *output.VersionId == "null") {
+		return ErrStorage
+	}
+	return nil
 }
 
 func (s *s3Store) Stat(ctx context.Context, key string) (Metadata, error) {
@@ -154,18 +176,70 @@ func (s *s3Store) Get(ctx context.Context, key string, offset, length int64) (io
 }
 
 func (s *s3Store) Delete(ctx context.Context, key string) error {
+	return s.DeleteGuarded(ctx, key, nil)
+}
+
+func (s *s3Store) DeleteGuarded(ctx context.Context, key string, guard func(context.Context) error) error {
 	if err := validateKey(key); err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
-	safe := s3Error(ctx, err)
-	if errors.Is(safe, ErrNotFound) {
+	// A request may still execute remotely after timeout, cancellation, process
+	// loss, or loss of the database guard. Never issue a key-only DELETE: only
+	// immutable version IDs captured before dispatch may be destroyed.
+	// One page per pass bounds memory/work; the durable candidate retries the
+	// remaining versions. Every successful Put creates a fresh remote version.
+	output, err := s.client.ListObjectVersions(ctx, &s3.ListObjectVersionsInput{
+		Bucket: aws.String(s.bucket), Prefix: aws.String(key), MaxKeys: aws.Int32(100),
+	})
+	if err != nil {
+		return s3Error(ctx, err)
+	}
+	if len(output.Versions)+len(output.DeleteMarkers) > 100 {
+		return ErrStorage
+	}
+	versions := make([]string, 0, len(output.Versions)+len(output.DeleteMarkers))
+	add := func(objectKey, version *string) error {
+		if aws.ToString(objectKey) != key {
+			return nil
+		}
+		id := aws.ToString(version)
+		if id == "" || id == "null" {
+			return ErrStorage
+		}
+		versions = append(versions, id)
 		return nil
 	}
-	return safe
+	for _, version := range output.Versions {
+		if err = add(version.Key, version.VersionId); err != nil {
+			return err
+		}
+	}
+	for _, marker := range output.DeleteMarkers {
+		if err = add(marker.Key, marker.VersionId); err != nil {
+			return err
+		}
+	}
+	// The DB connection may have died during listing and released its lock.
+	// Revalidate after capturing IDs, before dispatching any destructive call.
+	if guard != nil {
+		if err = guard(ctx); err != nil {
+			return err
+		}
+	}
+	for _, version := range versions {
+		_, err = s.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key), VersionId: aws.String(version)})
+		safe := s3Error(ctx, err)
+		if safe != nil && !errors.Is(safe, ErrNotFound) {
+			return safe
+		}
+	}
+	if aws.ToBool(output.IsTruncated) {
+		return ErrStorage
+	}
+	return nil
 }
 
 // Never retain or wrap SDK errors: their messages and unwrap chains can contain

@@ -49,11 +49,11 @@ try {
     `UPDATE rooms SET last_activity_at=clock_timestamp()-interval '8 days' WHERE id='${host.room_id}' RETURNING id`]);
   assert.ok(stdout.includes(host.room_id));
   // An existing actor must reject activity immediately, even before its minute sweep.
-  await page.evaluate(id => {
-    const socket = window.__sockets.find(s => s.readyState === WebSocket.OPEN && !s.url.includes('appearance_only'));
+  await page.evaluate(({ id, room }) => {
+    const socket = window.__sockets.find(s => s.readyState === WebSocket.OPEN && new URL(s.url).pathname === `/api/rooms/${room}/ws` && !s.url.includes('appearance_only'));
     if (!socket) throw Error('Missing live socket');
     socket.send(JSON.stringify({ v: 1, id, type: 'finish' }));
-  }, randomUUID());
+  }, { id: randomUUID(), room: host.room_id });
   await page.getByRole('alert', { name: 'Комната недоступна', exact: true }).waitFor({ timeout: 15000 });
   assert.equal(await page.evaluate(id => sessionStorage.getItem('room:' + id), host.room_id), null);
   const connections = await page.evaluate(() => window.__sockets.length);

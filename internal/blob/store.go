@@ -139,3 +139,17 @@ func (r *objectReader) Close() error {
 	}
 	return nil
 }
+
+// DeleteGuarded revalidates the caller's transaction after a remote store has
+// captured immutable deletion targets, before destructive requests are sent.
+func DeleteGuarded(ctx context.Context, store Store, key string, guard func(context.Context) error) error {
+	if guarded, ok := store.(interface {
+		DeleteGuarded(context.Context, string, func(context.Context) error) error
+	}); ok {
+		return guarded.DeleteGuarded(ctx, key, guard)
+	}
+	if err := guard(ctx); err != nil {
+		return err
+	}
+	return store.Delete(ctx, key)
+}

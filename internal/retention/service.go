@@ -320,7 +320,10 @@ func (s *Service) object(ctx context.Context, k string, st *Stats) error {
 		return e
 	}
 	objCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	e = s.objects.Delete(objCtx, k)
+	e = blob.DeleteGuarded(objCtx, s.objects, k, func(check context.Context) error {
+		_, err := tx.Exec(check, "SELECT 1")
+		return err
+	})
 	cancel()
 	if ctx.Err() != nil {
 		return ctx.Err()

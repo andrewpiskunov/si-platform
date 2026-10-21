@@ -33,7 +33,18 @@ func (w *s3Wire) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	w.requests = append(w.requests, r.Method+" "+r.URL.Path)
 	w.authorization = r.Header.Get("Authorization")
 	w.token = r.Header.Get("X-Amz-Security-Token")
-	if r.URL.RawQuery != "" && r.URL.RawQuery != "x-id=PutObject" && r.URL.RawQuery != "x-id=GetObject" && r.URL.RawQuery != "x-id=DeleteObject" {
+	if r.Method == "GET" && r.URL.Query().Has("versions") {
+		rw.Header().Set("Content-Type", "application/xml")
+		fmt.Fprint(rw, "<ListVersionsResult><IsTruncated>false</IsTruncated>")
+		key := r.URL.Query().Get("prefix")
+		if _, ok := w.objects[key]; ok {
+			fmt.Fprintf(rw, "<Version><Key>%s</Key><VersionId>wire-version</VersionId></Version>", key)
+		}
+		fmt.Fprint(rw, "</ListVersionsResult>")
+		return
+	}
+
+	if r.URL.RawQuery != "" && r.URL.RawQuery != "x-id=PutObject" && r.URL.RawQuery != "x-id=GetObject" && r.URL.RawQuery != "x-id=DeleteObject" && r.URL.Query().Get("versionId") != "wire-version" {
 		w.problem = "unexpected query: " + r.URL.RawQuery
 	}
 	if !strings.HasPrefix(r.URL.Path, "/private-test/") || r.Header.Get("X-Amz-Acl") != "" {
@@ -82,6 +93,11 @@ func (w *s3Wire) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			_, _ = io.WriteString(rw, data)
 		}
 	case "DELETE":
+		if r.URL.Query().Get("versionId") != "wire-version" {
+			w.problem = "unsafe unversioned deletion"
+			rw.WriteHeader(400)
+			return
+		}
 		delete(w.objects, key)
 		rw.WriteHeader(204)
 	default:
