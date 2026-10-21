@@ -9,8 +9,11 @@ RUN CGO_ENABLED=0 go build -trimpath -o /out/server ./cmd/server \
  && CGO_ENABLED=0 go build -trimpath -o /out/admin ./cmd/admin \
  && mkdir -p /runtime-data /runtime-tmp
 
-FROM scratch
-COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+FROM debian:trixie-slim
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates ffmpeg bubblewrap util-linux \
+ && apt-get clean \
+ && find /var/lib/apt/lists -mindepth 1 -delete
 COPY --from=build /out/ /app/
 COPY --from=build --chown=65532:65532 /runtime-data/ /data/
 COPY --from=build --chown=65532:65532 /runtime-tmp/ /tmp/

@@ -48,7 +48,20 @@ export interface Appeal {
   resolved: boolean;
   resolution?: string;
 }
+export interface MediaView {
+  id: string;
+  kind: string;
+  duration_ms: number;
+  width: number;
+  height: number;
+  standard: { mime: string; size: number };
+  economy: { mime: string; size: number };
+  start_at_ms: number;
+  paused_position_ms: number;
+}
+export type MediaStatus = 'loading' | 'ready' | 'error' | 'hidden';
 export interface SessionView {
+  readiness?: { id: string; status: MediaStatus }[];
   version: 2;
   rules_version: number;
   rules: Rules;
@@ -57,6 +70,7 @@ export interface SessionView {
   stage: Stage;
   round?: { id: string; name: string; type: string };
   question?: {
+    media?: MediaView;
     id: string;
     instance_id: string;
     type: string;
@@ -111,6 +125,10 @@ export function actionFor(view: SessionView, type: string): AllowedAction | unde
   return view.allowed_actions?.find((action) => action.type === type);
 }
 const fields: Record<string, string[]> = {
+  media_ready: ['status'],
+  continue_media: [],
+  wait_media: [],
+  skip_question: ['reason'],
   set_rules: ['rules'],
   pause: [],
   resume: [],
@@ -137,6 +155,10 @@ const fields: Record<string, string[]> = {
 const staged = new Set([
   'extend',
   'restart_stage',
+  'media_ready',
+  'continue_media',
+  'wait_media',
+  'skip_question',
   'advance',
   'open_buzzer',
   'buzz',
@@ -150,6 +172,10 @@ const staged = new Set([
   'judge'
 ]);
 const instanced = new Set([
+  'media_ready',
+  'continue_media',
+  'wait_media',
+  'skip_question',
   'advance',
   'open_buzzer',
   'buzz',
@@ -238,6 +264,11 @@ export function prepareAction(
     throw new Error('answer_too_long');
   if (typeof input.reason === 'string' && utf8Length(input.reason) > 1024)
     throw new Error('reason_too_long');
+  if (
+    type === 'media_ready' &&
+    !['loading', 'ready', 'error', 'hidden'].includes(String(input.status))
+  )
+    throw new Error('invalid_action_data');
   if (type === 'set_rules' && (!input.rules || typeof input.rules !== 'object'))
     throw new Error('invalid_action_data');
   return { v: 2, id, type, ...(action.requires_seq ? { expected_seq: seq } : {}), data };
@@ -253,6 +284,8 @@ export function timerSeconds(
   return Math.max(0, Math.ceil((stage.deadline_ms - serverTime - Math.max(0, elapsed)) / 1000));
 }
 export const stageNames: Record<string, string> = {
+  prepare_content: 'Подготовка медиа',
+  scheduled_content: 'Общий старт',
   select_question: 'Выбор вопроса',
   select_recipient: 'Кому достанется вопрос?',
   select_price: 'Выбор стоимости',

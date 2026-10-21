@@ -105,10 +105,30 @@ export interface Issue {
   path: string;
   message: string;
 }
+export interface PreparedVariant {
+  key: string;
+  mime: string;
+  size: number;
+}
+export interface PreparedMedia {
+  kind: string;
+  duration_ms: number;
+  width: number;
+  height: number;
+  standard: PreparedVariant;
+  economy: PreparedVariant;
+}
+export interface Asset {
+  name: string;
+  key: string;
+  content_type: string;
+  size: number;
+  prepared?: PreparedMedia | null;
+}
 export interface Draft {
   card: Card;
   document: PackDocument;
-  assets: { name: string; key: string; content_type: string; size: number }[];
+  assets: Asset[];
   original_key: string;
   issues: Issue[] | null;
   play_issues: Issue[] | null;
@@ -156,6 +176,8 @@ export interface Upload {
   offset: number;
   size: number;
   status: string;
+  purpose?: string;
+  asset?: Asset;
   draft_id?: string;
   error?: string;
 }

@@ -14,10 +14,13 @@
   import type { Board } from './types.ts';
   import GameActionForm from './GameActionForm.svelte';
   import GameRules from './GameRules.svelte';
+  import MediaPlayer from './MediaPlayer.svelte';
+  import SoundCheck from './SoundCheck.svelte';
   import GameTimer from './GameTimer.svelte';
   import { errorText } from './api.ts';
   let {
     room,
+    roomToken,
     view,
     board,
     ready,
@@ -28,6 +31,7 @@
     onresults
   }: {
     room: RoomState;
+    roomToken: string;
     view: SessionView;
     board: Board | null;
     ready: boolean;
@@ -53,6 +57,7 @@
     board?.rounds.find((item) => item.id === (selectedRound || view.round?.id)) || board?.rounds[0]
   );
   const players = $derived(room.participants.filter((p) => p.role === 'player'));
+  const isHost = $derived(room.participants.some((p) => p.id === room.you && p.role === 'host'));
   const blocked = $derived(!ready || pending > 0);
   const visibleSubmissions = $derived(
     (view.submissions || []).filter(
@@ -60,6 +65,7 @@
     )
   );
   const formTypes = new Set([
+    'skip_question',
     'answer',
     'wager',
     'bid',
@@ -132,7 +138,7 @@
   </div>
   {#if error}<div class="notice error" role="alert">{error}</div>{/if}
   <div class="row game-controls">
-    {#each [{ type: 'pause', label: 'Пауза Ⅱ' }, { type: 'resume', label: 'Продолжить ▶' }, { type: 'advance', label: view.stage.kind === 'present_answer' ? 'Следующий фрагмент ответа' : view.stage.kind === 'collect_answer' ? 'Ответ прозвучал' : view.stage.kind === 'collect_answers' ? 'Закрыть сбор ответов' : 'Продолжить →' }, { type: 'open_buzzer', label: 'Открыть кнопку' }] as control}{#if actionFor(view, control.type)}<button
+    {#each [{ type: 'pause', label: 'Пауза Ⅱ' }, { type: 'resume', label: 'Продолжить ▶' }, { type: 'advance', label: view.stage.kind === 'present_answer' ? 'Следующий фрагмент ответа' : view.stage.kind === 'collect_answer' ? 'Ответ прозвучал' : view.stage.kind === 'collect_answers' ? 'Закрыть сбор ответов' : 'Продолжить →' }, { type: 'open_buzzer', label: 'Открыть кнопку' }, { type: 'wait_media', label: 'Ждать ещё 10 секунд' }, { type: 'continue_media', label: 'Продолжить без всех' }] as control}{#if actionFor(view, control.type)}<button
           disabled={blocked}
           onclick={() => send(control.type)}>{control.label}</button
         >{/if}{/each}{#if actionFor(view, 'finish')}{#if finishConfirm}<span
@@ -148,6 +154,7 @@
     </p>{:else if view.stage.expired}<p class="notice">
       Время этапа вышло. Ведущий может продолжить игру доступным действием.
     </p>{/if}
+  {#if room.phase === 'lobby'}<SoundCheck />{/if}
   <div class="room-grid">
     <div class="stack">
       {#if roundAction || choosing}<section class="stack">
@@ -198,12 +205,12 @@
             Участвуют: {(view.final.eligible_ids || []).map(name).join(', ') || '—'}
           </p>
         </section>{/if}
-      {#if view.question}<div class="question-stage">
+      {#if view.question}<div class="question-stage" class:media-question={!!view.question.media}>
           {#if !(view.question.type === 'secret' && view.stage.kind === 'select_recipient')}
             <p class="question-price">
               {view.question.theme}{view.question.theme ? ' · ' : ''}{view.question.price} очков
             </p>{/if}
-          {#if view.question.text}<h2>{view.question.text}</h2>{:else}<h2>
+          {#if view.question.text}<h2>{view.question.text}</h2>{:else if !view.question.media}<h2>
               {stageNames[view.stage.kind] || 'Готовимся к вопросу'}
             </h2>{/if}{#if view.question.content_total > 1}<p class="helper">
               Фрагмент {view.question.content_index + 1} из {view.question.content_total}
@@ -219,6 +226,40 @@
               <p style="margin:8px 0 0;white-space:pre-wrap">{view.question.answer}</p>
             </div>{/if}
         </div>{/if}
+      {#if view.question?.media}<MediaPlayer
+          media={view.question.media}
+          {view}
+          seq={room.seq}
+          you={room.you}
+          roomID={room.room_id}
+          token={roomToken}
+          connected={ready}
+          paused={room.phase === 'paused'}
+          {onsend}
+        />{/if}
+      {#if view.readiness?.length && isHost}<section class="notice media-readiness">
+          <h3>Готовность к показу</h3>
+          <div class="list">
+            {#each view.readiness as participant}<div class="row between">
+                <span>{name(participant.id)}</span><span class="helper"
+                  >{{
+                    loading: 'Загрузка',
+                    ready: 'Готов',
+                    error: 'Ошибка',
+                    hidden: 'Вкладка скрыта'
+                  }[participant.status]}</span
+                >
+              </div>{/each}
+          </div>
+          {#if actionFor(view, 'continue_media')}<p class="helper">
+              Не все участники готовы. Продолжение запустит показ для тех, кто успел загрузить файл.
+            </p>{/if}
+        </section>{:else if view.readiness?.length && ['prepare_content', 'scheduled_content'].includes(view.stage.kind)}<p
+          class="helper media-readiness"
+        >
+          Готовы к показу: {view.readiness.filter((p) => p.status === 'ready').length} из {view
+            .readiness.length}.
+        </p>{/if}
       {#if actionFor(view, 'buzz')}<div>
           <button class="buzz" disabled={blocked} onclick={() => send('buzz')}>Знаю ответ!</button>
           <p class="helper" style="text-align:center;margin-top:12px">

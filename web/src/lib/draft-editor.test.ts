@@ -34,3 +34,27 @@ test('successful unchanged save clears dirty state and forbids concurrent saves'
   editor.saved(request!, { name: 'New' }, 2);
   assert.equal(editor.dirty, false);
 });
+test('asset attachment locks the revision and preserves edits made during its response', () => {
+  const editor = new DraftEditor({ name: 'Saved', question: 'Before' }, 4);
+  const attachment = editor.beginAttachment();
+  assert.equal(attachment?.base_revision, 4);
+  assert.equal(editor.beginSave(), null);
+  editor.edit({ name: 'Saved', question: 'Typed while attaching' });
+  editor.saved(attachment!, { name: 'Saved', question: 'Before' }, 5);
+  assert.equal(editor.document.question, 'Typed while attaching');
+  assert.equal(editor.revision, 5);
+  assert.equal(editor.dirty, true);
+  assert.equal(editor.beginSave()?.base_revision, 5);
+});
+test('attachment cannot bypass unsaved edits or a conflict', () => {
+  const editor = new DraftEditor({ name: 'Local' }, 2);
+  editor.edit({ name: 'Unsaved' });
+  assert.equal(editor.beginAttachment(), null);
+  const save = editor.beginSave()!;
+  editor.saved(save, { name: 'Unsaved' }, 3);
+  const attachment = editor.beginAttachment();
+  assert.ok(attachment);
+  editor.failed('conflict');
+  assert.equal(editor.beginAttachment(), null);
+  assert.equal(editor.document.name, 'Unsaved');
+});

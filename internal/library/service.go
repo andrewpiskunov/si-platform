@@ -200,7 +200,7 @@ func load(ctx context.Context, tx pgx.Tx, packID string, revision int) (Draft, e
 			return d, err
 		}
 	}
-	d.PlayIssues = playpack.Validate(d.Document)
+	d.PlayIssues = playpack.ValidateMedia(d.Document, MediaLookup(d.Assets))
 	return d, nil
 }
 func listCards(ctx context.Context, tx pgx.Tx, query string, args ...any) ([]Card, error) {
@@ -298,8 +298,20 @@ func (s *Service) Create(ctx context.Context, actor accounts.Identity, in Save) 
 	return result, nil
 }
 func usage(ctx context.Context, tx pgx.Tx, userID string) (int64, error) {
+	return StorageUsage(ctx, tx, userID)
+}
+
+// StorageUsage counts immutable revisions and ready media not yet attached to an
+// active pack. Quota callers must hold the account row lock for their transaction.
+func StorageUsage(ctx context.Context, tx pgx.Tx, userID string) (int64, error) {
 	var n int64
-	err := tx.QueryRow(ctx, `SELECT COALESCE(sum(r.size_bytes),0)::bigint FROM library_revisions r JOIN library_packs p ON p.id=r.pack_id WHERE p.owner_id=$1 AND p.deleted_at IS NULL`, userID).Scan(&n)
+	err := tx.QueryRow(ctx, `SELECT
+ COALESCE((SELECT sum(r.size_bytes) FROM library_revisions r JOIN library_packs p ON p.id=r.pack_id WHERE p.owner_id=$1 AND p.deleted_at IS NULL),0)::bigint
+ + COALESCE((SELECT sum(COALESCE((u.result_asset->>'size')::bigint,0)
+     + COALESCE((u.result_asset->'prepared'->'standard'->>'size')::bigint,0)
+     + COALESCE((u.result_asset->'prepared'->'economy'->>'size')::bigint,0))
+   FROM uploads u WHERE u.owner_id=$1 AND u.purpose='media' AND u.status='ready'
+   AND NOT EXISTS(SELECT 1 FROM library_media_receipts receipt JOIN library_packs p ON p.id=receipt.pack_id WHERE receipt.upload_id=u.id AND p.deleted_at IS NULL)),0)::bigint`, userID).Scan(&n)
 	return n, err
 }
 func insert(ctx context.Context, tx pgx.Tx, d Draft) error {

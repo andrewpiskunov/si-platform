@@ -1,32 +1,45 @@
 <script lang="ts">
-  import type { Question, Draft } from './types';
+  import type { Question, Draft } from './types.ts';
+  import { findPrepared } from './media-model.ts';
+  import PreparedPreview from './PreparedPreview.svelte';
   let {
     question,
     assets,
-    packId
-  }: { question: Question; assets: Draft['assets']; packId: string } = $props();
-  function source(value: string) {
-    const asset = assets.find((item) => item.name === value);
-    return asset ? `/api/drafts/${encodeURIComponent(packId)}/assets/${asset.key}` : '';
-  }
+    packId,
+    revision = 0
+  }: { question: Question; assets: Draft['assets']; packId: string; revision?: number } = $props();
+  let quality = $state<'standard' | 'economy'>('standard');
+  let selected = $state('');
 </script>
 
-<div class="question-stage">
-  <div class="question-price">{question.price} очков</div>
-  {#each question.params.find((parameter) => parameter.name === 'question')?.items || [] as content}{#if content.type === 'text'}<h2
-      >
-        {content.value || 'Текст вопроса появится здесь'}
-      </h2>{:else if content.is_ref && source(content.value)}{#if content.type === 'image'}<img
-          src={source(content.value)}
-          alt="Иллюстрация к вопросу"
-          style="max-width:100%;max-height:360px"
-        />{:else if content.type === 'audio'}<audio controls src={source(content.value)}
-        ></audio>{:else if content.type === 'video'}<video
-          controls
-          src={source(content.value)}
-          style="max-width:100%"><track kind="captions" /></video
-        >{/if}{:else}<p class="helper">{content.type}: {content.value}</p>{/if}{/each}
-</div>
+<label
+  >Качество предпросмотра<select bind:value={quality}
+    ><option value="standard">Обычное</option><option value="economy">Экономное</option></select
+  ></label
+>
+{#each ['question', 'answer'] as group}<div class="question-stage">
+    <p class="question-price">
+      {group === 'question' ? `${question.price} очков` : 'Пояснение к ответу'}
+    </p>
+    {#each question.params.find((p) => p.name === group)?.items || [] as content, index}{#if content.type === 'text'}<h2
+        >
+          {content.value || 'Текст появится здесь'}
+        </h2>{:else}{@const asset = findPrepared(
+          assets,
+          content.type,
+          content.value
+        )}{#if asset}<button class="small" onclick={() => (selected = `${group}:${index}`)}
+            >Показать {group === 'question' ? 'медиа вопроса' : 'медиа ответа'} · {index +
+              1}</button
+          >{#if selected === `${group}:${index}`}<PreparedPreview
+              {asset}
+              {packId}
+              {revision}
+              {quality}
+            />{/if}{:else}<p class="helper">
+            {content.type}: {content.value || 'Файл не выбран'} · нет подготовленной версии
+          </p>{/if}{/if}{/each}
+  </div>{/each}
 <div class="notice" style="margin-top:16px">
   <strong>Ответ ведущего:</strong>
   {question.right.filter(Boolean).join(' / ') || 'Не заполнен'}

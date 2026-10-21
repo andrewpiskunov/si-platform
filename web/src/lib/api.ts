@@ -11,7 +11,8 @@ export async function api<T>(
   path: string,
   method = 'GET',
   body?: unknown,
-  token?: string
+  token?: string,
+  signal?: AbortSignal
 ): Promise<T> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -19,6 +20,7 @@ export async function api<T>(
   const response = await fetch(`/api${path}`, {
     method,
     headers,
+    signal,
     body: body !== undefined ? JSON.stringify(body) : undefined,
     credentials: 'same-origin'
   });
@@ -29,6 +31,15 @@ export async function api<T>(
 const errors: Record<string, string> = {
   unauthorized: 'Войдите в аккаунт, чтобы продолжить.',
   forbidden: 'У вас нет доступа к этому действию.',
+  save_required: 'Сначала дождитесь сохранения изменений и повторите прикрепление.',
+  media_pending: 'Файл ещё не подготовлен для браузера.',
+  media_invalid: 'Файл повреждён или не подходит для обработки.',
+  media_unsupported: 'Этот формат медиа не поддерживается.',
+  media_too_large: 'Файл или разрешение превышают допустимый размер.',
+  media_too_long: 'Длительность медиа превышает 10 минут.',
+  media_timeout: 'Обработка заняла слишком много времени. Попробуйте файл меньшего размера.',
+  media_unavailable: 'Подготовка медиа временно недоступна.',
+  stage_expired: 'Этап уже завершился. Дождитесь обновления.',
   unavailable: 'Сервис временно недоступен. Попробуйте ещё раз.',
   not_found: 'Не удалось найти запрошенный материал.',
   invalid_input: 'Проверьте введённые данные.',

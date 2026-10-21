@@ -3,6 +3,7 @@ package library
 
 import (
 	"errors"
+	"siplatform/internal/media"
 	"siplatform/internal/packs"
 	"time"
 )
@@ -18,10 +19,11 @@ var (
 )
 
 type Asset struct {
-	Name        string `json:"name"`
-	Key         string `json:"key"`
-	ContentType string `json:"content_type"`
-	Size        int64  `json:"size"`
+	Name        string          `json:"name"`
+	Key         string          `json:"key"`
+	ContentType string          `json:"content_type"`
+	Size        int64           `json:"size"`
+	Prepared    *media.Prepared `json:"prepared,omitempty"`
 }
 type Rights struct {
 	License       string `json:"license"`

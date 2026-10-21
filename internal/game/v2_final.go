@@ -42,6 +42,7 @@ func beginRound(s *State, r RoundSpec, now int64) error {
 	}
 	g.Round = &r
 	g.Question = nil
+	g.Content = nil
 	g.Final = nil
 	s.Winner = ""
 	if r.Type != "final" {

@@ -26,7 +26,7 @@ func (s *Service) reserveObjects(ctx context.Context, id string, epoch int64, ke
 	if _, err = tx.Exec(ctx, BlobGCLockSQL); err != nil {
 		return err
 	}
-	result, err := tx.Exec(ctx, `UPDATE uploads SET stored_keys=$3 WHERE id=$1 AND lease_epoch=$2 AND status='processing'
+	result, err := tx.Exec(ctx, `UPDATE uploads SET stored_keys=ARRAY(SELECT DISTINCT unnest(stored_keys||$3::text[])) WHERE id=$1 AND lease_epoch=$2 AND status='processing'
  AND EXISTS(SELECT 1 FROM ingest_owner WHERE singleton=true AND epoch=$2)`, id, epoch, keys)
 	if err != nil {
 		return err
@@ -139,7 +139,8 @@ func (s *Service) cleanupObject(ctx context.Context, epoch int64, object failedO
 	assetJSON, _ := json.Marshal([]map[string]string{{"key": object.key}})
 	var referenced, active, ready bool
 	err = tx.QueryRow(ctx, `SELECT
- EXISTS(SELECT 1 FROM library_revisions WHERE original_key=$1 OR assets @> $2::jsonb),
+ EXISTS(SELECT 1 FROM library_revisions WHERE original_key=$1 OR assets @> $2::jsonb
+ OR EXISTS(SELECT 1 FROM jsonb_array_elements(assets) a WHERE a->'prepared'->'standard'->>'key'=$1 OR a->'prepared'->'economy'->>'key'=$1)),
  EXISTS(SELECT 1 FROM uploads WHERE status IN ('uploading','queued','processing') AND stored_keys @> ARRAY[$1]::text[]),
  EXISTS(SELECT 1 FROM uploads WHERE status='ready' AND stored_keys @> ARRAY[$1]::text[])`, object.key, assetJSON).Scan(&referenced, &active, &ready)
 	if err != nil {

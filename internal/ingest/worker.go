@@ -133,6 +133,7 @@ func (s *Service) runLease() {
 type job struct {
 	Upload
 	owner, credential string
+	name, kind        string
 	expires           time.Time
 }
 
@@ -150,9 +151,10 @@ func (s *Service) claim(ctx context.Context, epoch int64) (job, error) {
 		return job{}, ErrUnavailable
 	}
 	var j job
+	var rawAsset []byte
 	err = tx.QueryRow(ctx, `UPDATE uploads SET status='processing',lease_epoch=$1,updated_at=now()
  WHERE id=(SELECT id FROM uploads WHERE status='queued' AND expires_at>clock_timestamp() ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1)
- RETURNING `+uploadColumns+`,owner_id,credential_id,expires_at`, epoch).Scan(&j.ID, &j.Offset, &j.Size, &j.Status, &j.DraftID, &j.Error, &j.owner, &j.credential, &j.expires)
+ RETURNING `+uploadColumns+`,owner_id,credential_id,expires_at,name,media_kind`, epoch).Scan(&j.ID, &j.Offset, &j.Size, &j.Status, &j.DraftID, &j.Error, &j.Purpose, &rawAsset, &j.owner, &j.credential, &j.expires, &j.name, &j.kind)
 	if err != nil {
 		return job{}, err
 	}
@@ -172,24 +174,16 @@ func (s *Service) worker(ctx context.Context, epoch int64) {
 			deadline = j.expires
 		}
 		jobCtx, cancel := context.WithDeadline(ctx, deadline)
-		draftID, code := s.process(jobCtx, j, epoch)
+		draftID, asset, code := s.process(jobCtx, j, epoch)
 		cancel()
 		// A canceled lease leaves the processing state for the next lease owner.
 		if ctx.Err() != nil {
 			return
 		}
-		if code == "" && draftID == "" {
+		if code == "" && draftID == "" && asset == nil {
 			code = "import_failed"
 		}
-		status := "failed"
-		if code == "" {
-			status = "ready"
-		}
-		result, err := s.pool.Exec(ctx, `UPDATE uploads SET status=$3,draft_id=$4,error=$5,updated_at=now()
-    WHERE id=$1 AND lease_epoch=$2 AND status='processing' AND EXISTS(SELECT 1 FROM ingest_owner WHERE singleton=true AND epoch=$2)`, j.ID, epoch, status, draftID, code)
-		if err == nil && result.RowsAffected() == 1 {
-			s.removeStage(ctx, j.ID)
-		}
+		s.finish(ctx, j, epoch, draftID, asset, code)
 	}
 }
 func (s *Service) liveActor(ctx context.Context, j job) (accounts.Identity, error) {
@@ -217,7 +211,15 @@ func (s *Service) liveActor(ctx context.Context, j job) (accounts.Identity, erro
 	}
 	return a, nil
 }
-func (s *Service) process(ctx context.Context, j job, epoch int64) (string, string) {
+func (s *Service) process(ctx context.Context, j job, epoch int64) (string, *library.Asset, string) {
+	if j.Purpose == "media" {
+		asset, code := s.processMedia(ctx, j, epoch)
+		return "", asset, code
+	}
+	draftID, code := s.processArchive(ctx, j, epoch)
+	return draftID, nil, code
+}
+func (s *Service) processArchive(ctx context.Context, j job, epoch int64) (string, string) {
 	actor, err := s.liveActor(ctx, j)
 	if err != nil {
 		if errors.Is(err, ErrUnauthorized) || errors.Is(err, ErrForbidden) {
@@ -280,13 +282,45 @@ func (s *Service) process(ctx context.Context, j job, epoch int64) (string, stri
 		if err != nil || closeErr != nil {
 			return "", importError(ctx, "storage_unavailable")
 		}
-		assets = append(assets, library.Asset{Name: asset.Name, Key: asset.SHA256, Size: asset.Size, ContentType: contentType})
+		stored := library.Asset{Name: asset.Name, Key: asset.SHA256, Size: asset.Size, ContentType: contentType}
 		// siq provides canonical names, so case/percent/NFC aliases are already rejected.
-		if strings.HasPrefix(asset.Key, "audio/") || strings.HasPrefix(asset.Key, "video/") {
-			issues = append(issues, packs.Issue{Severity: "error", Code: "media_pending", Path: asset.Name, Message: "Аудио или видео ожидает проверки формата и подготовки для воспроизведения"})
-		} else if strings.HasPrefix(asset.Key, "images/") && !strings.HasPrefix(contentType, "image/") {
+		kind := archiveKind(asset.Key)
+		if kind == "image" && !strings.HasPrefix(contentType, "image/") {
 			issues = append(issues, packs.Issue{Severity: "error", Code: "unsafe_media", Path: asset.Name, Message: "Изображение имеет неподдерживаемый или небезопасный формат"})
+		} else if kind != "" {
+			source, openErr := asset.Open()
+			if openErr != nil {
+				return "", "invalid_archive"
+			}
+			prepared, code := s.prepareAsset(ctx, j, epoch, stored, kind, source)
+			closeErr := source.Close()
+			if ctx.Err() != nil {
+				return "", importError(ctx, "import_failed")
+			}
+			if closeErr != nil {
+				return "", "invalid_archive"
+			}
+			if code == "storage_unavailable" {
+				return "", code
+			}
+			if code != "" {
+				issues = append(issues, packs.Issue{Severity: "error", Code: code, Path: asset.Name, Message: mediaIssueMessage(code)})
+			} else {
+				stored = *prepared
+				if stored.ContentType != contentType {
+					source, openErr := asset.Open()
+					if openErr != nil {
+						return "", "invalid_archive"
+					}
+					putErr := s.objects.Put(ctx, stored.Key, source, stored.Size, stored.ContentType)
+					closeErr := source.Close()
+					if putErr != nil || closeErr != nil {
+						return "", importError(ctx, "storage_unavailable")
+					}
+				}
+			}
 		}
+		assets = append(assets, stored)
 	}
 	if err = ctx.Err(); err != nil {
 		return "", importError(ctx, "import_failed")

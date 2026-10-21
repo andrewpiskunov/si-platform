@@ -49,6 +49,7 @@
     resolve_appeal: 'Рассмотреть апелляцию',
     transfer_host: 'Передать роль ведущего',
     extend: 'Продлить время',
+    skip_question: 'Пропустить вопрос',
     restart_stage: 'Перезапустить этап'
   };
   function label(id: string) {
@@ -87,9 +88,14 @@
     if (['correct_judgement', 'appeal'].includes(type)) result.judgement_id = chosenTarget;
     if (type === 'resolve_appeal') result.appeal_id = chosenTarget;
     if (
-      ['correct_judgement', 'adjust_score', 'appeal', 'resolve_appeal', 'restart_stage'].includes(
-        type
-      )
+      [
+        'correct_judgement',
+        'adjust_score',
+        'appeal',
+        'resolve_appeal',
+        'restart_stage',
+        'skip_question'
+      ].includes(type)
     )
       result.reason = reason;
     if (type === 'adjust_score') result.delta = amount ?? 0;
@@ -150,7 +156,7 @@
         >{#each action.targets as id}<option value={id}>{label(id)}</option>{/each}</select
       ></label
     >{/if}
-  {#if ['correct_judgement', 'adjust_score', 'appeal', 'resolve_appeal', 'restart_stage'].includes(action.type)}<label
+  {#if ['correct_judgement', 'adjust_score', 'appeal', 'resolve_appeal', 'restart_stage', 'skip_question'].includes(action.type)}<label
       >Причина<textarea bind:value={reason} required maxlength="1024"></textarea><span
         class="helper"
         class:error-text={utf8Length(reason) > 1024}>{utf8Length(reason)} / 1024 байт UTF-8</span

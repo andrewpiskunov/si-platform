@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"io"
@@ -39,11 +40,16 @@ type Server struct {
 	exports     chan struct{}
 	httpMu      sync.Mutex
 	httpLimit   *bucket
+	mediaSecret [32]byte
 }
 
 func New(store *postgres.Store, options Options) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Server{store: store, options: options, ctx: ctx, cancel: cancel, rooms: make(map[string]*room), connections: make(chan struct{}, 10000), exports: make(chan struct{}, 2), httpLimit: newBucket()}
+	s := &Server{store: store, options: options, ctx: ctx, cancel: cancel, rooms: make(map[string]*room), connections: make(chan struct{}, 10000), exports: make(chan struct{}, 2), httpLimit: newBucket()}
+	// Tickets are short lived and intentionally expire on a server restart.
+	// crypto/rand.Read is guaranteed to fill the buffer or terminate in Go 1.24+.
+	_, _ = rand.Read(s.mediaSecret[:])
+	return s
 }
 func (s *Server) Close() {
 	s.mu.Lock()

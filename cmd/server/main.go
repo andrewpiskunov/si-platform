@@ -17,6 +17,7 @@ import (
 	"siplatform/internal/blob"
 	"siplatform/internal/ingest"
 	"siplatform/internal/library"
+	"siplatform/internal/media"
 	"siplatform/internal/server"
 	"siplatform/internal/storage/postgres"
 )
@@ -58,7 +59,18 @@ func run() error {
 	}
 	auth := accounts.New(pool, accounts.Options{Origin: origin, SecureCookies: strings.HasPrefix(origin, "https://")})
 	lib := library.New(pool)
-	uploads, err := ingest.New(pool, objects, lib, ingest.Options{Directory: filepath.Join(dataDir, "uploads")})
+	var processor *media.Processor
+	if os.Getenv("MEDIA_DISABLED") != "true" {
+		mediaDir := filepath.Join(dataDir, "media")
+		if err = os.MkdirAll(mediaDir, 0700); err != nil {
+			return err
+		}
+		processor, err = media.New(media.Options{FFmpeg: os.Getenv("MEDIA_FFMPEG"), FFprobe: os.Getenv("MEDIA_FFPROBE"), Sandbox: os.Getenv("MEDIA_SANDBOX"), Prlimit: os.Getenv("MEDIA_PRLIMIT"), Directory: mediaDir})
+		if err != nil {
+			return errors.New("media processor unavailable: install FFmpeg, ffprobe, bubblewrap and prlimit, configure MEDIA_* paths, or explicitly set MEDIA_DISABLED=true for text-only operation")
+		}
+	}
+	uploads, err := ingest.New(pool, objects, lib, ingest.Options{Directory: filepath.Join(dataDir, "uploads"), Media: processor})
 	if err != nil {
 		return err
 	}

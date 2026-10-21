@@ -5,9 +5,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -19,6 +21,7 @@ import (
 	"siplatform/internal/accounts"
 	"siplatform/internal/blob"
 	"siplatform/internal/library"
+	"siplatform/internal/media"
 )
 
 var (
@@ -33,21 +36,27 @@ var (
 
 const maxUpload int64 = 250 << 20
 const maxChunk int64 = 4 << 20
-const uploadColumns = `id,offset_bytes,size,status,draft_id,error`
+const uploadColumns = `id,offset_bytes,size,status,draft_id,error,purpose,result_asset`
 
-type Options struct{ Directory string }
+type Options struct {
+	Directory string
+	Media     *media.Processor
+}
 type Upload struct {
-	ID      string `json:"id"`
-	Offset  int64  `json:"offset"`
-	Size    int64  `json:"size"`
-	Status  string `json:"status"`
-	DraftID string `json:"draft_id,omitempty"`
-	Error   string `json:"error,omitempty"`
+	ID      string         `json:"id"`
+	Offset  int64          `json:"offset"`
+	Size    int64          `json:"size"`
+	Status  string         `json:"status"`
+	DraftID string         `json:"draft_id,omitempty"`
+	Error   string         `json:"error,omitempty"`
+	Purpose string         `json:"purpose"`
+	Asset   *library.Asset `json:"asset,omitempty"`
 }
 type Service struct {
 	pool            *pgxpool.Pool
 	objects         blob.Store
 	lib             *library.Service
+	media           *media.Processor
 	root            *os.Root
 	ctx             context.Context
 	cancel          context.CancelFunc
@@ -76,7 +85,7 @@ func New(pool *pgxpool.Pool, objects blob.Store, lib *library.Service, options O
 		return nil, ErrUnavailable
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Service{pool: pool, objects: objects, lib: lib, root: root, ctx: ctx, cancel: cancel, done: make(chan struct{})}, nil
+	return &Service{pool: pool, objects: objects, lib: lib, media: options.Media, root: root, ctx: ctx, cancel: cancel, done: make(chan struct{})}, nil
 }
 func (s *Service) Close() {
 	s.mu.Lock()
@@ -133,7 +142,11 @@ func validName(name string) bool {
 }
 func scanUpload(row pgx.Row) (Upload, error) {
 	var u Upload
-	err := row.Scan(&u.ID, &u.Offset, &u.Size, &u.Status, &u.DraftID, &u.Error)
+	var asset []byte
+	err := row.Scan(&u.ID, &u.Offset, &u.Size, &u.Status, &u.DraftID, &u.Error, &u.Purpose, &asset)
+	if err == nil && len(asset) > 0 {
+		err = json.Unmarshal(asset, &u.Asset)
+	}
 	return u, err
 }
 
@@ -201,6 +214,24 @@ func owned(ctx context.Context, tx pgx.Tx, owner, id string) (Upload, error) {
 	return u, safeError(ctx, err)
 }
 func (s *Service) Create(ctx context.Context, actor accounts.Identity, name string, size int64) (Upload, error) {
+	return s.create(ctx, actor, name, size, "siq", "")
+}
+
+func (s *Service) CreateMedia(ctx context.Context, actor accounts.Identity, name string, size int64, kind string) (Upload, error) {
+	if kind != "image" && kind != "audio" && kind != "video" || size > 100<<20 {
+		return Upload{}, ErrInvalid
+	}
+	if strings.ContainsAny(name, "%:") {
+		return Upload{}, ErrInvalid
+	}
+	switch strings.ToLower(path.Ext(name)) {
+	case ".zip", ".siq", ".7z", ".rar", ".tar", ".gz":
+		return Upload{}, ErrInvalid
+	}
+	return s.create(ctx, actor, name, size, "media", kind)
+}
+
+func (s *Service) create(ctx context.Context, actor accounts.Identity, name string, size int64, purpose, kind string) (Upload, error) {
 	if !validName(name) || size <= 0 || size > maxUpload {
 		return Upload{}, ErrInvalid
 	}
@@ -253,7 +284,7 @@ func (s *Service) Create(ctx context.Context, actor accounts.Identity, name stri
 	if err != nil {
 		return Upload{}, ErrUnavailable
 	}
-	u, err := scanUpload(tx.QueryRow(ctx, `INSERT INTO uploads(id,owner_id,credential_id,name,size) VALUES($1,$2,$3,$4,$5) RETURNING `+uploadColumns, id, actor.User.ID, actor.SessionID, name, size))
+	u, err := scanUpload(tx.QueryRow(ctx, `INSERT INTO uploads(id,owner_id,credential_id,name,size,purpose,media_kind) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING `+uploadColumns, id, actor.User.ID, actor.SessionID, name, size, purpose, kind))
 	if err != nil {
 		return Upload{}, safeError(ctx, err)
 	}

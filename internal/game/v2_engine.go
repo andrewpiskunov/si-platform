@@ -20,7 +20,7 @@ func ApplyAt(s State, actorID string, c Command, nowMS int64, entropy uint64) (S
 	if s.Phase == Finished {
 		return s, Fault("finished")
 	}
-	if c.ExpectedSeq != nil && *c.ExpectedSeq != s.Seq && c.Type != "buzz" && c.Type != "answer" && c.Type != "wager" {
+	if c.ExpectedSeq != nil && *c.ExpectedSeq != s.Seq && c.Type != "buzz" && c.Type != "answer" && c.Type != "wager" && c.Type != "media_ready" {
 		return s, Fault("stale_state")
 	}
 	allowed := false
@@ -76,6 +76,10 @@ func ApplyAt(s State, actorID string, c Command, nowMS int64, entropy uint64) (S
 		stage, instance = x.StageID, x.InstanceID
 	case *JudgePayload:
 		stage, instance = x.StageID, x.InstanceID
+	case *MediaReadyPayload:
+		stage, instance = x.StageID, x.InstanceID
+	case *SkipQuestionPayload:
+		stage, instance = x.StageID, x.InstanceID
 	}
 	if stage != "" && stage != s.Gameplay.Stage.ID {
 		return s, Fault("stale_stage")
@@ -102,6 +106,10 @@ func ApplyAt(s State, actorID string, c Command, nowMS int64, entropy uint64) (S
 		err = restartStage(&n, nowMS)
 	case *StagePayload:
 		switch c.Type {
+		case "continue_media":
+			err = continueMedia(&n, nowMS)
+		case "wait_media":
+			err = waitMedia(&n, nowMS)
 		case "buzz":
 			err = applyBuzz(&n, actorID, nowMS, entropy)
 		case "advance":
@@ -113,6 +121,10 @@ func ApplyAt(s State, actorID string, c Command, nowMS int64, entropy uint64) (S
 				openAnswers(&n, nowMS)
 			}
 		}
+	case *MediaReadyPayload:
+		err = updateReadiness(&n, actorID, x.Status, nowMS)
+	case *SkipQuestionPayload:
+		err = skipMediaQuestion(&n, x.Reason, nowMS)
 	case *AnswerPayload:
 		err = answer(&n, actorID, x.Text, nowMS)
 	case *AmountPayload:
@@ -194,6 +206,7 @@ func ApplyAt(s State, actorID string, c Command, nowMS int64, entropy uint64) (S
 				n.Participants[i].Role = Host
 			}
 		}
+		transferMediaHost(&n, x.TargetID, nowMS)
 	case *EmptyPayload:
 		switch c.Type {
 		case "pause":
@@ -215,6 +228,7 @@ func ApplyAt(s State, actorID string, c Command, nowMS int64, entropy uint64) (S
 					}
 				}
 			}
+			resumeMedia(&n, nowMS)
 			g.PausedAtMS = 0
 			if !g.Stage.Expired && g.PausedTimer {
 				g.Stage.DeadlineMS = nowMS + g.Stage.RemainingMS
@@ -245,6 +259,7 @@ func PauseAt(s State, nowMS int64) (State, bool) {
 	n.ResumePhase = n.Phase
 	n.Phase = Paused
 	g.PausedAtMS = nowMS
+	pauseMedia(&n, nowMS)
 	g.Stage.RemainingMS = 0
 	g.PausedTimer = g.Stage.DeadlineMS > 0
 	if g.Stage.DeadlineMS > nowMS {
@@ -288,6 +303,8 @@ func AdvanceAt(s State, nowMS int64) (State, bool) {
 		return n, true
 	}
 	switch g.Stage.Kind {
+	case "scheduled_content":
+		startPreparedContent(&n)
 	case "buzz_window":
 		if q != nil && len(q.Candidates) > 0 {
 			winBuzz(&n, q.Candidates[q.Seed%uint64(len(q.Candidates))], nowMS)
@@ -312,7 +329,7 @@ func AdvanceAt(s State, nowMS int64) (State, bool) {
 		} else {
 			st = q.Spec.Question[q.ContentIndex]
 		}
-		if st.DurationMS > 0 && !st.WaitForFinish {
+		if (st.DurationMS > 0 || st.Media != nil && st.Media.DurationMS > 0) && !st.WaitForFinish {
 			_ = advanceQuestion(&n, nowMS)
 		} else {
 			g.Stage.Expired = true
@@ -333,6 +350,9 @@ func restartStage(s *State, now int64) error {
 	kind, turn := g.Stage.Kind, g.Stage.TurnID
 	if q != nil {
 		switch kind {
+		case "prepare_content", "scheduled_content":
+			c := g.Content
+			prepareContent(s, c.Group, c.Index, c.ReturnStage, now)
 		case "collect_wagers":
 			for i := range q.Players {
 				p, _ := s.Participant(q.Players[i].ID)

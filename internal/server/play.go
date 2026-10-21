@@ -83,18 +83,25 @@ func (s *Server) roomIdentity(r *http.Request) (string, error) {
 	return s.store.Authenticate(r.Context(), chi.URLParam(r, "room"), parts[1])
 }
 func (s *Server) roomDocument(ctx context.Context, id string) (postgres.GamePin, packs.Document, error) {
+	pin, draft, err := s.roomManifest(ctx, id)
+	return pin, draft.Document, err
+}
+func (s *Server) roomManifest(ctx context.Context, id string) (postgres.GamePin, library.Draft, error) {
 	pin, e := s.store.GamePin(ctx, id)
 	if e != nil {
-		return pin, packs.Document{}, e
+		return pin, library.Draft{}, e
 	}
 	if pin.PackID == "" {
 		if pin.DemoDocument == nil {
-			return pin, packs.Document{}, game.Fault("unavailable")
+			return pin, library.Draft{}, game.Fault("unavailable")
 		}
-		return pin, *pin.DemoDocument, nil
+		return pin, library.Draft{Document: *pin.DemoDocument}, nil
+	}
+	if s.options.Library == nil {
+		return pin, library.Draft{}, game.Fault("unavailable")
 	}
 	d, e := s.options.Library.Pinned(ctx, pin.PackID, pin.Revision)
-	return pin, d.Document, e
+	return pin, d, e
 }
 
 type boardQuestion struct {
@@ -189,13 +196,14 @@ func (s *Server) selectQuestion(w http.ResponseWriter, r *http.Request) {
 		if !rm.limits[actor].allow(time.Now()) {
 			return nil, game.Fault("rate_limited")
 		}
-		_, doc, e := s.roomDocument(ctx, id)
+		_, draft, e := s.roomManifest(ctx, id)
 		if e != nil {
 			return nil, e
 		}
+		doc := draft.Document
 		var cmd game.Command
 		if state.Gameplay != nil {
-			question, err := playpack.Compile(doc, req.QuestionID)
+			question, err := playpack.CompileMedia(doc, req.QuestionID, library.MediaLookup(draft.Assets))
 			if err != nil {
 				return nil, game.Fault("unsupported_question")
 			}

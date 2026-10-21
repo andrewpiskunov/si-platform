@@ -82,10 +82,23 @@ func validateQuestion(q QuestionSpec) error {
 		return Fault("invalid_question")
 	}
 	questionBytes, answerBytes := 0, 0
+	questionMedia, answerMedia := 0, 0
+	seenMedia := map[string]bool{}
 	for i, steps := range [][]TextStep{q.Question, q.Answer} {
 		for _, st := range steps {
-			if st.DurationMS < 0 || st.DurationMS > 600000 || st.Placement != "" && st.Placement != "screen" && st.Placement != "replic" {
+			if st.DurationMS < 0 || st.DurationMS > 600000 || st.Placement != "" && st.Placement != "screen" && st.Placement != "replic" && !(st.Media != nil && st.Placement == "background") {
 				return Fault("invalid_question")
+			}
+			if st.Media != nil {
+				if st.Media.Validate() != nil || seenMedia[st.Media.ID] {
+					return Fault("invalid_question")
+				}
+				seenMedia[st.Media.ID] = true
+				if i == 0 {
+					questionMedia++
+				} else {
+					answerMedia++
+				}
 			}
 			if i == 0 {
 				questionBytes += len(st.Text)
@@ -104,7 +117,7 @@ func validateQuestion(q QuestionSpec) error {
 	if !serializedTextFits(strings.Join(questionTexts, "\n"), 4096) || !serializedTextFits(strings.Join(answerTexts, "\n"), 4096) || !serializedTextFits(strings.Join(q.Right, " / "), 4096) {
 		return Fault("invalid_question")
 	}
-	if questionBytes == 0 || questionBytes > 4096 || answerBytes > 4096 || len(strings.Join(q.Right, " / ")) > 4096 || strings.TrimSpace(strings.Join(q.Right, "")) == "" && answerBytes == 0 {
+	if questionBytes == 0 && questionMedia == 0 || questionBytes > 4096 || answerBytes > 4096 || len(strings.Join(q.Right, " / ")) > 4096 || strings.TrimSpace(strings.Join(q.Right, "")) == "" && answerBytes == 0 && answerMedia == 0 {
 		return Fault("invalid_question")
 	}
 	return nil
@@ -157,6 +170,7 @@ func beginQuestion(s *State, q QuestionSpec, replay bool, now int64) error {
 		a.Players = append(a.Players, Submission{ID: id, Maximum: p.Score})
 	}
 	g.Question = a
+	g.Content = nil
 	s.Question = nil
 	s.Winner = ""
 	s.Asked = append(s.Asked, q.ID)
@@ -181,12 +195,17 @@ func beginQuestion(s *State, q QuestionSpec, replay bool, now int64) error {
 }
 func present(s *State, now int64) {
 	q := s.Gameplay.Question
-	q.Shown = true
 	q.ContentIndex = 0
 	presentStage(s, now)
 }
 func presentStage(s *State, now int64) {
 	q := s.Gameplay.Question
+	if q.Spec.Question[q.ContentIndex].Media != nil {
+		prepareContent(s, "question", q.ContentIndex, "present_question", now)
+		return
+	}
+	s.Gameplay.Content = nil
+	q.Shown = true
 	setStage(s, "present_question", "", now, q.Rules.SelectionSeconds)
 	step := q.Spec.Question[q.ContentIndex]
 	if step.DurationMS > 0 {
@@ -286,6 +305,11 @@ func startAnswerPresentation(s *State, now int64, after, turn string) bool {
 }
 func presentAnswerStage(s *State, now int64) {
 	q := s.Gameplay.Question
+	if q.Spec.Answer[q.AnswerIndex].Media != nil {
+		prepareContent(s, "answer", q.AnswerIndex, "present_answer", now)
+		return
+	}
+	s.Gameplay.Content = nil
 	setStage(s, "present_answer", "", now, q.Rules.SelectionSeconds)
 	step := q.Spec.Answer[q.AnswerIndex]
 	if step.DurationMS > 0 {

@@ -16,10 +16,11 @@ type Rules struct {
 	NoRiskMultiplier  int    `json:"no_risk_multiplier"`
 }
 type TextStep struct {
-	Text          string `json:"text"`
-	DurationMS    int64  `json:"duration_ms,omitempty"`
-	WaitForFinish bool   `json:"wait_for_finish,omitempty"`
-	Placement     string `json:"placement,omitempty"`
+	Media         *MediaSpec `json:"media,omitempty"`
+	Text          string     `json:"text"`
+	DurationMS    int64      `json:"duration_ms,omitempty"`
+	WaitForFinish bool       `json:"wait_for_finish,omitempty"`
+	Placement     string     `json:"placement,omitempty"`
 }
 type PriceRange struct {
 	Minimum int64 `json:"minimum"`
@@ -105,6 +106,7 @@ type Submission struct {
 	BlockedUntilMS int64   `json:"blocked_until_ms,omitempty"`
 }
 type ActiveQuestion struct {
+	SkipReason       string        `json:"skip_reason,omitempty"`
 	Spec             QuestionSpec  `json:"spec"`
 	InstanceID       string        `json:"instance_id"`
 	Rules            Rules         `json:"rules"`
@@ -129,6 +131,7 @@ type ActiveQuestion struct {
 
 // Session is private persisted state; transport must use SessionView instead.
 type Session struct {
+	Content      *ContentState   `json:"content,omitempty"`
 	Version      int             `json:"version"`
 	RulesVersion int64           `json:"rules_version"`
 	Rules        Rules           `json:"rules"`
@@ -150,17 +153,18 @@ type RoundView struct {
 	Type string `json:"type"`
 }
 type QuestionView struct {
-	ID           string  `json:"id"`
-	InstanceID   string  `json:"instance_id"`
-	Type         string  `json:"type"`
-	Theme        string  `json:"theme"`
-	Price        int64   `json:"price"`
-	Text         string  `json:"text"`
-	Answer       *string `json:"answer,omitempty"`
-	ContentIndex int     `json:"content_index"`
-	ContentTotal int     `json:"content_total"`
-	AnswerIndex  int     `json:"answer_index"`
-	AnswerTotal  int     `json:"answer_total"`
+	Media        *MediaView `json:"media,omitempty"`
+	ID           string     `json:"id"`
+	InstanceID   string     `json:"instance_id"`
+	Type         string     `json:"type"`
+	Theme        string     `json:"theme"`
+	Price        int64      `json:"price"`
+	Text         string     `json:"text"`
+	Answer       *string    `json:"answer,omitempty"`
+	ContentIndex int        `json:"content_index"`
+	ContentTotal int        `json:"content_total"`
+	AnswerIndex  int        `json:"answer_index"`
+	AnswerTotal  int        `json:"answer_total"`
 }
 type PlayerView struct {
 	ID              string `json:"id"`
@@ -206,6 +210,7 @@ type AllowedAction struct {
 	RequiresSeq bool     `json:"requires_seq,omitempty"`
 }
 type SessionView struct {
+	Readiness      []Readiness      `json:"readiness"`
 	Version        int              `json:"version"`
 	RulesVersion   int64            `json:"rules_version"`
 	Rules          Rules            `json:"rules"`
@@ -304,4 +309,60 @@ type ResolveAppealPayload struct {
 }
 type TransferPayload struct {
 	TargetID string `json:"target_id"`
+}
+
+// MediaVariant and MediaSpec are private immutable prepared-file metadata.
+// Blob keys are never sent through a room projection.
+type MediaVariant struct {
+	Key  string `json:"key"`
+	MIME string `json:"mime"`
+	Size int64  `json:"size"`
+}
+type MediaSpec struct {
+	ID         string       `json:"id"`
+	Kind       string       `json:"kind"`
+	DurationMS int64        `json:"duration_ms"`
+	Width      int          `json:"width"`
+	Height     int          `json:"height"`
+	Standard   MediaVariant `json:"standard"`
+	Economy    MediaVariant `json:"economy"`
+}
+type MediaVariantView struct {
+	MIME string `json:"mime"`
+	Size int64  `json:"size"`
+}
+type MediaView struct {
+	ID               string           `json:"id"`
+	Kind             string           `json:"kind"`
+	DurationMS       int64            `json:"duration_ms"`
+	Width            int              `json:"width"`
+	Height           int              `json:"height"`
+	Standard         MediaVariantView `json:"standard"`
+	Economy          MediaVariantView `json:"economy"`
+	StartAtMS        int64            `json:"start_at_ms"`
+	PausedPositionMS int64            `json:"paused_position_ms"`
+}
+type Readiness struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+}
+
+// ContentState refers to exactly one currently authorized question/answer step.
+type ContentState struct {
+	Group            string      `json:"group"`
+	Index            int         `json:"index"`
+	ReturnStage      string      `json:"return_stage"`
+	Readiness        []Readiness `json:"readiness"`
+	StartAtMS        int64       `json:"start_at_ms"`
+	PausedPositionMS int64       `json:"paused_position_ms"`
+}
+type MediaReadyPayload struct {
+	StageID    string `json:"stage_id"`
+	InstanceID string `json:"instance_id"`
+	Status     string `json:"status"`
+}
+type SkipQuestionPayload struct {
+	StageID    string `json:"stage_id"`
+	InstanceID string `json:"instance_id"`
+	Reason     string `json:"reason"`
 }

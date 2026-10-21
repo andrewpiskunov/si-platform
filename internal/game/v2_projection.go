@@ -14,7 +14,7 @@ func ProjectAt(s State, id string, nowMS int64) View {
 	p, _ := n.Participant(id)
 	host := p.Role == Host
 	v := View{ID: n.ID, Seq: n.Seq, Phase: n.Phase, Participants: n.Participants, Winner: n.Winner, You: id}
-	gv := &SessionView{Version: 2, RulesVersion: g.RulesVersion, Rules: g.Rules, ChooserID: g.ChooserID, ServerTimeMS: nowMS, Stage: g.Stage, Players: []PlayerView{}, Submissions: []SubmissionView{}, Decisions: []Decision{}, Appeals: []Appeal{}, AllowedActions: allowedActions(n, id, nowMS)}
+	gv := &SessionView{Version: 2, RulesVersion: g.RulesVersion, Rules: g.Rules, ChooserID: g.ChooserID, ServerTimeMS: nowMS, Stage: g.Stage, Players: []PlayerView{}, Submissions: []SubmissionView{}, Decisions: []Decision{}, Appeals: []Appeal{}, AllowedActions: allowedActions(n, id, nowMS), Readiness: []Readiness{}}
 	v.Gameplay = gv
 	if gv.ChooserID == "" {
 		ids := playerIDs(n)
@@ -36,6 +36,11 @@ func ProjectAt(s State, id string, nowMS int64) View {
 	if q != nil {
 		qv := &QuestionView{ID: q.Spec.ID, InstanceID: q.InstanceID, Type: q.Spec.Type, ContentIndex: q.ContentIndex, ContentTotal: len(q.Spec.Question), AnswerIndex: q.AnswerIndex, AnswerTotal: len(q.Spec.Answer)}
 		gv.Question = qv
+		if m, ok := CurrentMedia(n, id); ok {
+			c := g.Content
+			qv.Media = &MediaView{ID: m.ID, Kind: m.Kind, DurationMS: m.DurationMS, Width: m.Width, Height: m.Height, Standard: MediaVariantView{MIME: m.Standard.MIME, Size: m.Standard.Size}, Economy: MediaVariantView{MIME: m.Economy.MIME, Size: m.Economy.Size}, StartAtMS: c.StartAtMS, PausedPositionMS: c.PausedPositionMS}
+			gv.Readiness = append(gv.Readiness, c.Readiness...)
+		}
 		if q.Spec.Type != "secret" || q.RecipientID != "" {
 			qv.Theme = q.Spec.Theme
 			qv.Price = q.Price
@@ -92,7 +97,7 @@ func visibleText(steps []TextStep, last int, host bool) string {
 		if i > last {
 			break
 		}
-		if host || st.Placement != "replic" {
+		if (host || st.Placement != "replic") && (st.Text != "" || st.Media == nil) {
 			lines = append(lines, st.Text)
 		}
 	}
@@ -114,7 +119,7 @@ func allowedActions(s State, id string, now int64) []AllowedAction {
 	kind := g.Stage.Kind
 	expired := deadlinePassed(g, now)
 	add := func(t string, targets ...string) {
-		out = append(out, AllowedAction{Type: t, Targets: targets, RequiresSeq: t != "buzz" && t != "answer" && t != "wager"})
+		out = append(out, AllowedAction{Type: t, Targets: targets, RequiresSeq: t != "buzz" && t != "answer" && t != "wager" && t != "media_ready"})
 	}
 	bounded := func(t string, minimum, maximum, step int64) {
 		out = append(out, AllowedAction{Type: t, Minimum: intPtr(minimum), Maximum: intPtr(maximum), Step: intPtr(step), RequiresSeq: t != "wager"})
@@ -140,7 +145,7 @@ func allowedActions(s State, id string, now int64) []AllowedAction {
 		if s.Phase != Lobby {
 			add("pause")
 		}
-		if kind != "buzz_window" && (g.Stage.DeadlineMS > 0 || g.Stage.Expired) {
+		if kind != "buzz_window" && kind != "prepare_content" && kind != "scheduled_content" && (g.Stage.DeadlineMS > 0 || g.Stage.Expired) {
 			bounded("extend", 5, 120, 1)
 		}
 		if kind != "resolved" && (q == nil || !q.Judged) {
@@ -219,6 +224,15 @@ func allowedActions(s State, id string, now int64) []AllowedAction {
 	}
 	sub := submission(q, id)
 	switch kind {
+	case "prepare_content", "scheduled_content":
+		if mediaReadinessActor(s, id) && (kind == "prepare_content" || !expired) {
+			add("media_ready")
+		}
+		if host && kind == "prepare_content" && expired {
+			add("wait_media")
+			add("continue_media")
+			add("skip_question")
+		}
 	case "select_recipient":
 		if host || id == chooser && !expired {
 			targets := []string{}

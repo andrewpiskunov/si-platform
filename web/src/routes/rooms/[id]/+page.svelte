@@ -345,6 +345,7 @@
         </div>{/if}
       <GameV2
         room={roomState}
+        roomToken={credentials.token}
         view={roomState.gameplay}
         {board}
         {ready}

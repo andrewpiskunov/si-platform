@@ -34,6 +34,15 @@ export class DraftEditor<T> {
   get canUndo() {
     return this.history.length > 0;
   }
+  beginAttachment(): SaveRequest<T> | null {
+    if (this.dirty || this.saving || this.conflict) return null;
+    this.saving = true;
+    return {
+      base_revision: this.revision,
+      document: copy(this.document),
+      generation: this.generation
+    };
+  }
   beginSave(): SaveRequest<T> | null {
     if (!this.dirty || this.saving || this.conflict) return null;
     this.saving = true;

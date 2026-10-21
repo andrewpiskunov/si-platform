@@ -1,6 +1,8 @@
 package playpack
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -10,13 +12,17 @@ import (
 	"siplatform/internal/packs"
 )
 
+type AssetLookup func(kind, reference string) (game.MediaSpec, error)
+
 type CompileError struct{ Issue packs.Issue }
 
 func (e CompileError) Error() string { return e.Issue.Path + ": " + e.Issue.Message }
 func problem(code, path, message string) error {
 	return CompileError{Issue: packs.Issue{Severity: "error", Code: code, Path: path, Message: message}}
 }
-func Validate(doc packs.Document) []packs.Issue {
+func Validate(doc packs.Document) []packs.Issue { return ValidateMedia(doc, nil) }
+
+func ValidateMedia(doc packs.Document, lookup AssetLookup) []packs.Issue {
 	issues := []packs.Issue{}
 	for ri, r := range doc.Rounds {
 		rp := fmt.Sprintf("rounds[%d]", ri)
@@ -25,7 +31,7 @@ func Validate(doc packs.Document) []packs.Issue {
 		}
 		for ti, t := range r.Themes {
 			for qi, q := range t.Questions {
-				_, err := compileQuestion(r, t, q, fmt.Sprintf("%s.themes[%d].questions[%d]", rp, ti, qi))
+				_, err := compileQuestion(r, t, q, fmt.Sprintf("%s.themes[%d].questions[%d]", rp, ti, qi), lookup)
 				if err != nil {
 					issues = append(issues, err.(CompileError).Issue)
 				}
@@ -35,6 +41,10 @@ func Validate(doc packs.Document) []packs.Issue {
 	return issues
 }
 func Compile(doc packs.Document, questionID string) (game.QuestionSpec, error) {
+	return CompileMedia(doc, questionID, nil)
+}
+
+func CompileMedia(doc packs.Document, questionID string, lookup AssetLookup) (game.QuestionSpec, error) {
 	for ri, r := range doc.Rounds {
 		for ti, t := range r.Themes {
 			for qi, q := range t.Questions {
@@ -43,7 +53,7 @@ func Compile(doc packs.Document, questionID string) (game.QuestionSpec, error) {
 					if _, err := roundSpec(r, rp); err != nil {
 						return game.QuestionSpec{}, err
 					}
-					return compileQuestion(r, t, q, fmt.Sprintf("%s.themes[%d].questions[%d]", rp, ti, qi))
+					return compileQuestion(r, t, q, fmt.Sprintf("%s.themes[%d].questions[%d]", rp, ti, qi), lookup)
 				}
 			}
 		}
@@ -113,7 +123,7 @@ func roundSpec(r packs.Round, path string) (game.RoundSpec, error) {
 	}
 	return out, nil
 }
-func compileQuestion(r packs.Round, t packs.Theme, q packs.Question, path string) (game.QuestionSpec, error) {
+func compileQuestion(r packs.Round, t packs.Theme, q packs.Question, path string, lookup AssetLookup) (game.QuestionSpec, error) {
 	out := game.QuestionSpec{ID: q.ID, RoundID: r.ID, ThemeID: t.ID, Theme: t.Name, Type: q.Type, Price: int64(q.Price), Question: []game.TextStep{}, Answer: []game.TextStep{}, Right: append([]string{}, q.Right...)}
 	bad := func(code, field, message string) (game.QuestionSpec, error) {
 		return out, problem(code, path+field, message)
@@ -168,7 +178,29 @@ func compileQuestion(r packs.Round, t packs.Theme, q packs.Question, path string
 			for i, c := range p.Items {
 				cp := fmt.Sprintf("%s.items[%d]", pp, i)
 				if c.Type == "image" || c.Type == "audio" || c.Type == "video" {
-					return bad("game_media_pending", cp, "Медиа требует подготовки перед игрой; текстовые правила уже доступны")
+					if lookup == nil {
+						return bad("game_media_pending", cp, "Медиа требует подготовки перед игрой")
+					}
+					if !c.IsRef || strings.TrimSpace(c.Value) == "" || strings.Contains(c.Value, "://") || c.DurationMS < 0 || c.DurationMS > 600000 || c.Placement != "" && c.Placement != "screen" && c.Placement != "replic" && c.Placement != "background" {
+						return bad("game_content", cp, "Ожидается локальная ссылка на подготовленное медиа")
+					}
+					media, err := lookup(c.Type, c.Value)
+					if err != nil {
+						return bad("game_media_pending", cp, "Файл отсутствует или ещё не подготовлен для игры")
+					}
+					media.ID = ""
+					identity, _ := json.Marshal(struct {
+						Round, Theme, Question, Group string
+						Index                         int
+						Media                         game.MediaSpec
+					}{r.ID, t.ID, q.ID, p.Name, i, media})
+					digest := sha256.Sum256(identity)
+					media.ID = "m_" + hex.EncodeToString(digest[:24])
+					if media.Kind != c.Type || media.Validate() != nil {
+						return bad("game_media_invalid", cp, "Подготовленное медиа не соответствует игровому профилю")
+					}
+					steps = append(steps, game.TextStep{Media: &media, DurationMS: c.DurationMS, WaitForFinish: c.WaitForFinish, Placement: c.Placement})
+					continue
 				}
 				if c.Type != "text" || c.IsRef || c.Placement != "" && c.Placement != "screen" && c.Placement != "replic" || c.DurationMS < 0 || c.DurationMS > 600000 {
 					return bad("game_content", cp, "Неподдерживаемый текстовый фрагмент")
@@ -238,6 +270,9 @@ func compileQuestion(r packs.Round, t packs.Theme, q packs.Question, path string
 	textLength := 0
 	for _, s := range out.Question {
 		textLength += len(strings.TrimSpace(s.Text))
+		if s.Media != nil {
+			textLength++
+		}
 	}
 	if textLength == 0 {
 		return bad("game_text", ".params.question", "Нужен текст вопроса")

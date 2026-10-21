@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Question, Draft, Content } from './types';
+  import AssetPicker from './AssetPicker.svelte';
   import ContentOptions from './ContentOptions.svelte';
   import { questionTypes } from './game-v2.ts';
   import { setSimpleParameter, setPriceRange } from './question-parameters.ts';
@@ -161,7 +162,8 @@
                         : Number(event.currentTarget.value)
                   })}
               /><span class="helper"
-                >Пусто или 0 — любое целое. Положительный шаг задаёт сетку; максимум доступен всегда.</span
+                >Пусто или 0 — любое целое. Положительный шаг задаёт сетку; максимум доступен
+                всегда.</span
               ></label
             >
           </div>{/if}{/if}
@@ -200,36 +202,24 @@
               oninput={(event) => updateItem(index, { value: event.currentTarget.value })}
               placeholder="Напишите вопрос…"
               aria-label={`Текст вопроса, фрагмент ${index + 1}`}
-              rows="5"></textarea>{:else if item.is_ref}<label
-              >Файл из пакета<select
-                value={item.value}
-                onchange={(event) => updateItem(index, { value: event.currentTarget.value })}
-                ><option value="">Выберите файл</option
-                >{#if item.value && !assets.some((asset) => asset.name === item.value)}<option
-                    value={item.value}>{item.value}</option
-                  >{/if}{#each assets as asset}<option value={asset.name}>{asset.name}</option
-                  >{/each}</select
-              ></label
-            >{:else}<label
-              >Ссылка на медиа<input
-                value={item.value}
-                oninput={(event) => updateItem(index, { value: event.currentTarget.value })}
-              /></label
-            >{/if}
-          {#if item.type === 'text'}<ContentOptions
+              rows="5"></textarea>{:else}<AssetPicker
+              {assets}
               {item}
+              label={`Файл вопроса, фрагмент ${index + 1}`}
               onchange={(patch) => updateItem(index, patch)}
             />{/if}
+          <ContentOptions {item} onchange={(patch) => updateItem(index, patch)} />
         </div>{/each}
       <div class="row">
-        <button type="button" class="small" onclick={() => add('text')}>＋ Текст</button
-        >{#if assets.length}<button type="button" class="small" onclick={() => add('image')}
-            >＋ Изображение</button
-          ><button type="button" class="small" onclick={() => add('audio')}>＋ Аудио</button><button
-            type="button"
-            class="small"
-            onclick={() => add('video')}>＋ Видео</button
-          >{/if}
+        <button type="button" class="small" onclick={() => add('text')}>＋ Текст</button><button
+          type="button"
+          class="small"
+          onclick={() => add('image')}>＋ Изображение</button
+        ><button type="button" class="small" onclick={() => add('audio')}>＋ Аудио</button><button
+          type="button"
+          class="small"
+          onclick={() => add('video')}>＋ Видео</button
+        >
       </div>
     </div>
   </fieldset>
@@ -269,10 +259,27 @@
                   aria-label={`Пояснение, фрагмент ${index + 1}`}></textarea><ContentOptions
                   {item}
                   onchange={(patch) => updateItem(index, patch, 'answer')}
-                />{:else}<p class="helper">Импортированный фрагмент сохранён: {item.value}</p>{/if}
+                />{:else}<AssetPicker
+                  {assets}
+                  {item}
+                  label={`Файл пояснения, фрагмент ${index + 1}`}
+                  onchange={(patch) => updateItem(index, patch, 'answer')}
+                /><ContentOptions
+                  {item}
+                  onchange={(patch) => updateItem(index, patch, 'answer')}
+                />{/if}
             </div>{/each}<button type="button" class="small" onclick={() => add('text', 'answer')}
             >＋ Фрагмент пояснения</button
           >
+          <div class="row">
+            <button type="button" class="small" onclick={() => add('image', 'answer')}
+              >＋ Изображение в ответ</button
+            ><button type="button" class="small" onclick={() => add('audio', 'answer')}
+              >＋ Аудио в ответ</button
+            ><button type="button" class="small" onclick={() => add('video', 'answer')}
+              >＋ Видео в ответ</button
+            >
+          </div>
           <p class="helper">
             Фрагменты раскрываются последовательно после показа правильного ответа.
           </p>

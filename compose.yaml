@@ -30,6 +30,7 @@ services:
       DATABASE_URL: postgres://si:${POSTGRES_PASSWORD:-local-dev-only}@db:5432/si?sslmode=disable
       LISTEN_ADDR: "0.0.0.0:8080"
       ALLOWED_ORIGIN: ${ALLOWED_ORIGIN:-http://localhost:8080}
+      MEDIA_DISABLED: ${MEDIA_DISABLED:-false}
     volumes:
       - app-data:/data
     depends_on:

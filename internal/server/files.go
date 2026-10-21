@@ -120,13 +120,16 @@ func (s *Server) draftAsset(w http.ResponseWriter, r *http.Request) {
 }
 func safeMIME(value string) string {
 	switch value {
-	case "image/png", "image/jpeg", "image/webp", "audio/mpeg", "audio/wav", "audio/ogg", "video/mp4", "video/webm":
+	case "image/png", "image/jpeg", "image/webp", "audio/mpeg", "audio/wav", "audio/ogg", "audio/mp4", "video/mp4", "video/webm":
 		return value
 	default:
 		return "application/octet-stream"
 	}
 }
 func (s *Server) serveBlob(w http.ResponseWriter, r *http.Request, key, contentType, name string) {
+	s.serveBlobAs(w, r, key, contentType, name, "attachment")
+}
+func (s *Server) serveBlobAs(w http.ResponseWriter, r *http.Request, key, contentType, name, disposition string) {
 	if s.options.Objects == nil {
 		appError(w, errors.New("storage unavailable"))
 		return
@@ -142,8 +145,9 @@ func (s *Server) serveBlob(w http.ResponseWriter, r *http.Request, key, contentT
 	reader := &blobSeeker{ctx: r.Context(), store: s.options.Objects, key: key, size: m.Size}
 	defer reader.Close()
 	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
+	w.Header().Set("Content-Disposition", disposition+`; filename="`+name+`"`)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("ETag", strconv.Quote(key))
 	http.ServeContent(w, r, name, time.Time{}, reader)

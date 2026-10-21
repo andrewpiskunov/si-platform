@@ -7,6 +7,8 @@
   import { normalizeDraft, canWithdraw, canPlayDraft } from '#lib/draft-model.ts';
   import QuestionEditor from '#lib/QuestionEditor.svelte';
   import QuestionPreview from '#lib/QuestionPreview.svelte';
+  import MediaUpload from '#lib/MediaUpload.svelte';
+  import MediaLibrary from '#lib/MediaLibrary.svelte';
   import CreateRoom from '#lib/CreateRoom.svelte';
   import type { Draft, PackDocument, Question, Card, Rights } from '#lib/types.ts';
   let draft = $state<Draft | null>(null),
@@ -35,6 +37,7 @@
   let editor: DraftEditor<PackDocument> | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let alive = true;
+  let saveTask: Promise<void> | null = null;
   let loadedID = '';
   const selectedQuestion = $derived(
     document?.rounds
@@ -104,7 +107,14 @@
     saveLabel = 'Есть изменения';
     schedule();
   }
-  async function save() {
+  function save(): Promise<void> {
+    if (saveTask) return saveTask;
+    saveTask = performSave().finally(() => {
+      saveTask = null;
+    });
+    return saveTask;
+  }
+  async function performSave() {
     if (!editor) return;
     const request = editor.beginSave();
     if (!request) return;
@@ -131,6 +141,54 @@
       sync();
       saveLabel = 'Не сохранено';
       error = errorText(e);
+    }
+  }
+  async function flushDraft() {
+    clearTimeout(timer);
+    if (saveTask) await saveTask;
+    if (!editor) throw new Error('unavailable');
+    if (editor.conflict) throw new Error('conflict');
+    while (editor.dirty) {
+      await save();
+      if (editor.conflict) throw new Error('conflict');
+      if (saveLabel === 'Не сохранено') throw new Error('save_required');
+    }
+    clearTimeout(timer);
+    if (editor.saving) throw new Error('save_required');
+  }
+  async function attachMedia(uploadID: string, signal: AbortSignal) {
+    await flushDraft();
+    if (signal.aborted || !editor) return;
+    const current = editor,
+      request = current.beginAttachment();
+    if (!request) throw new Error('conflict');
+    sync();
+    saveLabel = 'Прикрепляем медиа…';
+    try {
+      const result = normalizeDraft(
+        await api<Draft>(
+          `/drafts/${loadedID}/assets`,
+          'POST',
+          { upload_id: uploadID, base_revision: request.base_revision },
+          undefined,
+          signal
+        )
+      );
+      current.saved(request, result.document, result.card.revision);
+      if (alive && current === editor) {
+        draft = result;
+        sync();
+        saveLabel = current.dirty ? 'Есть изменения' : 'Все изменения сохранены';
+        if (current.dirty) schedule();
+        void loadHistory();
+      }
+    } catch (e) {
+      current.failed(e instanceof APIError ? e.code : 'unavailable');
+      if (alive) {
+        sync();
+        saveLabel = 'Не сохранено';
+      }
+      throw e;
     }
   }
   function undo() {
@@ -513,6 +571,7 @@
                 question={selectedQuestion}
                 assets={draft.assets || []}
                 packId={draft.card.id}
+                {revision}
               />{:else}<QuestionEditor
                 question={selectedQuestion}
                 assets={draft.assets || []}
@@ -608,6 +667,13 @@
               disabled={!canPlayDraft(draft)}
             />{/if}
         </details>
+        <MediaLibrary assets={draft.assets} packId={draft.card.id} {revision} />
+        <MediaUpload
+          packId={draft.card.id}
+          disabled={conflict || busy}
+          onflush={flushDraft}
+          onattach={attachMedia}
+        />
         <details>
           <summary>Файлы и управление</summary>
           <div class="stack">
@@ -617,8 +683,7 @@
                 download>Скачать исходный SIQ</a
               >{/if}
             <p class="helper">
-              Медиафайлов: {draft.assets?.length || 0}. Медиа добавляются в составе импортируемого
-              SIQ.
+              Медиафайлов: {draft.assets?.length || 0}. Исходники включаются в экспорт SIQ.
             </p>
             <label class="check"
               ><input type="checkbox" bind:checked={deleteConfirmed} />Удалить пакет и снять его

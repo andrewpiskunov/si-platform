@@ -30,8 +30,12 @@ func (c Command) Payload() (any, error) {
 		p = &ExtendPayload{}
 	case "restart_stage":
 		p = &RestartPayload{}
-	case "advance", "open_buzzer", "buzz":
+	case "advance", "open_buzzer", "buzz", "continue_media", "wait_media":
 		p = &StagePayload{}
+	case "media_ready":
+		p = &MediaReadyPayload{}
+	case "skip_question":
+		p = &SkipQuestionPayload{}
 	case "answer":
 		p = &AnswerPayload{}
 	case "wager", "select_price":
@@ -76,6 +80,10 @@ func (c Command) Payload() (any, error) {
 		valid = ValidID(x.StageID) && validReason(x.Reason)
 	case *StagePayload:
 		valid = validStage(x.StageID, x.InstanceID)
+	case *MediaReadyPayload:
+		valid = validStage(x.StageID, x.InstanceID) && (x.Status == "loading" || x.Status == "ready" || x.Status == "error" || x.Status == "hidden")
+	case *SkipQuestionPayload:
+		valid = validStage(x.StageID, x.InstanceID) && validReason(x.Reason)
 	case *AnswerPayload:
 		valid = validStage(x.StageID, x.InstanceID) && strings.TrimSpace(x.Text) != "" && serializedTextFits(x.Text, 1024)
 	case *AmountPayload:
