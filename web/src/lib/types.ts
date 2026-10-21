@@ -223,3 +223,17 @@ export interface ReportsPage {
   items: Report[] | null;
   next_after?: string;
 }
+
+export type Usage = {
+  storage: { used_bytes: number; limit_bytes: number; remaining_bytes: number };
+  packs: { used: number; limit: number; remaining: number };
+  themes: { used: number; limit: number; remaining: number };
+  uploads: { active: number; limit: number; remaining: number };
+  limits: {
+    pack_revisions: number;
+    theme_revisions: number;
+    siq_bytes: number;
+    media_bytes: number;
+    theme_bytes: number;
+  };
+};

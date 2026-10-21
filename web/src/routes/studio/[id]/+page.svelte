@@ -1,4 +1,5 @@
 <script lang="ts">
+  import UsagePanel from '#lib/UsagePanel.svelte';
   import { onMount } from 'svelte';
   import { beforeNavigate, goto } from '$app/navigation';
   import { page } from '$app/state';
@@ -40,6 +41,7 @@
     });
   let editor: DraftEditor<PackDocument> | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let usageRefresh = $state(0);
   let alive = true;
   let saveTask: Promise<void> | null = null;
   let loadedID = '';
@@ -149,6 +151,7 @@
       draft = result;
       saveLabel = 'Все изменения сохранены';
       if (alive) {
+        usageRefresh++;
         sync();
         if (editor.dirty) schedule();
         void loadHistory();
@@ -193,6 +196,7 @@
       );
       current.saved(request, result.document, result.card.revision);
       if (alive && current === editor) {
+        usageRefresh++;
         draft = result;
         sync();
         saveLabel = current.dirty ? 'Есть изменения' : 'Все изменения сохранены';
@@ -726,7 +730,9 @@
             />{/if}
         </details>
         <MediaLibrary assets={draft.assets} packId={draft.card.id} {revision} />
+        <UsagePanel refreshTrigger={usageRefresh} packRevision={revision} />
         <MediaUpload
+          onusagechange={() => usageRefresh++}
           packId={draft.card.id}
           disabled={conflict || busy}
           onflush={flushDraft}

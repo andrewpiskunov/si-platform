@@ -26,17 +26,17 @@
 
 Files internal/library/usage.go+usage_test.go; internal/server/usage.go+usage_test.go; authoring.go routes.
 `Service.Usage(ctx context.Context, actor accounts.Identity)(Usage,error)`, DTO nestedstorage/Counts packs/themes/uploads + limitsfieldsexactspec. begin(ctx,actor,"",true,"") then StorageUsage and countqueries underaccountlock. GET /api/usage existingidentity/writeJSON.
-- [ ] RED ownusage/revisions/unattachedreadyuploads/retainedthemes/expiredactive, anonymous/token/revoked/deleted, otherusercounts excluded, remainingclamp.
-- [ ] Implement DTO and shared10GiB/200/500 constants onlyif needed topreventdrift, notunrelatedrefactor. No changequotasemantics. RealDBboundaryfixtures bypassnormalcapacityonlyintests.
-- [ ] HTTP RED endpoint401/403/no-store/exactJSONnumeric; implement route, focused/fullGo race DB/media/vet/build.
+- [x] RED ownusage/revisions/unattachedreadyuploads/retainedthemes/expiredactive, anonymous/token/revoked/deleted, otherusercounts excluded, remainingclamp.
+- [x] Implement DTO and shared10GiB/200/500 constants onlyif needed topreventdrift, notunrelatedrefactor. No changequotasemantics. RealDBboundaryfixtures bypassnormalcapacityonlyintests.
+- [x] HTTP RED endpoint401/403/no-store/exactJSONnumeric; implement route, focused/fullGo race DB/media/vet/build.
 
 ## Task2 — Before-upload UI independent worker
 
 Files newweb/src/lib/{UsagePanel.svelte,usage-model.ts,usage-model.test.ts}; account/studio/editor, MediaUpload/ThemeUpload/ThemeLibrary asneeded; types.ts.
-- [ ] RED formatting/projection/unknownvs0/lifecycle helper meaningfultests; sharedpanel limitlabels+refresh+staleerror. Independentcomponentstate, noaccountsharedcache.
-- [ ] Mountaccount,studioSIQ,editorbeforemedia,themesbeforeZIP. Refresh afterownedmutation throughexplicitprop/callback or eventscopedtosamepage, no backgroundpolling. Editorcurrentrevision/selectedthemeversion visible.
-- [ ] Staticlimits visiblebeforeGETresolved; dynamicerrornotzero; preserveforms/retry. Uploadcontrolskeep serverauthority/resume; nofalseestimatefromfilebytes.
-- [ ] npm test/check/build; no runtime/Go/e2e/commits/review.
+- [x] RED formatting/projection/unknownvs0/lifecycle helper meaningfultests; sharedpanel limitlabels+refresh+staleerror. Independentcomponentstate, noaccountsharedcache.
+- [x] Mountaccount,studioSIQ,editorbeforemedia,themesbeforeZIP. Refresh afterownedmutation throughexplicitprop/callback or eventscopedtosamepage, no backgroundpolling. Editorcurrentrevision/selectedthemeversion visible.
+- [x] Staticlimits visiblebeforeGETresolved; dynamicerrornotzero; preserveforms/retry. Uploadcontrolskeep serverauthority/resume; nofalseestimatefromfilebytes.
+- [x] npm test/check/build; no runtime/Go/e2e/commits/review.
 
 ## Task3 — Acceptance root
 

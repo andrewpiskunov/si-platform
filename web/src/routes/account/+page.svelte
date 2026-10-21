@@ -1,4 +1,5 @@
 <script lang="ts">
+  import UsagePanel from '#lib/UsagePanel.svelte';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { api, errorText } from '#lib/api.ts';
@@ -115,6 +116,7 @@
         href="/login">Войти</a
       >{/if}
   </div>
+  {#if $user}<UsagePanel />{/if}
   {#if error}<p class="notice error" role="alert">{error}</p>{/if}{#if $user}<div
       class="two-columns"
     >

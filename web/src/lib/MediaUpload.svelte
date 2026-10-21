@@ -5,11 +5,13 @@
   let {
     packId,
     disabled = false,
+    onusagechange,
     onflush,
     onattach
   }: {
     packId: string;
     disabled?: boolean;
+    onusagechange?: () => void;
     onflush: () => Promise<void>;
     onattach: (id: string, signal: AbortSignal) => Promise<void>;
   } = $props();
@@ -76,6 +78,7 @@
       }
       sessionStorage.setItem(key, current.id);
       upload = current;
+      if (alive) onusagechange?.();
       while (!signal.aborted && current.status === 'uploading' && current.offset < selected.size) {
         const response = await fetch(`/api/uploads/${current.id}`, {
           method: 'PATCH',
@@ -143,7 +146,10 @@
     } catch (e) {
       if (!signal.aborted && alive) error = errorText(e);
     } finally {
-      if (alive) busy = false;
+      if (alive) {
+        busy = false;
+        onusagechange?.();
+      }
     }
   }
 </script>

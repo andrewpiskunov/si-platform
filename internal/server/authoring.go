@@ -25,6 +25,7 @@ func (s *Server) platformRoutes(r chi.Router) {
 	if s.options.Library == nil {
 		return
 	}
+	r.Get("/usage", s.usage)
 	r.Get("/catalogue", s.catalogue)
 	r.Get("/catalogue/{id}", s.publicCard)
 	r.Get("/catalogue/{id}/download", s.publicDownload)

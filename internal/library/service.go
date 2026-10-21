@@ -258,14 +258,14 @@ func (s *Service) Create(ctx context.Context, actor accounts.Identity, in Save) 
 	if err != nil {
 		return Draft{}, err
 	}
-	if count >= 200 {
+	if count >= PackCountLimit {
 		return Draft{}, ErrQuota
 	}
 	used, err = usage(ctx, a.tx, a.actor.User.ID)
 	if err != nil {
 		return Draft{}, err
 	}
-	if used+d.Card.SizeBytes > 10<<30 {
+	if used+d.Card.SizeBytes > StorageLimitBytes {
 		return Draft{}, ErrQuota
 	}
 	packID, err := id()
@@ -358,7 +358,7 @@ func (s *Service) update(ctx context.Context, actor accounts.Identity, packID st
 	if base != a.pack.current {
 		return Draft{}, ErrConflict
 	}
-	if base >= 500 {
+	if base >= PackRevisionLimit {
 		return Draft{}, ErrQuota
 	}
 	if in.ImportID != "" {
@@ -382,7 +382,7 @@ func (s *Service) update(ctx context.Context, actor accounts.Identity, packID st
 	if err != nil {
 		return Draft{}, err
 	}
-	if used+d.Card.SizeBytes > 10<<30 {
+	if used+d.Card.SizeBytes > StorageLimitBytes {
 		return Draft{}, ErrQuota
 	}
 	d.Card.ID = packID

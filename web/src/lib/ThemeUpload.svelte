@@ -1,9 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api, APIError, errorText, bytes } from './api.ts';
+  import { usageLimits } from './usage-model.ts';
   import type { Upload } from './types.ts';
   import type { ThemeCard, ThemeVersion } from './appearance.ts';
-  let { cards, onsaved }: { cards: ThemeCard[]; onsaved: (version: ThemeVersion) => void } =
+  let {
+    cards,
+    onsaved,
+    onusagechange
+  }: { cards: ThemeCard[]; onsaved: (version: ThemeVersion) => void; onusagechange?: () => void } =
     $props();
   let file = $state<File | null>(null),
     upload = $state<Upload | null>(null),
@@ -14,7 +19,11 @@
     saving = $state(false);
   let controller: AbortController | undefined,
     storageKey = '';
-  onMount(() => () => controller?.abort());
+  let alive = true;
+  onMount(() => () => {
+    alive = false;
+    controller?.abort();
+  });
   async function start() {
     if (!file || busy) return;
     if (file.size === 0 || file.size > 5 * 1024 * 1024) {
@@ -54,6 +63,7 @@
       }
       sessionStorage.setItem(storageKey, current.id);
       upload = current;
+      if (alive) onusagechange?.();
       while (current.status === 'uploading' && current.offset < selected.size) {
         const response = await fetch(`/api/uploads/${current.id}`, {
           method: 'PATCH',
@@ -114,6 +124,7 @@
       if (!signal.aborted) error = errorText(e);
     } finally {
       busy = false;
+      if (alive) onusagechange?.();
     }
   }
   async function save() {
@@ -129,7 +140,7 @@
       sessionStorage.removeItem(storageKey);
       upload = null;
       file = null;
-      onsaved(version);
+      if (alive) onsaved(version);
     } catch (e) {
       error =
         e instanceof APIError && e.code === 'conflict'
@@ -205,6 +216,11 @@
           >{/each}</select
       ></label
     >
+    <p class="helper" data-testid="quota-theme-target-revision">
+      {#if target}Версии выбранного оформления: {cards.find((card) => card.id === target)
+          ?.revision ?? 'неизвестно'} из {usageLimits.theme_revisions}.
+      {:else}Будет создано новое оформление с первой версией. Лимит — {usageLimits.theme_revisions} версий.{/if}
+    </p>
     {#if target}<label
         >Базовая версия<input
           aria-label="Базовая версия темы"

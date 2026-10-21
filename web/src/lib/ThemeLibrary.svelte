@@ -1,4 +1,5 @@
 <script lang="ts">
+  import UsagePanel from './UsagePanel.svelte';
   import { onMount } from 'svelte';
   import { api, APIError, errorText } from './api.ts';
   import type { ThemeCard, ThemeVersion } from './appearance.ts';
@@ -11,6 +12,7 @@
     login = $state(false),
     deleting = $state(false),
     confirmDelete = $state(false);
+  let usageRefresh = $state(0);
   let request: AbortController | undefined;
   onMount(() => {
     void load();
@@ -53,6 +55,7 @@
     try {
       await api(`/themes/${version.card.id}`, 'DELETE');
       version = null;
+      usageRefresh++;
       confirmDelete = false;
       await load();
     } catch (e) {
@@ -67,10 +70,17 @@
     {error}{#if login}
       <a class="text-link" href="/login">Войти</a>{/if}
   </p>{/if}
-{#if !login}<ThemeUpload
+{#if !login}<UsagePanel
+    refreshTrigger={usageRefresh}
+    themeRevision={version
+      ? (cards.find((card) => card.id === version?.card.id)?.revision ?? version.card.revision)
+      : undefined}
+  /><ThemeUpload
+    onusagechange={() => usageRefresh++}
     {cards}
     onsaved={(saved) => {
       version = saved;
+      usageRefresh++;
       void load();
     }}
   />
@@ -115,7 +125,10 @@
         ><button class="danger small" onclick={() => (confirmDelete = true)}>Удалить тему</button>
       </div>
       {#if confirmDelete}<div class="notice">
-          <p>Тема исчезнет из вашей библиотеки. Уже созданные комнаты сохранят выбранную версию.</p>
+          <p>
+            Тема исчезнет из вашей библиотеки. Уже созданные комнаты сохранят выбранную версию.
+            Сохранённые версии продолжат занимать квоту хранения и число оформлений.
+          </p>
           <div class="row">
             <button class="danger" disabled={deleting} onclick={remove}
               >Подтвердить удаление темы</button

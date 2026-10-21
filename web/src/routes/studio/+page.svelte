@@ -1,4 +1,5 @@
 <script lang="ts">
+  import UsagePanel from '#lib/UsagePanel.svelte';
   import { page } from '$app/state';
   import { contextLink, roomContext } from '#lib/appearance.ts';
   import { onMount } from 'svelte';
@@ -15,6 +16,7 @@
     file = $state<File | null>(null),
     uploading = $state(false),
     login = $state(false);
+  let usageRefresh = $state(0);
   let alive = true;
   onMount(() => {
     void load();
@@ -72,6 +74,7 @@
       }
       sessionStorage.setItem(key, current.id);
       upload = current;
+      usageRefresh++;
       while (alive && current.status === 'uploading' && current.offset < selected.size) {
         const response = await fetch(`/api/uploads/${current.id}`, {
           method: 'PATCH',
@@ -118,6 +121,7 @@
       error = errorText(e);
     } finally {
       uploading = false;
+      if (alive) usageRefresh++;
     }
   }
 </script>
@@ -135,7 +139,8 @@
   {#if error}<div class="notice error" role="alert">
       {error}{#if login}
         <a class="text-link" href="/login">Войти</a>{/if}
-    </div>{/if}{#if !login}<div class="two-columns" style="margin:32px 0">
+    </div>{/if}{#if !login}<UsagePanel refreshTrigger={usageRefresh} />
+    <div class="two-columns" style="margin:32px 0">
       <div class="panel">
         <h2>Уже есть пакет?</h2>
         <p class="muted">
