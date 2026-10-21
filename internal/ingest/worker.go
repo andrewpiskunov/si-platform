@@ -258,6 +258,14 @@ func (s *Service) processArchive(ctx context.Context, j job, epoch int64) (strin
 		return "", importError(ctx, "staging_unavailable")
 	}
 	key := hex.EncodeToString(hash.Sum(nil))
+	var expected string
+	checksumErr := s.pool.QueryRow(ctx, `SELECT sha256 FROM catalogue_imports WHERE upload_id=$1 AND owner_id=$2`, j.ID, actor.User.ID).Scan(&expected)
+	if checksumErr != nil && !errors.Is(checksumErr, pgx.ErrNoRows) {
+		return "", "storage_unavailable"
+	}
+	if checksumErr == nil && key != expected {
+		return "", "checksum_mismatch"
+	}
 	keys := make([]string, 0, len(imported.Assets)+1)
 	keys = append(keys, key)
 	for _, asset := range imported.Assets {

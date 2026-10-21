@@ -239,7 +239,26 @@ func (s *Service) Create(ctx context.Context, actor accounts.Identity, in Save) 
 // createInAccess preserves creation invariants inside the caller's account lock.
 // The caller owns commit, allowing additional receipts to be atomic with creation.
 func createInAccess(ctx context.Context, a *access, in Save) (Draft, error) {
-	var err error
+	catalogue, err := catalogueForCreate(ctx, a, in.ImportID)
+	if err != nil {
+		return Draft{}, err
+	}
+	if catalogue.pack != "" {
+		var revision int
+		var blocked bool
+		e := a.tx.QueryRow(ctx, `SELECT current_revision,blocked FROM library_packs WHERE id=$1 AND owner_id=$2 AND deleted_at IS NULL FOR UPDATE`, catalogue.pack, a.actor.User.ID).Scan(&revision, &blocked)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return Draft{}, ErrNotFound
+		}
+		if e != nil {
+			return Draft{}, e
+		}
+		if blocked {
+			return Draft{}, ErrBlocked
+		}
+		return load(ctx, a.tx, catalogue.pack, revision)
+	}
+
 	if in.ImportID != "" {
 		if !hexID(in.ImportID, 32) {
 			return Draft{}, ErrInvalid
@@ -301,6 +320,9 @@ func createInAccess(ctx context.Context, a *access, in Save) (Draft, error) {
 		return Draft{}, err
 	}
 	if err = insert(ctx, a.tx, d); err != nil {
+		return Draft{}, err
+	}
+	if err = catalogueRecord(ctx, a, catalogue, packID); err != nil {
 		return Draft{}, err
 	}
 	result, err := load(ctx, a.tx, packID, 1)

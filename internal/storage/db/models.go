@@ -101,6 +101,24 @@ type AiQuote struct {
 	ProviderID      string
 }
 
+type CatalogueImport struct {
+	ID              string
+	OwnerID         string
+	Namespace       string
+	ExternalID      string
+	RequestHash     string
+	Sha256          string
+	Name            string
+	Size            int64
+	SourceUrl       string
+	License         string
+	Attribution     string
+	PermissionBasis string
+	UploadID        string
+	PackID          string
+	CreatedAt       pgtype.Timestamptz
+}
+
 type CommandResult struct {
 	RoomID      string
 	ActorID     string

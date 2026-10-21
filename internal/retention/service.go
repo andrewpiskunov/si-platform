@@ -17,7 +17,7 @@ import (
 const batchSize = 25
 const redacted = "[удалено вместе с аккаунтом]"
 
-type Stats struct{ Packs, Themes, Uploads, Audits, Credentials, MCPReceipts, Redacted, ObjectsDeleted, ObjectsFailed, ObjectsReferenced int }
+type Stats struct{ Packs, Themes, Uploads, Audits, Credentials, CatalogueImports, MCPReceipts, Redacted, ObjectsDeleted, ObjectsFailed, ObjectsReferenced int }
 type Service struct {
 	pool    *pgxpool.Pool
 	objects blob.Store
@@ -33,6 +33,7 @@ type item struct{ kind, id, owner string }
 // Minimal anonymous account tombstones remain for foreign moderation references.
 func (s *Service) Sweep(ctx context.Context) (st Stats, err error) {
 	queries := []string{
+		`SELECT 'catalogue',p.id,p.owner_id FROM catalogue_imports p JOIN account_users a ON a.id=p.owner_id WHERE a.deleted_at<=now()-interval '30 days'`,
 		`SELECT 'mcp',p.idempotency_key,p.owner_id FROM mcp_receipts p JOIN account_users a ON a.id=p.owner_id WHERE a.deleted_at<=now()-interval '30 days'`,
 		`SELECT 'pack',p.id,p.owner_id FROM library_packs p JOIN account_users a ON a.id=p.owner_id WHERE (p.deleted_at<=now()-interval '30 days' OR a.deleted_at<=now()-interval '30 days') AND NOT EXISTS(SELECT 1 FROM room_packs r WHERE r.pack_id=p.id)`,
 		`SELECT 'theme',p.id,p.owner_id FROM themes p JOIN account_users a ON a.id=p.owner_id WHERE (p.deleted_at<=now()-interval '30 days' OR a.deleted_at<=now()-interval '30 days') AND NOT EXISTS(SELECT 1 FROM room_theme_pins r WHERE r.theme_id=p.id)`,
@@ -183,6 +184,15 @@ func (s *Service) metadata(ctx context.Context, i item, st *Stats) error {
 			return e
 		}
 		n = r.RowsAffected()
+	case "catalogue":
+		if !deleted {
+			return nil
+		}
+		r, e := tx.Exec(ctx, `DELETE FROM catalogue_imports WHERE owner_id=$1 AND id=$2`, i.owner, i.id)
+		if e != nil {
+			return e
+		}
+		n = r.RowsAffected()
 	case "mcp":
 		if !deleted {
 			return nil
@@ -230,6 +240,8 @@ func (s *Service) metadata(ctx context.Context, i item, st *Stats) error {
 		st.Audits += int(n)
 	case "mcp":
 		st.MCPReceipts += int(n)
+	case "catalogue":
+		st.CatalogueImports += int(n)
 	case "credential":
 		st.Credentials += int(n)
 	case "redact":

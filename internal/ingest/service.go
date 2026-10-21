@@ -223,7 +223,7 @@ func owned(ctx context.Context, tx pgx.Tx, owner, id string) (Upload, error) {
 	return u, safeError(ctx, err)
 }
 func (s *Service) Create(ctx context.Context, actor accounts.Identity, name string, size int64) (Upload, error) {
-	return s.create(ctx, actor, name, size, "siq", "")
+	return s.create(ctx, actor, name, size, "siq", "", nil)
 }
 
 func (s *Service) CreateMedia(ctx context.Context, actor accounts.Identity, name string, size int64, kind string) (Upload, error) {
@@ -237,10 +237,10 @@ func (s *Service) CreateMedia(ctx context.Context, actor accounts.Identity, name
 	case ".zip", ".siq", ".7z", ".rar", ".tar", ".gz":
 		return Upload{}, ErrInvalid
 	}
-	return s.create(ctx, actor, name, size, "media", kind)
+	return s.create(ctx, actor, name, size, "media", kind, nil)
 }
 
-func (s *Service) create(ctx context.Context, actor accounts.Identity, name string, size int64, purpose, kind string) (Upload, error) {
+func (s *Service) create(ctx context.Context, actor accounts.Identity, name string, size int64, purpose, kind string, catalogue *CatalogueInput) (Upload, error) {
 	if !validName(name) || size <= 0 || size > maxUpload {
 		return Upload{}, ErrInvalid
 	}
@@ -249,6 +249,15 @@ func (s *Service) create(ctx context.Context, actor accounts.Identity, name stri
 		return Upload{}, err
 	}
 	defer tx.Rollback(context.Background())
+	if catalogue != nil {
+		replay, found, e := catalogueReplay(ctx, tx, actor.User.ID, *catalogue)
+		if e != nil {
+			return Upload{}, e
+		}
+		if found {
+			return replay, nil
+		}
+	}
 	if purpose == "theme" {
 		if err = requireThemeSession(ctx, tx, actor, purpose); err != nil {
 			return Upload{}, err
@@ -301,6 +310,11 @@ func (s *Service) create(ctx context.Context, actor accounts.Identity, name stri
 	u, err := scanUpload(tx.QueryRow(ctx, `INSERT INTO uploads(id,owner_id,credential_id,name,size,purpose,media_kind) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING `+uploadColumns, id, actor.User.ID, actor.SessionID, name, size, purpose, kind))
 	if err != nil {
 		return Upload{}, safeError(ctx, err)
+	}
+	if catalogue != nil {
+		if err = catalogueInsert(ctx, tx, actor.User.ID, id, *catalogue); err != nil {
+			return Upload{}, err
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return Upload{}, safeError(ctx, err)

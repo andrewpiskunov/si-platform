@@ -18,7 +18,7 @@ func (s *Service) CreateTheme(ctx context.Context, actor accounts.Identity, name
 	if size > 5<<20 {
 		return Upload{}, ErrInvalid
 	}
-	return s.create(ctx, actor, name, size, "theme", "")
+	return s.create(ctx, actor, name, size, "theme", "", nil)
 }
 
 // The common draft-token policy does not confer theme rights. This second gate
