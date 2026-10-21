@@ -59,6 +59,23 @@
       <summary>Ещё фильтры</summary>
       <div class="form-grid">
         <label
+          >Возрастная отметка
+          <select
+            name="age"
+            aria-label="Возрастная отметка"
+            aria-describedby="age-filter-help"
+            value={data.filters.age || ''}
+          >
+            <option value="">Все отметки</option>
+            {#each [0, 6, 12, 16, 18] as age}<option value={String(age)}>Не выше {age}+</option
+              >{/each}
+            <option value="unrated">Без распознанной отметки</option>
+          </select>
+          <span id="age-filter-help" class="helper"
+            >Указано автором; фильтр не проверяет содержание пакета</span
+          >
+        </label>
+        <label
           >Тег<input
             name="tag"
             value={data.filters.tag || ''}
@@ -77,7 +94,7 @@
   {#if data.failed}<div class="notice error" role="alert">
       Не удалось загрузить каталог. Проверьте соединение и <a
         class="text-link"
-        href={contextLink('/', room)}>попробуйте ещё раз</a
+        href={contextLink(`/?${new URLSearchParams(data.filters)}`, room)}>попробуйте ещё раз</a
       >.
     </div>{:else if data.items.length}<div class="card-grid">
       {#each data.items as card}<PackCard {card} />{/each}

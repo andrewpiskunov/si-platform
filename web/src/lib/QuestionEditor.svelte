@@ -2,6 +2,8 @@
   import type { Question, Draft, Content } from './types';
   import AssetPicker from './AssetPicker.svelte';
   import ContentOptions from './ContentOptions.svelte';
+  import ReorderControls from './ReorderControls.svelte';
+  import { moveItem } from './reorder.ts';
   import { questionTypes } from './game-v2.ts';
   import { setSimpleParameter, setPriceRange } from './question-parameters.ts';
   let {
@@ -64,6 +66,14 @@
     const q = copy();
     q.params.find((parameter) => parameter.name === group)?.items?.splice(index, 1);
     onchange(q);
+  }
+  function move(index: number, delta: -1 | 1, group = 'question') {
+    const q = copy();
+    const p = q.params.find((parameter) => parameter.name === group);
+    if (p?.items && index + delta >= 0 && index + delta < p.items.length) {
+      p.items = moveItem(p.items, index, index + delta);
+      onchange(q);
+    }
   }
 </script>
 
@@ -197,6 +207,12 @@
               aria-label={`Удалить фрагмент ${index + 1}`}>Удалить</button
             >
           </div>
+          <ReorderControls
+            label={`Фрагмент вопроса ${index + 1}`}
+            {index}
+            count={parameter('question')?.items?.length || 0}
+            onmove={(delta) => move(index, delta)}
+          />
           {#if item.type === 'text'}<textarea
               value={item.value}
               oninput={(event) => updateItem(index, { value: event.currentTarget.value })}
@@ -252,6 +268,12 @@
                   >Удалить</button
                 >
               </div>
+              <ReorderControls
+                label={`Фрагмент ответа ${index + 1}`}
+                {index}
+                count={parameter('answer')?.items?.length || 0}
+                onmove={(delta) => move(index, delta, 'answer')}
+              />
               {#if item.type === 'text'}<textarea
                   value={item.value}
                   oninput={(event) =>

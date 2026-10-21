@@ -3,7 +3,7 @@ import type { Card } from '#lib/types.ts';
 import type { PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ url }) => {
   const query = new URLSearchParams();
-  for (const key of ['q', 'language', 'tag', 'difficulty', 'media', 'max_bytes', 'offset']) {
+  for (const key of ['q', 'language', 'tag', 'difficulty', 'media', 'age', 'max_bytes', 'offset']) {
     const value = url.searchParams.get(key);
     if (value) query.set(key, value);
   }

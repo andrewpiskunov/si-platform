@@ -28,28 +28,28 @@
 **Files:** `migrations/00010_catalogue_search.sql`, `internal/library/catalogue_metadata.go` и tests, `internal/library/{model,service,publication}.go`, `internal/server/authoring.go` и tests.
 **Interfaces:** `Filter.Age string`; внутренний `catalogueMetadata(card Card, document packs.Document) (searchText string, ageRating *int)`; INSERT добавляет два параметра. HTTP принимает `age`; DTO неизменны.
 
-- [ ] RED `TestCatalogueThemeSearchAndAge`: опубликованные темы/регистр/буквальные спецсимволы, все возрастные варианты/границы/комбинации, private/pending/newdraft/withdraw/block исключены; ответы не найдены. `TestCatalogueMetadataBackfill`: данные до migration10 (включая null rounds/themes), затем миграция, сравнение с новым сохранением; повтор миграции и параллельные изолированные схемы безопасны.
-- [ ] Run `. media-env.sh; TEST_DATABASE_URL=... go test -race ./internal/library -run 'TestCatalogue(ThemeSearchAndAge|MetadataBackfill)'`; ожидаемый RED — отсутствующий Age/метаданные или неверный поиск.
-- [ ] Добавить чистое вычисление метаданных, миграцию с backfill/индексами/constraint age, заполнение INSERT, строгую проверку фильтра и параметризованный буквальный ILIKE. Все варианты создания/восстановления используют общий insert.
-- [ ] RED→GREEN HTTP-тест invalid age/recognized/unrated + существующие фильтры; `go test -race ./internal/library ./internal/server ./internal/storage/postgres` и vet GREEN. Scoped commit.
+- [x] RED `TestCatalogueThemeSearchAndAge`: опубликованные темы/регистр/буквальные спецсимволы, все возрастные варианты/границы/комбинации, private/pending/newdraft/withdraw/block исключены; ответы не найдены. `TestCatalogueMetadataBackfill`: данные до migration10 (включая null rounds/themes), затем миграция, сравнение с новым сохранением; повтор миграции и параллельные изолированные схемы безопасны.
+- [x] Run `. media-env.sh; TEST_DATABASE_URL=... go test -race ./internal/library -run 'TestCatalogue(ThemeSearchAndAge|MetadataBackfill)'`; ожидаемый RED — отсутствующий Age/метаданные или неверный поиск.
+- [x] Добавить чистое вычисление метаданных, миграцию с backfill/индексами/constraint age, заполнение INSERT, строгую проверку фильтра и параметризованный буквальный ILIKE. Все варианты создания/восстановления используют общий insert.
+- [x] RED→GREEN HTTP-тест invalid age/recognized/unrated + существующие фильтры; `go test -race ./internal/library ./internal/server ./internal/storage/postgres` и vet GREEN. Scoped commit.
 
 ## Task 2 — Перестановка в редакторе (независимый web worker)
 
 **Files:** новые `web/src/lib/reorder.ts`/tests и `ReorderControls.svelte`; существующие `QuestionEditor.svelte`, `routes/studio/[id]/+page.svelte`, при необходимости локальные styles. Не менять каталог/e2e/package.json.
 **Interfaces:** `moveItem<T>(items: readonly T[], from: number, to: number): T[]` возвращает новый массив, не меняет элементы; некорректные/равные индексы возвращают исходный порядок. `ReorderControls` props `{label:string,index:number,count:number,onmove:(delta:-1|1)=>void}`. Точные aria-label: `${label}: выше` / `${label}: ниже`.
 
-- [ ] RED unit: move parents/question/content preserves all IDs/unknown metadata/refs; no mutation on bad/boundary inputs; DraftEditor undo restores prior document and next save holds reordered document despite stale prior save completing.
-- [ ] `node --test src/lib/reorder.test.ts` → отсутствующий helper RED. Реализовать helper и кнопки; все действия через существующий `change`/QuestionEditor onchange, операции границ disabled, выбранный ID не заменяется индексом. Сохранить null-нормализацию diagnostic drafts.
-- [ ] UI уровней: раунд, тема, выбранный вопрос в своей теме, content group question/answer. Кнопки клавиатурные, подписи с именем/номером и направлением; компактны на 390px.
-- [ ] `npm test`, `npm run check`, `npm run build` → GREEN; один scoped commit после интеграции root, без собственного reviewer.
+- [x] RED unit: move parents/question/content preserves all IDs/unknown metadata/refs; no mutation on bad/boundary inputs; DraftEditor undo restores prior document and next save holds reordered document despite stale prior save completing.
+- [x] `node --test src/lib/reorder.test.ts` → отсутствующий helper RED. Реализовать helper и кнопки; все действия через существующий `change`/QuestionEditor onchange, операции границ disabled, выбранный ID не заменяется индексом. Сохранить null-нормализацию diagnostic drafts.
+- [x] UI уровней: раунд, тема, выбранный вопрос в своей теме, content group question/answer. Кнопки клавиатурные, подписи с именем/номером и направлением; компактны на 390px.
+- [x] `npm test`, `npm run check`, `npm run build` → GREEN; один scoped commit после интеграции root, без собственного reviewer.
 
 ## Task 3 — Фильтр и браузерная приёмка (root после Task1/2)
 
 **Files:** `web/src/routes/+page.{server.ts,svelte}`, новый `e2e/authoring.mjs`, `e2e/package.json`, README/Docs11/17/план.
 **Consumes:** Task1 `age` query, неизменный Card; Task2 кнопки с exact aria-label. API/Vite перезапускает только root после стабильных исходников.
 
-- [ ] RED Chromium: поиск по теме + age через форму/SSR; pagination preserves query/age/context; invalid API age fails. Показать подсказку «Указано автором; фильтр не проверяет содержание пакета» и все семь вариантов фильтра.
-- [ ] Implement SSR allowlist/form and preservation; стандартные фильтры остаются совместимы.
-- [ ] RED→GREEN Chromium reordered rounds/themes/questions/question+answer fragments → selected question stable → undo → autosave/reload → exported SIQ/reimport same order. Diagnostic unknown fields/refs retained; mobile overflow absent; keyboard controls work; no page errors. Создавать синтетические пакеты только локально.
+- [x] RED Chromium: поиск по теме + age через форму/SSR; pagination preserves query/age/context; invalid API age fails. Показать подсказку «Указано автором; фильтр не проверяет содержание пакета» и все семь вариантов фильтра.
+- [x] Implement SSR allowlist/form and preservation; стандартные фильтры остаются совместимы.
+- [x] RED→GREEN Chromium reordered rounds/themes/questions/question+answer fragments → selected question stable → undo → autosave/reload → exported SIQ/reimport same order. Diagnostic unknown fields/refs retained; mobile overflow absent; keyboard controls work; no page errors. Создавать синтетические пакеты только локально.
 - [ ] Полный Go race с PostgreSQL и MEDIA_INTEGRATION, vet/build; web tests/check/build; существующие шесть e2e (включая theme-regressions) + authoring. Результаты записать, не выдавая их за нагрузочное испытание.
 - [ ] Один свежий обзор всего этапа с Review Focus; Important/Critical — одна проверяемая коррекция. Обновить фактический статус и scoped commits, FF локального main; продолжить остальные P0.

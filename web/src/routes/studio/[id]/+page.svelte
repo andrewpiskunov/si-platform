@@ -6,6 +6,8 @@
   import { DraftEditor } from '#lib/draft-editor.ts';
   import { normalizeDraft, canWithdraw, canPlayDraft } from '#lib/draft-model.ts';
   import QuestionEditor from '#lib/QuestionEditor.svelte';
+  import ReorderControls from '#lib/ReorderControls.svelte';
+  import { moveItem, readQuestionSelection, saveQuestionSelection } from '#lib/reorder.ts';
   import QuestionPreview from '#lib/QuestionPreview.svelte';
   import MediaUpload from '#lib/MediaUpload.svelte';
   import MediaLibrary from '#lib/MediaLibrary.svelte';
@@ -39,11 +41,10 @@
   let alive = true;
   let saveTask: Promise<void> | null = null;
   let loadedID = '';
-  const selectedQuestion = $derived(
-    document?.rounds
-      .flatMap((round) => round.themes.flatMap((theme) => theme.questions))
-      .find((question) => question.id === selected)
+  const questions = $derived(
+    document?.rounds.flatMap((round) => round.themes.flatMap((theme) => theme.questions)) || []
   );
+  const selectedQuestion = $derived(questions.find((question) => question.id === selected));
   const selectedLocation = $derived(
     document?.rounds.flatMap((round) =>
       round.themes
@@ -51,6 +52,15 @@
         .map((theme) => `${round.name} / ${theme.name}`)
     )[0] || ''
   );
+  const selectedPosition = $derived.by(() => {
+    for (const [ri, round] of (document?.rounds || []).entries()) {
+      for (const [ti, theme] of round.themes.entries()) {
+        const qi = theme.questions.findIndex((question) => question.id === selected);
+        if (qi >= 0) return { ri, ti, qi, theme };
+      }
+    }
+    return null;
+  });
   const copy = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
   onMount(() => {
     loadedID = page.params.id || '';
@@ -59,6 +69,11 @@
       alive = false;
       clearTimeout(timer);
     };
+  });
+  $effect(() => {
+    if (loading || !document) return;
+    if (!questions.some((question) => question.id === selected)) selected = questions[0]?.id || '';
+    saveQuestionSelection(loadedID, selected);
   });
   beforeNavigate(({ cancel }) => {
     if (dirty && !window.confirm('Есть несохранённые изменения. Покинуть редактор?')) cancel();
@@ -78,7 +93,7 @@
       editor = new DraftEditor(draft.document, draft.card.revision);
       rights = { ...rights, ...draft.card.rights, confirmed: false };
       sync();
-      selected = document?.rounds[0]?.themes[0]?.questions[0]?.id || '';
+      selected = readQuestionSelection(loadedID, questions);
       await loadHistory();
     } catch (e) {
       error = errorText(e);
@@ -244,6 +259,18 @@
           const i = theme.questions.findIndex((question) => question.id === value.id);
           if (i >= 0) theme.questions[i] = value;
         }
+    });
+  }
+  function moveQuestion(delta: -1 | 1) {
+    if (!selectedPosition) return;
+    const { ri, ti, qi, theme } = selectedPosition;
+    if (qi + delta < 0 || qi + delta >= theme.questions.length) return;
+    change((next) => {
+      next.rounds[ri].themes[ti].questions = moveItem(
+        next.rounds[ri].themes[ti].questions,
+        qi,
+        qi + delta
+      );
     });
   }
   function deleteQuestion() {
@@ -440,6 +467,17 @@
                   change((next) => (next.rounds[ri].name = event.currentTarget.value))}
               /></label
             >
+            <div class="structure-order">
+              <ReorderControls
+                label={`Раунд ${ri + 1} «${round.name || 'Без названия'}»`}
+                index={ri}
+                count={document.rounds.length}
+                onmove={(delta) =>
+                  change((next) => {
+                    next.rounds = moveItem(next.rounds, ri, ri + delta);
+                  })}
+              />
+            </div>
             <label
               >Тип раунда<select
                 value={round.type || 'standard'}
@@ -467,6 +505,17 @@
                       )}
                   /></label
                 >
+                <div class="structure-order">
+                  <ReorderControls
+                    label={`Тема ${ti + 1} «${theme.name || 'Без названия'}» (раунд ${ri + 1})`}
+                    index={ti}
+                    count={round.themes.length}
+                    onmove={(delta) =>
+                      change((next) => {
+                        next.rounds[ri].themes = moveItem(next.rounds[ri].themes, ti, ti + delta);
+                      })}
+                  />
+                </div>
                 <div class="question-pills">
                   {#each theme.questions as question}<button
                       class:selected={selected === question.id}
@@ -567,6 +616,12 @@
                 >{preview ? 'Редактировать' : 'Предпросмотр'}</button
               >
             </div>
+            {#if selectedPosition}<ReorderControls
+                label={`Вопрос ${selectedPosition.qi + 1} за ${selectedQuestion.price} в теме «${selectedPosition.theme.name || 'Без названия'}»`}
+                index={selectedPosition.qi}
+                count={selectedPosition.theme.questions.length}
+                onmove={moveQuestion}
+              />{/if}
             {#if preview}<QuestionPreview
                 question={selectedQuestion}
                 assets={draft.assets || []}
@@ -698,3 +753,9 @@
       {error || 'Не удалось открыть пакет.'} <a class="text-link" href="/login">Войти</a>
     </div>{/if}
 </section>
+
+<style>
+  .structure-order {
+    margin: 8px 0 12px;
+  }
+</style>

@@ -905,7 +905,12 @@ details[open] > summary {
     order: 3;
     width: 100%;
     gap: 28px;
-    height: 36px;
+    row-gap: 8px;
+    min-height: 36px;
+    flex-wrap: wrap;
+  }
+  .topbar nav a {
+    min-height: 36px;
   }
   .account-link > span:last-child {
     max-width: 110px;
