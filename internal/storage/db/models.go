@@ -189,6 +189,16 @@ type LibraryRevision struct {
 	AgeRating   pgtype.Int2
 }
 
+type McpReceipt struct {
+	OwnerID        string
+	IdempotencyKey string
+	Operation      string
+	RequestHash    string
+	PackID         string
+	ResultRevision int32
+	CreatedAt      pgtype.Timestamptz
+}
+
 type RetentionCandidate struct {
 	Key       string
 	CreatedAt pgtype.Timestamptz

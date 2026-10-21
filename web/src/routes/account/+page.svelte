@@ -2,6 +2,7 @@
   import AccountExport from '#lib/AccountExport.svelte';
   import UsagePanel from '#lib/UsagePanel.svelte';
   import { onMount } from 'svelte';
+  import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { api, errorText } from '#lib/api.ts';
   import { user, refreshUser, authenticationChanged } from '#lib/session.ts';
@@ -176,6 +177,17 @@
         <p class="muted">
           Для подключения ваших инструментов. Доступ можно отозвать в любой момент.
         </p>
+        <details data-testid="mcp-connection">
+          <summary>Подключение MCP</summary>
+          <div class="stack">
+            <p>Подключите клиент, который поддерживает Streamable HTTP и собственный заголовок авторизации.</p>
+            <p>Адрес сервера: <code class="code-token">{page.url.origin}/api/mcp</code></p>
+            <p>Создайте токен ниже. Для полного доступа к своим пакетам выберите чтение, редактирование и экспорт. Токен действует до 30 дней; его можно отозвать.</p>
+            <p>В настройках клиента задайте заголовок <code>Authorization: Bearer &lt;ваш токен&gt;</code>. Не добавляйте токен в адрес сервера и не отправляйте его в текст чата.</p>
+            <p>Доступны создание черновика, чтение, изменение вопросов, проверка структуры и экспорт SIQ. Публикация выполняется на сайте. После внешних изменений обновите открытый редактор; конфликт версии защищает ваши правки.</p>
+            <p class="muted">Вход через OAuth пока не поддерживается. Клиентам, которые принимают только OAuth-подключение, этот способ не подходит. Лимит — 100 000 новых операций изменения через MCP на аккаунт; повторы с тем же ключом не расходуют его.</p>
+          </div>
+        </details>
         <form class="stack" onsubmit={createToken}>
           <label
             >Название<input

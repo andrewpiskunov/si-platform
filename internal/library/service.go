@@ -360,6 +360,19 @@ func (s *Service) update(ctx context.Context, actor accounts.Identity, packID st
 		return Draft{}, err
 	}
 	defer a.close()
+	result, err := updateInAccess(ctx, a, packID, base, in, documentOnly)
+	if err != nil {
+		return Draft{}, err
+	}
+	if err = a.tx.Commit(ctx); err != nil {
+		return Draft{}, err
+	}
+	return result, nil
+}
+
+// updateInAccess keeps revision, quota and asset invariants in the caller's transaction.
+func updateInAccess(ctx context.Context, a *access, packID string, base int, in Save, documentOnly bool) (Draft, error) {
+	var err error
 	if err = a.owner(); err != nil {
 		return Draft{}, err
 	}
@@ -410,9 +423,6 @@ func (s *Service) update(ctx context.Context, actor accounts.Identity, packID st
 	}
 	result, err := load(ctx, a.tx, packID, base+1)
 	if err != nil {
-		return Draft{}, err
-	}
-	if err = a.tx.Commit(ctx); err != nil {
 		return Draft{}, err
 	}
 	return result, nil

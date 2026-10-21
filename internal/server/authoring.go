@@ -11,6 +11,7 @@ import (
 	"siplatform/internal/game"
 	"siplatform/internal/ingest"
 	"siplatform/internal/library"
+	"siplatform/internal/mcpauthor"
 	"siplatform/internal/packs"
 	"siplatform/internal/themes"
 )
@@ -24,6 +25,9 @@ func (s *Server) platformRoutes(r chi.Router) {
 	}
 	if s.options.Library == nil {
 		return
+	}
+	if s.options.Accounts != nil {
+		r.Handle("/mcp", mcpauthor.New(s.options.Accounts, s.options.Library, s.options.Origin))
 	}
 	s.aiRoutes(r)
 	r.Get("/privacy/subjects", s.privacySubjects)
