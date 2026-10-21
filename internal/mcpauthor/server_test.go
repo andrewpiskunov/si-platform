@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -289,7 +290,7 @@ func TestHTTPAdmissionIsBounded(t *testing.T) {
 
 func TestDeepJSONRejectedBeforeSchemaWork(t *testing.T) {
 	h, _, token := fixture(t)
-	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_draft","arguments":{"pack_id":"` + strings.Repeat("a", 32) + `","nested":` + strings.Repeat("[", 65) + `0` + strings.Repeat("]", 65) + `}}}`
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}},"name":"get_draft","arguments":{"pack_id":"` + strings.Repeat("a", 32) + `","nested":` + strings.Repeat("[", 65) + `0` + strings.Repeat("]", 65) + `}}}`
 	r, _ := http.NewRequest("POST", h.URL, strings.NewReader(body))
 	r.Header.Set("Authorization", "Bearer "+token)
 	r.Header.Set("Content-Type", "application/json")
@@ -330,5 +331,55 @@ func TestLatestRequestCancellationReleasesAdmission(t *testing.T) {
 			t.Fatal("cancelled request retained slot")
 		}
 		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestSuccessfulDraftResponseIsNotStored(t *testing.T) {
+	h, _, token := fixture(t)
+	s := client(t, h, token, "2026-07-28")
+	var card library.Card
+	result(t, s, "create_draft", map[string]any{"idempotency_key": "cache-regression-01", "document": document()}, &card)
+	req, _ := http.NewRequest("POST", h.URL, strings.NewReader(fmt.Sprintf(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}},"name":"get_draft","arguments":{"pack_id":%q}}}`, card.ID)))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("MCP-Protocol-Version", "2026-07-28")
+	req.Header.Set("Mcp-Method", "tools/call")
+	req.Header.Set("Mcp-Name", "get_draft")
+	resp, err := h.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatal(resp.Status, string(b))
+	}
+	if got := resp.Header.Get("Cache-Control"); got != "private, no-store" {
+		t.Fatalf("cache header = %q", got)
+	}
+}
+
+func TestJSONOnlyTransportRejectsSubscriptions(t *testing.T) {
+	h, _, token := fixture(t)
+	s := client(t, h, token, "2026-07-28")
+	if caps := s.InitializeResult().Capabilities; caps.Tools == nil || caps.Tools.ListChanged {
+		t.Errorf("unexpected tools capabilities: %+v", caps.Tools)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "POST", h.URL, strings.NewReader(`{"jsonrpc":"2.0","id":3,"method":"subscriptions/listen","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}},"notifications":{"toolsListChanged":true}}}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("MCP-Protocol-Version", "2026-07-28")
+	req.Header.Set("Mcp-Method", "subscriptions/listen")
+	resp, err := h.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 400 || strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("subscription accepted: %s %s", resp.Status, resp.Header.Get("Content-Type"))
 	}
 }
