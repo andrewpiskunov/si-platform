@@ -25,6 +25,7 @@ func (s *Server) platformRoutes(r chi.Router) {
 	if s.options.Library == nil {
 		return
 	}
+	s.aiRoutes(r)
 	r.Get("/privacy/subjects", s.privacySubjects)
 	r.Get("/privacy/export", s.privacyExport)
 	r.Get("/usage", s.usage)

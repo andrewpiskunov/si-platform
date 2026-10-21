@@ -44,6 +44,60 @@ type AccountUser struct {
 	DeletedAt    pgtype.Timestamptz
 }
 
+type AiAdmission struct {
+	ID int32
+}
+
+type AiJob struct {
+	ID              string
+	OwnerID         string
+	CredentialID    string
+	Status          string
+	Request         []byte
+	Result          []byte
+	Model           string
+	CreatedAt       pgtype.Timestamptz
+	CompletedAt     pgtype.Timestamptz
+	StartedAt       pgtype.Timestamptz
+	AppliedPackID   pgtype.Text
+	AppliedHash     string
+	QuoteID         string
+	IdempotencyKey  string
+	RequestHash     string
+	Month           pgtype.Date
+	InputRate       int64
+	OutputRate      int64
+	InputTokens     int64
+	MaxOutputTokens int32
+	MaximumCost     int64
+	ActualCost      pgtype.Int8
+	CancelRequested bool
+	Error           string
+}
+
+type AiMonthlyUsage struct {
+	OwnerID  string
+	Month    pgtype.Date
+	Spent    int64
+	Reserved int64
+}
+
+type AiQuote struct {
+	OwnerID         string
+	ID              string
+	CredentialID    string
+	Request         []byte
+	Model           string
+	InputRate       int64
+	OutputRate      int64
+	MaxOutputTokens int32
+	InputTokens     pgtype.Int8
+	MaximumCost     pgtype.Int8
+	CreatedAt       pgtype.Timestamptz
+	ExpiresAt       pgtype.Timestamptz
+	FormatVersion   string
+}
+
 type CommandResult struct {
 	RoomID      string
 	ActorID     string

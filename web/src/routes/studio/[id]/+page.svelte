@@ -1,4 +1,6 @@
 <script lang="ts">
+  import AIAuthoring from '#lib/AIAuthoring.svelte';
+  import { appendAITheme } from '#lib/ai-model.ts';
   import UsagePanel from '#lib/UsagePanel.svelte';
   import { onMount } from 'svelte';
   import { beforeNavigate, goto } from '$app/navigation';
@@ -549,6 +551,13 @@
         >
       </aside>
       <div class="stack">
+        <AIAuthoring
+          rounds={document.rounds}
+          ontheme={(preview, round) => {
+            const normalized = normalizeDraft({ ...draft!, document: preview }).document;
+            change((next) => appendAITheme(next, normalized, round));
+          }}
+        />
         <details open>
           <summary>О пакете</summary>
           <div class="form-grid">

@@ -226,6 +226,20 @@ func (s *Service) Create(ctx context.Context, actor accounts.Identity, in Save) 
 		return Draft{}, err
 	}
 	defer a.close()
+	result, err := createInAccess(ctx, a, in)
+	if err != nil {
+		return Draft{}, err
+	}
+	if err = a.tx.Commit(ctx); err != nil {
+		return Draft{}, err
+	}
+	return result, nil
+}
+
+// createInAccess preserves creation invariants inside the caller's account lock.
+// The caller owns commit, allowing additional receipts to be atomic with creation.
+func createInAccess(ctx context.Context, a *access, in Save) (Draft, error) {
+	var err error
 	if in.ImportID != "" {
 		if !hexID(in.ImportID, 32) {
 			return Draft{}, ErrInvalid
@@ -291,9 +305,6 @@ func (s *Service) Create(ctx context.Context, actor accounts.Identity, in Save) 
 	}
 	result, err := load(ctx, a.tx, packID, 1)
 	if err != nil {
-		return Draft{}, err
-	}
-	if err = a.tx.Commit(ctx); err != nil {
 		return Draft{}, err
 	}
 	return result, nil

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"siplatform/internal/accounts"
+	"siplatform/internal/ai"
 	"siplatform/internal/blob"
 	"siplatform/internal/ingest"
 	"siplatform/internal/library"
@@ -51,6 +52,14 @@ func run() error {
 		return err
 	}
 	origin := os.Getenv("ALLOWED_ORIGIN")
+	addr := os.Getenv("LISTEN_ADDR")
+	if addr == "" {
+		addr = "127.0.0.1:8080"
+	}
+	aiConfig, err := aiOptions(os.Getenv, addr)
+	if err != nil {
+		return err
+	}
 	dataDir := os.Getenv("DATA_DIR")
 	if dataDir == "" {
 		dataDir = ".local/data"
@@ -84,12 +93,17 @@ func run() error {
 	defer uploads.Close()
 	stopRetention := startRetention(ctx, retention.New(pool, objects))
 	defer stopRetention()
-	app := server.New(store, server.Options{ExportDirectory: exportDirectory, Origin: origin, Accounts: auth, Library: lib, Objects: objects, Uploads: uploads, Themes: themes.New(pool)})
-	defer app.Close()
-	addr := os.Getenv("LISTEN_ADDR")
-	if addr == "" {
-		addr = "127.0.0.1:8080"
+	aiService, err := ai.New(pool, aiConfig)
+	if err != nil {
+		return errors.New("AI service configuration unavailable")
 	}
+	stopAI, err := aiService.StartWorkers(ctx)
+	if err != nil {
+		return errors.New("AI queue recovery unavailable")
+	}
+	defer stopAI()
+	app := server.New(store, server.Options{AI: aiService, ExportDirectory: exportDirectory, Origin: origin, Accounts: auth, Library: lib, Objects: objects, Uploads: uploads, Themes: themes.New(pool)})
+	defer app.Close()
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
@@ -108,6 +122,7 @@ func run() error {
 			outcome = err
 		}
 	}
+	stopAI()
 	stopRetention()
 	app.Close()
 	shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AIAuthoring from '#lib/AIAuthoring.svelte';
   import UsagePanel from '#lib/UsagePanel.svelte';
   import { page } from '$app/state';
   import { contextLink, roomContext } from '#lib/appearance.ts';
@@ -140,6 +141,7 @@
       {error}{#if login}
         <a class="text-link" href="/login">Войти</a>{/if}
     </div>{/if}{#if !login}<UsagePanel refreshTrigger={usageRefresh} />
+    <AIAuthoring />
     <div class="two-columns" style="margin:32px 0">
       <div class="panel">
         <h2>Уже есть пакет?</h2>

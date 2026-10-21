@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"siplatform/internal/accounts"
+	"siplatform/internal/ai"
 	"siplatform/internal/blob"
 	"siplatform/internal/game"
 	"siplatform/internal/ingest"
@@ -25,6 +26,7 @@ type Options struct {
 	ExportDirectory string
 	Origin          string
 	Accounts        *accounts.Service
+	AI              *ai.Service
 	Library         *library.Service
 	Objects         blob.Store
 	Uploads         *ingest.Service
