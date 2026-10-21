@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Синяя студия — Своя игра</title>
+<link rel="stylesheet" href="studio.css"><script src="studio.js" defer></script>
+</head>
+<body>
+<div class="proposal"><span>НОВОЕ НАПРАВЛЕНИЕ <b>Синяя студия</b></span><a href="/">Работающий сервис ↗</a><span class="prototype-label">Интерактивный макет</span></div>
+<div class="app">
+<aside class="sidebar">
+<a class="brand" href="studio.html" aria-label="Своя игра — главная"><span>СВОЯ</span><span>ИГРА<span class="brand-dot">.</span></span></a>
+<p class="brand-caption">Знакомая игра.<br>Ваша компания.</p>
+<nav aria-label="Разделы"><button data-screen="game"><span class="nav-icon">▦</span> Игровая комната</button><button data-screen="catalogue"><span class="nav-icon">▤</span> Пакеты вопросов</button><button data-screen="editor"><span class="nav-icon">✎</span> Мастерская</button></nav>
+<div class="sidebar-bottom"><div class="palette-label">ПАЛИТРА СТУДИИ</div><div class="palette" role="group" aria-label="Палитра"><button data-palette="classic" aria-pressed="true"><i></i>Классика</button><button data-palette="night" aria-pressed="false"><i></i>Вечер</button></div><a href="index.html" class="old-designs">Предыдущие варианты ↗</a><div class="account"><span class="avatar">А</span><div>Алексей<small>Демонстрационный профиль</small></div></div></div>
+</aside>
+<div class="workspace"><header class="topbar"><span id="breadcrumb">Игровая комната <span>/</span> Пятничная игра</span><div><span class="demo-indicator"></span> Предпросмотр интерфейса</div></header><main id="main"></main><footer>СВОЯ ИГРА <span>HTML-макет · без подключения к игровой сессии</span></footer></div>
+</div>
+<dialog id="question-dialog" aria-labelledby="question-title"><div class="question-top"><span id="question-theme"></span><button class="close" aria-label="Закрыть вопрос">×</button></div><div class="question-price" id="question-price"></div><h2 id="question-title"></h2><p id="question-answer" hidden></p><div class="question-actions"><button class="gold" id="show-answer">Показать ответ</button><button class="quiet close">Вернуться к табло</button></div></dialog>
+<div class="toast" role="status" hidden></div>
+</body></html>
