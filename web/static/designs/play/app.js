@@ -2,6 +2,9 @@ const $ = s => document.querySelector(s);
 const params = new URLSearchParams(location.search);
 let role = ['host','player','screen'].includes(params.get('role')) ? params.get('role') : 'host';
 let state = { stage:'board', mode:'oral', count:3, score:0, blocked:0, paused:false, correct:null, price:100, played:[] };
+const instance = crypto.randomUUID();
+let introTimer;
+let lastScene = '';
 const channel = new BroadcastChannel('efir-interaction-prototype');
 const names = ['Анна','Михаил','Елена'];
 const avatars = ['anna','mikhail','elena'];
@@ -15,7 +18,13 @@ channel.onmessage = ({data}) => {
 channel.postMessage({type:'request'});
 function update(change){ Object.assign(state,change); render(); publish(); }
 function button(label, action, cls='primary') { const b=document.createElement('button'); b.textContent=label; b.className=cls; b.disabled=state.paused; b.onclick=action; return b; }
-function showQuestion(id,price){cell=id; update({stage:'reading',price,correct:null,blocked:0});}
+function showQuestion(id,price,topic){cell=id; update({stage:'intro',topic,price,correct:null,blocked:0,introOwner:instance,introEnd:Date.now()+2000,introRemaining:2000});}
+function scheduleIntro(){
+ clearTimeout(introTimer);
+ if(state.stage==='intro'&&!state.paused&&state.introOwner===instance){
+  introTimer=setTimeout(()=>{if(state.stage==='intro'&&!state.paused)update({stage:'reading'});},Math.max(0,state.introEnd-Date.now()));
+ }
+}
 function buzz(){
  if(state.paused || state.blocked>Date.now()) return;
  if(state.stage==='reading') update({blocked:Date.now()+3000});
@@ -24,28 +33,39 @@ function buzz(){
 function judge(correct){ if(state.stage!=='answering')return; update({stage:'result',correct,score:state.score+(correct?state.price:-state.price)}); }
 function next(){ update({stage:'board',blocked:0,correct:null,played:[...state.played,cell]}); }
 function render(){
+ scheduleIntro();
  document.body.dataset.role=role;
  document.querySelectorAll('[data-role]').forEach(el=>{if(el.tagName==='BUTTON')el.setAttribute('aria-pressed',String(el.dataset.role===role));});
  $('#count').value=String(state.count); $('#count').disabled=role==='screen';
  $('#mode').value=state.mode; $('#mode').disabled=role==='screen'; $('#reset').hidden=role==='screen';
  $('#pause').textContent=state.paused?'Продолжить':'Пауза';
- const titles={board:'Выбирает Анна',reading:'Вопрос читается',open:'Приём нажатий открыт',answering:'Отвечает Анна',result:state.correct?'Ответ засчитан':'Ответ не засчитан'};
+ const titles={board:'Выбирает Анна',intro:'Тема вопроса',reading:'Вопрос читается',open:'Приём нажатий открыт',answering:'Отвечает Анна',result:state.correct?'Ответ засчитан':'Ответ не засчитан'};
  $('#status').textContent=state.paused?'Игра на паузе':titles[state.stage];
- $('#price').textContent=state.stage==='board'?'4 темы · 16 вопросов':`На карте · ${state.price}`;
+ $('#price').textContent=state.stage==='board'?'4 темы · 16 вопросов':`${state.topic || "На карте"} · ${state.price}`;
  $('.stage').classList.toggle('open',state.stage==='open'&&!state.paused);
+ const sceneKey=state.stage==='intro'?`intro:${state.topic}:${state.price}`:state.stage==='result'?'result':state.stage==='board'?'board':'question';
+ const changed=lastScene!==sceneKey; lastScene=sceneKey;
+ $('#scene').classList.toggle('scene-enter',changed&&sceneKey!=='board');
  $('#scene').replaceChildren();
  if(state.stage==='board'){
   const board=document.createElement('div');board.className='board';
   ['На карте','Наука вокруг','Книжная полка','Всякое разное'].forEach((topic,t)=>{
    const row=document.createElement('div');row.className='board-row';const label=document.createElement('div');label.className='topic';label.textContent=topic;row.append(label);
-   [100,200,300,400].forEach(price=>{const id=`${t}-${price}`;const b=button(state.played.includes(id)?'—':String(price),()=>showQuestion(id,price),'price');b.disabled=state.paused||role!=='host'||state.played.includes(id);b.setAttribute('aria-label',`${topic}, ${price}`);row.append(b);});board.append(row);
+   [100,200,300,400].forEach(price=>{const id=`${t}-${price}`;const b=button(state.played.includes(id)?'—':String(price),()=>showQuestion(id,price,topic),'price');b.disabled=state.paused||role!=='host'||state.played.includes(id);b.setAttribute('aria-label',`${topic}, ${price}`);row.append(b);});board.append(row);
   });$('#scene').append(board);
+ }else if(state.stage==='intro'){
+  const card=document.createElement('div');card.className='topic-announcement';card.setAttribute('role','status');
+  const label=document.createElement('p');label.className='announcement-label';label.textContent='ТЕМА';
+  const heading=document.createElement('h2');heading.textContent=state.topic;
+  const value=document.createElement('p');value.className='announcement-price';value.textContent=`${state.price} очков`;
+  card.append(label,heading,value);$('#scene').append(card);
  }else{const h=document.createElement('h2');h.textContent=state.stage==='result'?'Тихий океан':question;$('#scene').append(h);}
- $('#signal').textContent=state.paused?'Пауза':({board:'Выберите стоимость вопроса',reading:'Ждите сигнала · раннее нажатие — фальстарт',open:'Можно отвечать',answering:'Право ответа у Анны',result:state.correct?`Анна +${state.price}`:`Анна −${state.price}`})[state.stage];
+ $('#signal').textContent=state.paused?'Пауза':({board:'Выберите стоимость вопроса',intro:'Сейчас появится вопрос',reading:'Ждите сигнала · раннее нажатие — фальстарт',open:'Можно отвечать',answering:'Право ответа у Анны',result:state.correct?`Анна +${state.price}`:`Анна −${state.price}`})[state.stage];
  const panel=$('#console');panel.replaceChildren();
  const title=document.createElement('h2');title.textContent='Пульт ведущего';panel.append(title);
  const hint=document.createElement('p');hint.className='muted';hint.textContent=state.mode==='oral'?'Устная игра · оценивает ведущий':'Ответ проверяет система';panel.append(hint);
  if(state.stage==='board'){const p=document.createElement('p');p.textContent='Анна выбирает тему и стоимость. Нажмите нужную ячейку табло.';panel.append(p);}
+ else if(state.stage==='intro'){const p=document.createElement('p');p.textContent='Объявляем тему и стоимость. Вопрос появится автоматически.';panel.append(p);}
  else if(state.stage!=='result'){
   const answer=document.createElement('div');answer.className='answer';answer.innerHTML='<span class="muted">Видно только в представлении ведущего</span><strong>Тихий океан</strong><span class="muted">Вариант: «Тихий»</span>';panel.append(answer);
   if(state.stage==='reading')panel.append(button('Открыть кнопку',()=>update({stage:'open'})));
@@ -67,13 +87,16 @@ function render(){
  }
  $('#guide').textContent=role==='screen'?'Демонстрационный общий экран · синхронизируется с вкладкой ведущего':role==='host'?'Прототип: все ячейки открывают один демонстрационный вопрос. Для проверки фальстарта переключитесь на «Игрок» до открытия кнопки.':'Прототип: переключайтесь на «Ведущий», чтобы открыть кнопку или оценить устный ответ. Пробел — нажатие кнопки.';
 }
-function updateBuzzer(){const b=$('#buzzer');if(!b)return;const remaining=Math.max(0,state.blocked-Date.now());b.disabled=state.paused||remaining>0||!['reading','open'].includes(state.stage);b.textContent=state.paused?'Пауза':remaining>0?`Фальстарт · ${(remaining/1000).toFixed(1)} с`:({board:'Ждём выбора вопроса',reading:'Ждите сигнала',open:'Ответить · пробел',answering:'Вы отвечаете',result:'Ответ раскрыт'})[state.stage];}
+function updateBuzzer(){const b=$('#buzzer');if(!b)return;const remaining=Math.max(0,state.blocked-Date.now());b.disabled=state.paused||remaining>0||!['reading','open'].includes(state.stage);b.textContent=state.paused?'Пауза':remaining>0?`Фальстарт · ${(remaining/1000).toFixed(1)} с`:({board:'Ждём выбора вопроса',intro:'Объявление темы',reading:'Ждите сигнала',open:'Ответить · пробел',answering:'Вы отвечаете',result:'Ответ раскрыт'})[state.stage];}
 setInterval(updateBuzzer,100);
 document.querySelectorAll('button[data-role]').forEach(b=>b.onclick=()=>{role=b.dataset.role;render();});
 $('#count').onchange=e=>update({count:Number(e.target.value)});
 $('#mode').onchange=e=>update({mode:e.target.value,stage:'board',blocked:0,correct:null});
 $('#reset').onclick=()=>{cell='';update({stage:'board',score:0,blocked:0,paused:false,correct:null,played:[]});};
-$('#pause').onclick=()=>update({paused:!state.paused});
+$('#pause').onclick=()=>{
+ const timing=state.stage==='intro'?(state.paused?{introEnd:Date.now()+state.introRemaining}:{introRemaining:Math.max(0,state.introEnd-Date.now())}):{};
+ update({...timing,paused:!state.paused});
+};
 $('#settings').onclick=()=>$('#rules').showModal();
 $('#display').onclick=()=>window.open('./index.html?role=screen','efir-demo-display');
 document.addEventListener('keydown',e=>{if(e.code==='Space'&&role==='player'&&!['INPUT','SELECT','TEXTAREA','BUTTON'].includes(document.activeElement.tagName)&&!$('#rules').open){e.preventDefault();if(!e.repeat)buzz();}});

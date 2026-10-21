@@ -7,7 +7,16 @@ await mkdir('../.local/play-prototype',{recursive:true});
 try{
  await page.goto('http://localhost:5173/designs/play/index.html');
  await page.getByRole('button',{name:'На карте, 100',exact:true}).click();
+ await page.locator('.topic-announcement').waitFor();
+ assert.equal(await page.locator('.announcement-price').textContent(),'100 очков');
+ assert.equal(await page.getByRole('heading',{name:'Какой океан самый большой по площади?',exact:true}).count(),0);
+ await page.getByRole('button',{name:'Пауза',exact:true}).click();
+ await page.waitForTimeout(2200);
+ assert.equal(await page.locator('.topic-announcement').count(),1);
+ await page.screenshot({path:'../.local/play-prototype/topic.png',fullPage:true});
+ await page.getByRole('button',{name:'Продолжить',exact:true}).click();
  await page.getByRole('button',{name:'Игрок',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('#status').textContent==='Вопрос читается');
  await page.locator('#buzzer').click();
  assert.match(await page.locator('#buzzer').textContent(),/Фальстарт/);
  assert.equal(await page.locator('#buzzer').isDisabled(),true);
@@ -27,6 +36,10 @@ try{
  await display.screenshot({path:'../.local/play-prototype/screen.png',fullPage:true});
  await page.locator('#mode').selectOption('auto');
  await page.getByRole('button',{name:'На карте, 200',exact:true}).click();
+ await display.locator('.topic-announcement').waitFor();
+ assert.equal(await display.locator('.announcement-price').textContent(),'200 очков');
+ await page.emulateMedia({reducedMotion:'reduce'});
+ assert.equal(await page.locator('.topic-announcement').evaluate(el=>getComputedStyle(el).animationName),'none');
  await page.getByRole('button',{name:'Открыть кнопку',exact:true}).click();
  await page.getByRole('button',{name:'Игрок',exact:true}).click();
  await page.locator('#buzzer').click();
