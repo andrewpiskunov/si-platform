@@ -1,0 +1,41 @@
+import {chromium} from 'playwright';
+import assert from 'node:assert/strict';
+import {mkdir} from 'node:fs/promises';
+const browser=await chromium.launch();
+const ctx=await browser.newContext(); const page=await ctx.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+await mkdir('../.local/play-prototype',{recursive:true});
+try{
+ await page.goto('http://localhost:5173/designs/play/index.html');
+ await page.getByRole('button',{name:'На карте, 100',exact:true}).click();
+ await page.getByRole('button',{name:'Игрок',exact:true}).click();
+ await page.locator('#buzzer').click();
+ assert.match(await page.locator('#buzzer').textContent(),/Фальстарт/);
+ assert.equal(await page.locator('#buzzer').isDisabled(),true);
+ await page.screenshot({path:'../.local/play-prototype/false-start.png',fullPage:true});
+ await page.getByRole('button',{name:'Ведущий',exact:true}).click();
+ const popup=page.waitForEvent('popup');await page.getByRole('button',{name:'Открыть общий экран ↗'}).click();const display=await popup;
+ await display.locator('#status').getByText('Вопрос читается',{exact:true}).waitFor();
+ assert.equal(await display.locator('.answer').count(),0);
+ await page.getByRole('button',{name:'Открыть кнопку',exact:true}).click();
+ await page.getByRole('button',{name:'Игрок',exact:true}).click();
+ await page.waitForFunction(()=>!document.querySelector('#buzzer').disabled);
+ await page.locator('#buzzer').click();
+ await page.getByRole('button',{name:'Ведущий',exact:true}).click();
+ await page.screenshot({path:'../.local/play-prototype/host.png',fullPage:true});
+ await page.getByRole('button',{name:'Верно',exact:true}).click();
+ await display.getByRole('heading',{name:'Тихий океан',exact:true}).waitFor();
+ await display.screenshot({path:'../.local/play-prototype/screen.png',fullPage:true});
+ await page.locator('#mode').selectOption('auto');
+ await page.getByRole('button',{name:'На карте, 200',exact:true}).click();
+ await page.getByRole('button',{name:'Открыть кнопку',exact:true}).click();
+ await page.getByRole('button',{name:'Игрок',exact:true}).click();
+ await page.locator('#buzzer').click();
+ await page.getByLabel('Ваш ответ').fill('ТИХИЙ');
+ await page.getByRole('button',{name:'Отправить ответ'}).click();
+ assert.equal(await page.locator('#status').textContent(),'Ответ засчитан');
+ await page.locator('#count').selectOption('12');
+ assert.equal(await page.locator('.person').count(),12);
+ for(const width of [390,768,1440]){await page.setViewportSize({width,height:900});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
+ await page.setViewportSize({width:390,height:844});await page.screenshot({path:'../.local/play-prototype/mobile.png',fullPage:true});
+ assert.deepEqual(errors,[]);console.log('PASS: oral verdict, false start, automatic answer, display synchronization, responsive widths');
+}finally{await browser.close();}
