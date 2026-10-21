@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sync/atomic"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -47,6 +48,9 @@ func decode(row db.Room) (game.State, error) {
 	if err == nil && (state.ID != row.ID || state.Seq != row.Seq) {
 		err = errors.New("room snapshot sequence mismatch")
 	}
+	if err == nil && !roomExpiry(row, state.Phase).After(time.Now()) {
+		return game.State{}, game.Fault("not_found")
+	}
 	state.Settings = state.Settings.Normalized()
 	return state, err
 }
@@ -70,6 +74,9 @@ func (s *Store) Authenticate(ctx context.Context, roomID, token string) (string,
 	id, err := db.New(s.pool).GetSession(ctx, db.GetSessionParams{TokenHash: digest(token), RoomID: roomID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", game.Fault("unauthorized")
+	}
+	if err == nil {
+		_, err = s.Load(ctx, roomID)
 	}
 	return id, err
 }
@@ -216,7 +223,7 @@ func saveState(ctx context.Context, q *db.Queries, before game.State, state *gam
 	if err != nil {
 		return err
 	}
-	if err = q.UpdateRoom(ctx, db.UpdateRoomParams{ID: state.ID, Snapshot: b, Seq: state.Seq}); err != nil {
+	if err = q.UpdateRoom(ctx, db.UpdateRoomParams{ID: state.ID, Snapshot: b, Seq: state.Seq, HumanActivity: actor != "" && actor != "system", Finished: state.Phase == game.Finished}); err != nil {
 		return err
 	}
 	return q.AddEvent(ctx, db.AddEventParams{RoomID: state.ID, Seq: state.Seq, Kind: kind, ActorID: actor, Payload: payload})

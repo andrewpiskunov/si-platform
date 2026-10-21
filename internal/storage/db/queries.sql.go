@@ -158,7 +158,7 @@ func (q *Queries) FindCommand(ctx context.Context, arg FindCommandParams) (Comma
 }
 
 const getRoom = `-- name: GetRoom :one
-SELECT id, snapshot, seq, invite_hash, created_at, visibility FROM rooms WHERE id = $1
+SELECT id, snapshot, seq, invite_hash, created_at, visibility, last_activity_at, finished_at FROM rooms WHERE id = $1
 `
 
 func (q *Queries) GetRoom(ctx context.Context, id string) (Room, error) {
@@ -171,6 +171,8 @@ func (q *Queries) GetRoom(ctx context.Context, id string) (Room, error) {
 		&i.InviteHash,
 		&i.CreatedAt,
 		&i.Visibility,
+		&i.LastActivityAt,
+		&i.FinishedAt,
 	)
 	return i, err
 }
@@ -240,7 +242,7 @@ func (q *Queries) LockOwner(ctx context.Context) (int64, error) {
 }
 
 const lockRoom = `-- name: LockRoom :one
-SELECT id, snapshot, seq, invite_hash, created_at, visibility FROM rooms WHERE id = $1 FOR UPDATE
+SELECT id, snapshot, seq, invite_hash, created_at, visibility, last_activity_at, finished_at FROM rooms WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockRoom(ctx context.Context, id string) (Room, error) {
@@ -253,6 +255,8 @@ func (q *Queries) LockRoom(ctx context.Context, id string) (Room, error) {
 		&i.InviteHash,
 		&i.CreatedAt,
 		&i.Visibility,
+		&i.LastActivityAt,
+		&i.FinishedAt,
 	)
 	return i, err
 }
@@ -515,16 +519,27 @@ func (q *Queries) SetInvite(ctx context.Context, arg SetInviteParams) error {
 }
 
 const updateRoom = `-- name: UpdateRoom :exec
-UPDATE rooms SET snapshot = $2, seq = $3 WHERE id = $1
+UPDATE rooms SET snapshot = $2, seq = $3,
+ last_activity_at = CASE WHEN $4::boolean THEN statement_timestamp() ELSE last_activity_at END,
+ finished_at = CASE WHEN $5::boolean THEN COALESCE(finished_at,statement_timestamp()) ELSE finished_at END
+ WHERE id = $1
 `
 
 type UpdateRoomParams struct {
-	ID       string
-	Snapshot []byte
-	Seq      int64
+	ID            string
+	Snapshot      []byte
+	Seq           int64
+	HumanActivity bool
+	Finished      bool
 }
 
 func (q *Queries) UpdateRoom(ctx context.Context, arg UpdateRoomParams) error {
-	_, err := q.db.Exec(ctx, updateRoom, arg.ID, arg.Snapshot, arg.Seq)
+	_, err := q.db.Exec(ctx, updateRoom,
+		arg.ID,
+		arg.Snapshot,
+		arg.Seq,
+		arg.HumanActivity,
+		arg.Finished,
+	)
 	return err
 }

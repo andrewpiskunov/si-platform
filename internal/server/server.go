@@ -22,12 +22,13 @@ import (
 )
 
 type Options struct {
-	Origin   string
-	Accounts *accounts.Service
-	Library  *library.Service
-	Objects  blob.Store
-	Uploads  *ingest.Service
-	Themes   *themes.Service
+	ExportDirectory string
+	Origin          string
+	Accounts        *accounts.Service
+	Library         *library.Service
+	Objects         blob.Store
+	Uploads         *ingest.Service
+	Themes          *themes.Service
 }
 type Server struct {
 	store           *postgres.Store
@@ -37,6 +38,7 @@ type Server struct {
 	mu              sync.Mutex
 	closed          bool
 	rooms           map[string]*room
+	roomGates       map[string]*roomGate
 	wg              sync.WaitGroup
 	connections     chan struct{}
 	exports         chan struct{}
@@ -49,7 +51,7 @@ type Server struct {
 
 func New(store *postgres.Store, options Options) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
-	s := &Server{store: store, options: options, ctx: ctx, cancel: cancel, rooms: make(map[string]*room), connections: make(chan struct{}, 10000), exports: make(chan struct{}, 2), httpLimit: newBucket()}
+	s := &Server{store: store, options: options, ctx: ctx, cancel: cancel, rooms: make(map[string]*room), roomGates: make(map[string]*roomGate), connections: make(chan struct{}, 10000), exports: make(chan struct{}, 2), httpLimit: newBucket()}
 	// Tickets are short lived and intentionally expire on a server restart.
 	// crypto/rand.Read is guaranteed to fill the buffer or terminate in Go 1.24+.
 	_, _ = rand.Read(s.mediaSecret[:])
@@ -58,6 +60,8 @@ func New(store *postgres.Store, options Options) *Server {
 		s.wg.Add(1)
 		go s.watchAppearances()
 	}
+	s.wg.Add(1)
+	go s.watchRoomExpiry()
 	return s
 }
 func (s *Server) Close() {
@@ -97,6 +101,7 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/rooms/{room}/ws", s.websocket)
 		r.Post("/rooms/{room}/invite", s.rotateInvite)
 		r.Get("/rooms/{room}/results", s.roomResults)
+		r.Get("/rooms/{room}/retention", s.roomRetention)
 		r.Get("/rooms/{room}/roster", s.roomRoster)
 		r.Post("/rooms/{room}/session", s.bindRoomSession)
 	})
@@ -262,8 +267,13 @@ func (s *Server) getRoom(ctx context.Context, id string) (*room, error) {
 	if len(id) != 32 || !game.ValidID(id) {
 		return nil, game.Fault("not_found")
 	}
+	unlock, err := s.lockRoomAdmission(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	s.mu.Lock()
-	if s.closed {
+	if s.closed || s.ctx.Err() != nil {
 		s.mu.Unlock()
 		return nil, game.Fault("unavailable")
 	}
@@ -272,18 +282,17 @@ func (s *Server) getRoom(ctx context.Context, id string) (*room, error) {
 	if existing != nil {
 		return existing, nil
 	}
-	if _, err := s.store.Load(ctx, id); err != nil {
+	// Per-room admission serializes load/publication with uncached retirement.
+	// Database work never holds the global map mutex.
+	if _, err = s.store.Load(ctx, id); err != nil {
 		return nil, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.closed {
+	if s.closed || s.ctx.Err() != nil {
 		return nil, game.Fault("unavailable")
 	}
-	if existing = s.rooms[id]; existing != nil {
-		return existing, nil
-	}
-	rm := &room{id: id, server: s, requests: make(chan job, 128), clients: make(map[*client]struct{}), limits: make(map[string]*bucket)}
+	rm := &room{id: id, server: s, requests: make(chan job, 128), done: make(chan struct{}), retirementDone: make(chan struct{}), clients: make(map[*client]struct{}), limits: make(map[string]*bucket)}
 	s.rooms[id] = rm
 	s.wg.Add(1)
 	go func() { defer s.wg.Done(); rm.run() }()

@@ -18,6 +18,7 @@ import (
 	"siplatform/internal/ingest"
 	"siplatform/internal/library"
 	"siplatform/internal/media"
+	"siplatform/internal/retention"
 	"siplatform/internal/server"
 	"siplatform/internal/storage/postgres"
 	"siplatform/internal/themes"
@@ -54,6 +55,10 @@ func run() error {
 	if dataDir == "" {
 		dataDir = ".local/data"
 	}
+	exportDirectory, err := prepareExportDirectory(dataDir)
+	if err != nil {
+		return err
+	}
 	objects, err := objectStore(ctx, dataDir)
 	if err != nil {
 		return err
@@ -77,7 +82,9 @@ func run() error {
 	}
 	uploads.Start(ctx)
 	defer uploads.Close()
-	app := server.New(store, server.Options{Origin: origin, Accounts: auth, Library: lib, Objects: objects, Uploads: uploads, Themes: themes.New(pool)})
+	stopRetention := startRetention(ctx, retention.New(pool, objects))
+	defer stopRetention()
+	app := server.New(store, server.Options{ExportDirectory: exportDirectory, Origin: origin, Accounts: auth, Library: lib, Objects: objects, Uploads: uploads, Themes: themes.New(pool)})
 	defer app.Close()
 	addr := os.Getenv("LISTEN_ADDR")
 	if addr == "" {
@@ -101,6 +108,7 @@ func run() error {
 			outcome = err
 		}
 	}
+	stopRetention()
 	app.Close()
 	shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

@@ -150,6 +150,13 @@ test('bootstrap precedes socket; revocation clears stored credential and prevent
     assert.equal(readRoomCredentials('bootstrap')?.token, 'fresh-token');
     assert.equal(connection.protocol.state, null);
     assert.equal(statuses.length, updates, 'stopped socket delivered a late update');
+    assert.doesNotThrow(() =>
+      sockets[0].onmessage?.({
+        get data(): string {
+          throw new Error('stale event read');
+        }
+      })
+    );
   } finally {
     for (const [key, descriptor] of originals) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
@@ -238,4 +245,124 @@ test('revoking a superseded connection cannot clear the fresh room identity', as
   fresh.revoke();
   assert.equal(readRoomCredentials('rejoined-room'), null);
   assert.deepEqual(statuses, ['revoked']);
+});
+
+test('room expiry discards queued commands and ignores late snapshots permanently', () => {
+  const protocol = new RoomProtocol('secret');
+  protocol.receive({ v: 1, type: 'snapshot', state: state(1) });
+  protocol.command('pause', {}, 'queued');
+  protocol.receive({ v: 1, type: 'error', code: 'room_expired' });
+  assert.equal(protocol.token, '');
+  assert.equal(protocol.pending.size, 0);
+  assert.equal(protocol.state, null);
+  assert.equal(protocol.ready, false);
+  assert.deepEqual(protocol.receive({ v: 1, type: 'snapshot', state: state(99) }), []);
+  assert.equal(protocol.state, null);
+  assert.throws(() => protocol.connected(), /room_expired/);
+});
+test('bootstrap precedes socket; expiry clears stored credential and prevents reconnect', async () => {
+  const { RoomConnection } = await import('./room-client.ts');
+  const { saveRoomCredentials, readRoomCredentials } = await import('./room-credentials.ts');
+  const originals = new Map(
+    ['fetch', 'WebSocket', 'location'].map((key) => [
+      key,
+      Object.getOwnPropertyDescriptor(globalThis, key)
+    ])
+  );
+  const sockets: FakeSocket[] = [];
+  class FakeSocket {
+    static OPEN = 1;
+    readyState = 1;
+    onopen?: () => void;
+    onmessage?: (event: { data: string }) => void;
+    onclose?: () => void;
+    onerror?: () => void;
+    sent: string[] = [];
+    url: URL;
+    constructor(url: URL) {
+      this.url = url;
+      sockets.push(this);
+    }
+    send(data: string) {
+      this.sent.push(data);
+    }
+    close() {
+      this.readyState = 3;
+      this.onclose?.();
+    }
+  }
+  let complete!: (response: Response) => void;
+  const statuses: string[] = [];
+  Object.defineProperty(globalThis, 'fetch', {
+    configurable: true,
+    value: (url: string, init: RequestInit) => {
+      assert.equal(url, '/api/rooms/bootstrap/session');
+      assert.equal(init.method, 'POST');
+      assert.equal((init.headers as Record<string, string>).Authorization, 'Bearer secret');
+      return new Promise<Response>((resolve) => {
+        complete = resolve;
+      });
+    }
+  });
+  Object.defineProperty(globalThis, 'WebSocket', { configurable: true, value: FakeSocket });
+  Object.defineProperty(globalThis, 'location', {
+    configurable: true,
+    value: { origin: 'http://localhost', protocol: 'http:' }
+  });
+  try {
+    saveRoomCredentials({ room_id: 'bootstrap', participant_id: 'guest', token: 'secret' });
+    const connection = new RoomConnection('bootstrap', 'secret', (_, status) =>
+      statuses.push(status)
+    );
+    const connecting = connection.connect();
+    assert.equal(sockets.length, 0);
+    complete(new Response('{}'));
+    await connecting;
+    assert.equal(sockets.length, 1);
+    sockets[0].onopen?.();
+    assert.equal(sockets[0].url.search, '');
+    sockets[0].onmessage?.({ data: JSON.stringify({ v: 1, type: 'snapshot', state: state(1) }) });
+    connection.send('pause');
+    sockets[0].onmessage?.({ data: JSON.stringify({ v: 1, type: 'error', code: 'room_expired' }) });
+    assert.equal(connection.protocol.pending.size, 0);
+    assert.equal(readRoomCredentials('bootstrap'), null);
+    assert.equal(statuses.at(-1), 'expired');
+    await connection.connect();
+    assert.equal(sockets.length, 1);
+    assert.throws(() => connection.send('pause'), /disconnected/);
+    saveRoomCredentials({ room_id: 'bootstrap', participant_id: 'fresh', token: 'fresh-token' });
+    const updates = statuses.length;
+    sockets[0].onmessage?.({ data: JSON.stringify({ v: 1, type: 'error', code: 'room_expired' }) });
+    sockets[0].onmessage?.({ data: JSON.stringify({ v: 1, type: 'snapshot', state: state(99) }) });
+    sockets[0].onclose?.();
+    connection.expire();
+    assert.equal(readRoomCredentials('bootstrap')?.token, 'fresh-token');
+    assert.equal(connection.protocol.state, null);
+    assert.equal(statuses.length, updates, 'stopped socket delivered a late update');
+    assert.doesNotThrow(() =>
+      sockets[0].onmessage?.({
+        get data(): string {
+          throw new Error('stale event read');
+        }
+      })
+    );
+  } finally {
+    for (const [key, descriptor] of originals) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+});
+
+test('expiry of a superseded connection preserves its replacement credentials and UI', async () => {
+  const { RoomConnection } = await import('./room-client.ts');
+  const { saveRoomCredentials, readRoomCredentials } = await import('./room-credentials.ts');
+  const statuses: string[] = [];
+  const old = new RoomConnection('expiry-rejoined', 'old', (_, status) => statuses.push(status));
+  saveRoomCredentials({ room_id: 'expiry-rejoined', participant_id: 'new', token: 'new' });
+  old.expire();
+  assert.equal(readRoomCredentials('expiry-rejoined')?.token, 'new');
+  assert.deepEqual(statuses, []);
+  assert.equal(old.protocol.state, null);
+  assert.equal(old.protocol.token, '');
 });

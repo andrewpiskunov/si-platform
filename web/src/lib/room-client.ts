@@ -44,6 +44,7 @@ export class RoomProtocol {
   state: RoomState | null = null;
   ready = false;
   revoked = false;
+  terminalCode = '';
   appearanceEpoch = 0;
   pending = new Map<string, Command>();
   private known = new Map<string, string>();
@@ -51,7 +52,7 @@ export class RoomProtocol {
     this.token = token;
   }
   connected() {
-    if (this.revoked) throw new Error('unauthorized');
+    if (this.revoked) throw new Error(this.terminalCode || 'unauthorized');
     this.ready = false;
     return { v: 1, type: 'authenticate', token: this.token };
   }
@@ -87,8 +88,9 @@ export class RoomProtocol {
   }
   receive(message: Message): Command[] {
     if (this.revoked) return [];
-    if (message.code === 'unauthorized') {
+    if (message.code === 'unauthorized' || message.code === 'room_expired') {
       this.revoked = true;
+      this.terminalCode = message.code;
       this.ready = false;
       this.token = '';
       this.state = null;
@@ -149,6 +151,13 @@ export class RoomConnection {
       );
     } catch (error) {
       if (this.stopped) return;
+      if (
+        error instanceof APIError &&
+        (error.code === 'room_expired' || error.code === 'not_found')
+      ) {
+        this.expire();
+        return;
+      }
       if (error instanceof APIError && error.status === 401) {
         this.revoke();
         return;
@@ -172,20 +181,24 @@ export class RoomConnection {
     const socket = new WebSocket(url);
     this.socket = socket;
     socket.onopen = () => {
-      if (this.stopped) {
+      if (this.stopped || socket !== this.socket) {
         socket.close();
         return;
       }
       socket.send(JSON.stringify(this.protocol.connected()));
     };
     socket.onmessage = (event) => {
+      if (this.stopped || socket !== this.socket) return;
       let message: Message;
       try {
         message = JSON.parse(event.data);
       } catch {
         return;
       }
-      if (this.stopped || socket !== this.socket) return;
+      if (message.code === 'room_expired') {
+        this.expire();
+        return;
+      }
       if (message.code === 'unauthorized') {
         this.revoke();
         return;
@@ -211,16 +224,22 @@ export class RoomConnection {
     };
     socket.onerror = () => socket.close();
   }
+  expire() {
+    this.terminate('room_expired');
+  }
   revoke() {
+    this.terminate('unauthorized');
+  }
+  private terminate(code: 'unauthorized' | 'room_expired') {
     if (this.stopped) return;
     const token = this.protocol.token;
     const saved = readRoomCredentials(this.room);
     const superseded = !!saved && saved.token !== token;
-    this.protocol.receive({ v: 1, type: 'error', code: 'unauthorized' });
+    this.protocol.receive({ v: 1, type: 'error', code });
     clearRoomCredentials(this.room, token);
     this.close();
     if (superseded) return;
-    this.update(this.protocol, 'revoked', 'unauthorized');
+    this.update(this.protocol, code === 'room_expired' ? 'expired' : 'revoked', code);
   }
   send(type: string, fields: { question_id?: string; correct?: boolean } = {}) {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) throw new Error('disconnected');

@@ -203,7 +203,10 @@ export class AppearanceConnection {
       );
     } catch (error) {
       if (this.stopped) return;
-      if (error instanceof APIError && error.status === 401) {
+      if (
+        error instanceof APIError &&
+        (error.status === 401 || error.code === 'room_expired' || error.code === 'not_found')
+      ) {
         this.revoke();
         return;
       }
@@ -217,7 +220,7 @@ export class AppearanceConnection {
     const socket = new WebSocket(url);
     this.socket = socket;
     socket.onopen = () => {
-      if (this.stopped) {
+      if (this.stopped || socket !== this.socket) {
         socket.close();
         return;
       }
@@ -231,7 +234,7 @@ export class AppearanceConnection {
           this.attempts = 0;
           this.refresh();
         }
-        if (message.code === 'unauthorized') {
+        if (message.code === 'unauthorized' || message.code === 'room_expired') {
           this.revoke();
         }
       } catch {}

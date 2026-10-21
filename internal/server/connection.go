@@ -50,6 +50,7 @@ func (b *outbox) sent(size int) { b.mu.Lock(); b.bytes -= size; b.mu.Unlock() }
 
 type client struct {
 	revoked        atomic.Bool
+	expired        atomic.Bool
 	appearanceOnly bool
 	id             string
 	ctx            context.Context
@@ -70,14 +71,18 @@ func (c *client) send(m Message) bool {
 	}
 	return true
 }
+func (c *client) expireRoom() {
+	c.expired.Store(true)
+	c.revoke()
+}
 func (c *client) revoke() {
 	if c.revoked.Swap(true) {
 		return
 	}
 	// Wake the writer; it discards pending frames and sends one terminal error.
-	if !c.out.push([]byte{}) {
-		c.cancel()
-	}
+	// A full queue already wakes the writer. Never cancel before its terminal
+	// write: it must discard the queued frames and deliver the terminal code.
+	_ = c.out.push([]byte{})
 }
 func (c *client) writer() {
 	for {
@@ -87,7 +92,11 @@ func (c *client) writer() {
 		case b := <-c.out.messages:
 			c.out.sent(len(b))
 			if c.revoked.Load() {
-				terminal, _ := json.Marshal(Message{Version: 1, Type: "error", Code: "unauthorized", ServerTime: time.Now().UnixMilli()})
+				code := "unauthorized"
+				if c.expired.Load() {
+					code = "room_expired"
+				}
+				terminal, _ := json.Marshal(Message{Version: 1, Type: "error", Code: code, ServerTime: time.Now().UnixMilli()})
 				ctx, cancel := context.WithTimeout(c.ctx, time.Second)
 				_ = c.conn.Write(ctx, websocket.MessageText, terminal)
 				cancel()

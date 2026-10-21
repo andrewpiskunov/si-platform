@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"siplatform/internal/game"
@@ -17,6 +18,10 @@ type job struct {
 	result chan reply
 }
 type room struct {
+	done              chan struct{}
+	stopped           atomic.Bool
+	retirementErr     error
+	retirementDone    chan struct{}
 	id                string
 	server            *Server
 	requests          chan job
@@ -34,20 +39,42 @@ func (r *room) run() {
 			r.timer.Stop()
 		}
 		for c := range r.clients {
-			c.cancel()
+			if !c.revoked.Load() {
+				c.cancel()
+			}
+		}
+		terminal := game.Fault("unavailable")
+		if r.stopped.Load() {
+			terminal = game.Fault("room_expired")
+		}
+		for {
+			select {
+			case j := <-r.requests:
+				j.result <- reply{err: terminal}
+			default:
+				return
+			}
 		}
 	}()
 	for {
 		select {
 		case <-r.server.ctx.Done():
 			return
+		case <-r.done:
+			return
 		case <-r.timerC:
 			r.timerC = nil
 			ctx, cancel := context.WithTimeout(r.server.ctx, 5*time.Second)
-			err := r.expire(ctx)
+			err := r.checkRetention(ctx)
+			if err == nil {
+				err = r.expire(ctx)
+			}
 			cancel()
 			if game.Code(err) == "ownership_lost" {
 				r.server.cancel()
+				return
+			}
+			if r.stopped.Load() {
 				return
 			}
 			if err != nil {
@@ -55,6 +82,10 @@ func (r *room) run() {
 				r.timerC = r.timer.C
 			}
 		case j := <-r.requests:
+			if r.stopped.Load() {
+				j.result <- reply{err: game.Fault("room_expired")}
+				continue
+			}
 			if j.ctx.Err() != nil {
 				j.result <- reply{err: j.ctx.Err()}
 				continue
@@ -69,7 +100,13 @@ func (r *room) run() {
 	}
 }
 func (r *room) do(ctx context.Context, run func(context.Context, *room) (any, error)) (any, error) {
+	if r.stopped.Load() {
+		return nil, game.Fault("room_expired")
+	}
 	j := job{ctx: ctx, result: make(chan reply, 1), run: func(ctx context.Context, r *room) (any, error) {
+		if err := r.checkRetention(ctx); err != nil {
+			return nil, err
+		}
 		if err := r.reconcileMembership(ctx); err != nil {
 			return nil, err
 		}
@@ -81,6 +118,8 @@ func (r *room) do(ctx context.Context, run func(context.Context, *room) (any, er
 		return run(ctx, r)
 	}}
 	select {
+	case <-r.done:
+		return nil, game.Fault("room_expired")
 	case <-r.server.ctx.Done():
 		return nil, game.Fault("unavailable")
 	case <-ctx.Done():
@@ -92,6 +131,8 @@ func (r *room) do(ctx context.Context, run func(context.Context, *room) (any, er
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	case <-r.done:
+		return nil, game.Fault("room_expired")
 	case <-r.server.ctx.Done():
 		return nil, game.Fault("unavailable")
 	case result := <-j.result:
@@ -143,6 +184,9 @@ func (r *room) detach(c *client) {
 	// Removal must not be dropped when the ordinary command queue is full.
 	j := job{ctx: r.server.ctx, result: make(chan reply, 1), run: func(ctx context.Context, r *room) (any, error) {
 		delete(r.clients, c)
+		if err := r.checkRetention(ctx); err != nil {
+			return nil, err
+		}
 		if c.appearanceOnly {
 			return nil, nil
 		}
@@ -171,6 +215,7 @@ func (r *room) detach(c *client) {
 	}}
 	select {
 	case r.requests <- j:
+	case <-r.done:
 	case <-r.server.ctx.Done():
 	}
 }

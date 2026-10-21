@@ -47,7 +47,13 @@
     mounted = $state(false),
     resultsOpen = $state(false),
     rotating = $state(false),
-    revoked = $state(false);
+    revoked = $state(false),
+    expired = $state(false),
+    retention = $state<{ created_at: string; last_activity_at: string; expires_at: string } | null>(
+      null
+    ),
+    retentionLoading = $state(false);
+  let retentionRequestedAt = 0;
   let connection: RoomConnection | null = null;
   let roomID = $state('');
   const boardLoader = new BoardLoader<Board>();
@@ -125,6 +131,10 @@
     boardLoader.reset();
     roomID = id;
     revoked = false;
+    expired = false;
+    retention = null;
+    retentionLoading = false;
+    retentionRequestedAt = 0;
     board = null;
     boardError = '';
     boardLoading = false;
@@ -162,8 +172,9 @@
         connection !== active
       )
         return;
-      if (status === 'revoked') {
+      if (status === 'revoked' || status === 'expired') {
         releaseRevoked();
+        expired = status === 'expired';
         return;
       }
       const previousVisibility = roomState
@@ -185,10 +196,45 @@
       pending = protocol.pending.size;
       if (code) error = errorText(code);
       roomTheme.observe(roomState?.appearance, protocol.appearanceEpoch, protocol.ready);
-      if (roomState && protocol.ready) void loadBoard();
+      if (roomState && protocol.ready) {
+        void loadBoard();
+        void loadRetention();
+      }
     });
     connection = active;
     active.connect();
+    void loadRetention();
+  }
+  async function loadRetention(force = false) {
+    if (
+      !alive ||
+      !credentials ||
+      retentionLoading ||
+      (!force && Date.now() - retentionRequestedAt < 30000)
+    )
+      return;
+    const scope = identity();
+    retentionLoading = true;
+    retentionRequestedAt = Date.now();
+    try {
+      const result = await api<{
+        created_at: string;
+        last_activity_at: string;
+        expires_at: string;
+      }>(
+        `/rooms/${scope.room}/retention`,
+        'GET',
+        undefined,
+        scope.token,
+        AbortSignal.timeout(5000)
+      );
+      if (!scope.current()) return;
+      if (Number.isFinite(Date.parse(result.expires_at))) retention = result;
+    } catch {
+      // Availability of this informational endpoint must never block play.
+    } finally {
+      if (scope.current()) retentionLoading = false;
+    }
   }
   async function loadBoard(force = false) {
     if (!credentials || !roomState) return;
@@ -236,6 +282,11 @@
       connect();
     } catch (e) {
       if (!scope.current()) return;
+      if (e instanceof APIError && (e.code === 'not_found' || e.code === 'room_expired')) {
+        releaseRevoked();
+        expired = true;
+        return;
+      }
       error =
         e instanceof APIError && e.status === 401
           ? 'Приглашение недействительно или устарело. Попросите ведущего прислать новую полную ссылку.'
@@ -391,6 +442,8 @@
     selection = null;
     error = '';
     revoked = true;
+    retention = null;
+    retentionLoading = false;
   }
   function reset() {
     generation++;
@@ -401,6 +454,10 @@
     boardLoading = false;
     if (credentials) clearRoomCredentials(roomID, credentials.token);
     revoked = false;
+    expired = false;
+    retention = null;
+    retentionLoading = false;
+    retentionRequestedAt = 0;
     board = null;
     credentials = null;
     roomTheme.enter(roomID, '', themePreferences(null));
@@ -420,6 +477,20 @@
   /></svelte:head
 >
 <section class="page">
+  {#if mounted && credentials && !expired && !revoked}
+    <div class="notice" aria-label="Срок хранения комнаты">
+      <p>
+        {#if retention}Текущий срок комнаты: <time datetime={retention.expires_at}
+            >{new Date(retention.expires_at).toLocaleString('ru-RU')}</time
+          >.{:else}Срок комнаты пока недоступен.{/if}
+        Принятые действия могут продлить срок неактивности; общий предел — 90 дней с создания.
+      </p>
+      <a href="/privacy">Правила хранения данных</a>
+      <button class="small" disabled={retentionLoading} onclick={() => void loadRetention(true)}
+        >Обновить срок</button
+      >
+    </div>
+  {/if}
   {#if mounted && credentials && connectionStatus === 'failed'}
     <div class="notice error" role="alert">
       <p>Подключение не удалось. Повторите явно.</p>
@@ -432,7 +503,19 @@
         >Повторить загрузку табло</button
       >
     </div>{/if}
-  {#if !mounted}<p class="loading" role="status">Открываем комнату…</p>{:else if revoked}<div
+  {#if !mounted}<p class="loading" role="status">Открываем комнату…</p>{:else if expired}<div
+      class="narrow panel stack"
+      role="alert"
+      aria-label="Комната недоступна"
+    >
+      <h1>Комната недоступна</h1>
+      <p>
+        Срок хранения комнаты истёк или комната больше не существует. Её состояние и прежнее
+        приглашение больше недоступны.
+      </p>
+      <a class="button" href="/rooms">Выйти к списку комнат</a>
+      <a href="/privacy">Правила хранения данных</a>
+    </div>{:else if revoked}<div
       class="narrow panel stack"
       role="alert"
       aria-label="Доступ к комнате прекращён"

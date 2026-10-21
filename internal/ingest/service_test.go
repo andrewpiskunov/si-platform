@@ -21,6 +21,7 @@ import (
 	"siplatform/internal/blob"
 	"siplatform/internal/library"
 	"siplatform/internal/packs"
+	"siplatform/internal/retention"
 	"siplatform/internal/storage/postgres"
 	"siplatform/internal/testutil"
 )
@@ -729,6 +730,9 @@ func TestFailedBlobLedgerCleanupPreservesSharedObjects(t *testing.T) {
 		t.Fatal(err)
 	}
 	next.cleanup(bg, epoch)
+	if _, err = retention.New(f.pool, f.objects).Sweep(bg); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = f.objects.Stat(bg, failedKey); !errors.Is(err, blob.ErrNotFound) {
 		t.Fatal("orphan failed hash retained", err)
 	}

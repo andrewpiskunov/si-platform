@@ -179,7 +179,7 @@ func (s *Store) Recover(ctx context.Context) error {
 		return err
 	}
 	for _, id := range ids {
-		if _, err = s.Pause(ctx, id, "server_restarted"); err != nil {
+		if _, err = s.Pause(ctx, id, "server_restarted"); err != nil && game.Code(err) != "not_found" {
 			return err
 		}
 	}

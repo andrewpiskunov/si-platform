@@ -17,7 +17,10 @@ SELECT * FROM rooms WHERE id = $1;
 SELECT * FROM rooms WHERE id = $1 FOR UPDATE;
 
 -- name: UpdateRoom :exec
-UPDATE rooms SET snapshot = $2, seq = $3 WHERE id = $1;
+UPDATE rooms SET snapshot = $2, seq = $3,
+ last_activity_at = CASE WHEN sqlc.arg(human_activity)::boolean THEN statement_timestamp() ELSE last_activity_at END,
+ finished_at = CASE WHEN sqlc.arg(finished)::boolean THEN COALESCE(finished_at,statement_timestamp()) ELSE finished_at END
+ WHERE id = $1;
 
 -- name: ListRooms :many
 SELECT id FROM rooms ORDER BY id;

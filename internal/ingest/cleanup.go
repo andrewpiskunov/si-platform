@@ -2,12 +2,12 @@ package ingest
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"siplatform/internal/blobrefs"
 )
 
 // BlobGCLockSQL is the transaction-scoped guard for object reservations and
@@ -15,7 +15,7 @@ import (
 // before recording durable hash reservations. Writers without a reservation
 // ledger must keep it through Put and committing a library revision reference.
 // The lock key is hashtextextended(database || ':' || schema || ':si-ingest-blob-gc',0).
-const BlobGCLockSQL = `SELECT pg_advisory_xact_lock(hashtextextended(current_database()||':'||current_schema()||':si-ingest-blob-gc',0))`
+const BlobGCLockSQL = blobrefs.GuardSQL
 
 func (s *Service) reserveObjects(ctx context.Context, id string, epoch int64, keys []string) error {
 	tx, err := s.pool.Begin(ctx)
@@ -118,6 +118,22 @@ func (s *Service) cleanupObject(ctx context.Context, epoch int64, object failedO
 	if current != epoch {
 		return ErrUnavailable
 	}
+	var owner string
+	if err = tx.QueryRow(ctx, `SELECT owner_id FROM uploads WHERE id=$1`, object.id).Scan(&owner); errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `SELECT id FROM account_users WHERE id=$1 FOR UPDATE`, owner); err != nil {
+		return err
+	}
+	var exporting bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM account_export_leases WHERE owner_id=$1 AND expires_at>clock_timestamp())`, owner).Scan(&exporting); err != nil {
+		return err
+	}
+	if exporting {
+		return nil
+	}
 	var keys []string
 	err = tx.QueryRow(ctx, `SELECT stored_keys FROM uploads WHERE id=$1 AND status='failed' AND updated_at<clock_timestamp()-interval '1 hour' FOR UPDATE`, object.id).Scan(&keys)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -136,25 +152,18 @@ func (s *Service) cleanupObject(ctx context.Context, epoch int64, object failedO
 	if !found {
 		return nil
 	}
-	assetJSON, _ := json.Marshal([]map[string]string{{"key": object.key}})
-	var referenced, active, ready bool
-	err = tx.QueryRow(ctx, `SELECT
- EXISTS(SELECT 1 FROM library_revisions WHERE original_key=$1 OR assets @> $2::jsonb
- OR EXISTS(SELECT 1 FROM jsonb_array_elements(assets) a WHERE a->'prepared'->'standard'->>'key'=$1 OR a->'prepared'->'economy'->>'key'=$1))
- OR EXISTS(SELECT 1 FROM theme_versions WHERE prepared->>'original_key'=$1
- OR EXISTS(SELECT 1 FROM jsonb_array_elements(prepared->'assets') a WHERE a->'prepared'->'standard'->>'key'=$1 OR a->'prepared'->'economy'->>'key'=$1)),
- EXISTS(SELECT 1 FROM uploads WHERE status IN ('uploading','queued','processing') AND stored_keys @> ARRAY[$1]::text[]),
- EXISTS(SELECT 1 FROM uploads WHERE status='ready' AND stored_keys @> ARRAY[$1]::text[])`, object.key, assetJSON).Scan(&referenced, &active, &ready)
+	refs, err := blobrefs.Check(ctx, tx, object.key)
 	if err != nil {
 		return err
 	}
-	if active {
+	if refs.Active {
 		return nil
 	} // Keep the failed ledger entry until active work resolves.
-	if !referenced && !ready {
-		if err = s.objects.Delete(ctx, object.key); err != nil {
-			return err
-		}
+	// Transfer the reservation to a durable GC candidate before removing it.
+	// The collector rechecks all owners under the same guard; no remote Delete
+	// runs while this transaction holds the account lock.
+	if _, err = tx.Exec(ctx, `INSERT INTO retention_candidates(key) VALUES($1) ON CONFLICT(key) DO NOTHING`, object.key); err != nil {
+		return err
 	}
 	if _, err = tx.Exec(ctx, `UPDATE uploads SET stored_keys=array_remove(stored_keys,$2) WHERE id=$1`, object.id, object.key); err != nil {
 		return err

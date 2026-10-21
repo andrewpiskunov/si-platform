@@ -39,7 +39,7 @@ func (s *Store) ListPublicRooms(ctx context.Context, after string, limit int) (P
 	// One statement reads a consistent page, without room actors or account/pack
 	// lookups. Counts describe occupied seats; no socket presence is queried.
 	rows, err := s.pool.Query(ctx, `SELECT r.id,p.title,r.snapshot FROM rooms r JOIN room_packs p ON p.room_id=r.id
-		WHERE r.visibility='public' AND r.snapshot->>'phase'<>'finished' AND r.id>$1 ORDER BY r.id LIMIT $2`, after, limit+1)
+		WHERE `+roomExpirySQL+` > now() AND r.visibility='public' AND r.snapshot->>'phase'<>'finished' AND r.id>$1 ORDER BY r.id LIMIT $2`, after, limit+1)
 	if err != nil {
 		return PublicRooms{}, err
 	}

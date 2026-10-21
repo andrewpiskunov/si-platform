@@ -43,8 +43,8 @@ func privacyRequest(t *testing.T, url, token, accept string) (*http.Response, []
 
 func TestPrivacyHTTPExportAndOwnerScope(t *testing.T) {
 	staging := t.TempDir()
-	t.Setenv("TMPDIR", staging)
 	app, h, auth := platform(t)
+	app.options.ExportDirectory = staging
 	ctx := context.Background()
 	owner, err := auth.Register(ctx, "privacy_author", "long-enough-password", "Privacy Author")
 	if err != nil {

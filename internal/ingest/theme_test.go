@@ -14,6 +14,7 @@ import (
 
 	"siplatform/internal/blob"
 	"siplatform/internal/library"
+	"siplatform/internal/retention"
 	"siplatform/internal/themes"
 )
 
@@ -320,6 +321,9 @@ func TestThemeVersionsProtectArchiveAndDerivativesFromGC(t *testing.T) {
 		t.Fatal(err)
 	}
 	next.cleanup(bg, epoch)
+	if _, err = retention.New(f.pool, f.objects).Sweep(bg); err != nil {
+		t.Fatal(err)
+	}
 	for _, key := range keys {
 		if _, err = f.objects.Stat(bg, key); err != nil {
 			t.Fatal("retained theme object deleted", key, err)
@@ -368,6 +372,9 @@ func TestThemeRevokedDuringPublicationFailsAndLeavesCollectibleObjects(t *testin
 		t.Fatal(err)
 	}
 	next.cleanup(bg, epoch)
+	if _, err = retention.New(f.pool, f.objects).Sweep(bg); err != nil {
+		t.Fatal(err)
+	}
 	for _, key := range keys {
 		if _, err = f.objects.Stat(bg, key); !errors.Is(err, blob.ErrNotFound) {
 			t.Fatal("failed theme object leaked", err)

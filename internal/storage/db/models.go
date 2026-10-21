@@ -28,6 +28,12 @@ type AccountCredential struct {
 	RevokedAt pgtype.Timestamptz
 }
 
+type AccountExportLease struct {
+	OwnerID   string
+	ID        string
+	ExpiresAt pgtype.Timestamptz
+}
+
 type AccountUser struct {
 	ID           string
 	Username     pgtype.Text
@@ -96,13 +102,17 @@ type LibraryPack struct {
 }
 
 type LibraryReport struct {
-	ID         string
-	PackID     string
-	Revision   int32
-	ReporterID string
-	Reason     string
-	Status     string
-	CreatedAt  pgtype.Timestamptz
+	ID               string
+	PackID           string
+	Revision         int32
+	ReporterID       string
+	Reason           string
+	Status           string
+	CreatedAt        pgtype.Timestamptz
+	Resolution       string
+	ResolutionReason string
+	ResolvedBy       pgtype.Text
+	ResolvedAt       pgtype.Timestamptz
 }
 
 type LibraryRevision struct {
@@ -122,13 +132,23 @@ type LibraryRevision struct {
 	AgeRating   pgtype.Int2
 }
 
+type RetentionCandidate struct {
+	Key       string
+	CreatedAt pgtype.Timestamptz
+	RetryAt   pgtype.Timestamptz
+	Attempts  int64
+	LastError string
+}
+
 type Room struct {
-	ID         string
-	Snapshot   []byte
-	Seq        int64
-	InviteHash string
-	CreatedAt  pgtype.Timestamptz
-	Visibility pgtype.Text
+	ID             string
+	Snapshot       []byte
+	Seq            int64
+	InviteHash     string
+	CreatedAt      pgtype.Timestamptz
+	Visibility     pgtype.Text
+	LastActivityAt pgtype.Timestamptz
+	FinishedAt     pgtype.Timestamptz
 }
 
 type RoomGuestBan struct {

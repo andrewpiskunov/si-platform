@@ -21,6 +21,7 @@ import (
 	"siplatform/internal/library"
 	"siplatform/internal/media"
 	"siplatform/internal/packs"
+	"siplatform/internal/retention"
 	"siplatform/internal/siq"
 )
 
@@ -398,6 +399,9 @@ func TestRealMediaRevokedDuringPublicationFailsAndCollectsObjects(t *testing.T) 
 		t.Fatal(err)
 	}
 	next.cleanup(bg, epoch)
+	if _, err = retention.New(f.pool, f.objects).Sweep(bg); err != nil {
+		t.Fatal(err)
+	}
 	for _, key := range keys {
 		if _, err = f.objects.Stat(bg, key); !errors.Is(err, blob.ErrNotFound) {
 			t.Fatal("failed media object leaked", key, err)

@@ -134,6 +134,7 @@
       </p>{/if}{#key $sessionEpoch}{@render children()}{/key}
   </main>
   <footer class="site-footer">
+    <a href="/privacy">Хранение и удаление данных</a>
     <span>Своя игра <span class="muted">· Вопросы, которые нас собирают</span></span><a
       href={contextLink('/studio', context)}>Создать свой пакет ↗</a
     >

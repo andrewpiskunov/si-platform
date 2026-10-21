@@ -93,7 +93,7 @@ func (s *Server) privacyExport(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Minute)
 	defer cancel()
-	file, err := os.CreateTemp("", "si-account-export-*")
+	file, err := os.CreateTemp(s.options.ExportDirectory, "si-account-export-*")
 	if err != nil {
 		privacyError(w, r, privacy.ErrUnavailable)
 		return
