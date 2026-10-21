@@ -236,6 +236,7 @@ func ApplyAt(s State, actorID string, c Command, nowMS int64, entropy uint64) (S
 			g.Stage.RemainingMS = 0
 			g.PausedTimer = false
 		case "finish":
+			stopMedia(&n, nowMS)
 			n.Phase = Finished
 			n.ResumePhase = ""
 			g.Stage.DeadlineMS = 0

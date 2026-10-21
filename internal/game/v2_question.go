@@ -223,6 +223,7 @@ func answerSeconds(s State) int {
 	return q.Rules.SpecialSeconds
 }
 func openAnswers(s *State, now int64) {
+	stopMedia(s, now)
 	q := s.Gameplay.Question
 	if ordinary(q) {
 		setStage(s, "buzz_open", "", now, answerSeconds(*s))
@@ -245,6 +246,7 @@ func advanceQuestion(s *State, now int64) error {
 			openAnswers(s, now)
 		}
 	case "present_answer":
+		stopMedia(s, now)
 		if q.AnswerIndex+1 < len(q.Spec.Answer) {
 			q.AnswerIndex++
 			presentAnswerStage(s, now)

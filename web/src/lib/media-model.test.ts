@@ -91,3 +91,67 @@ test('a paused scheduled fragment stays hidden even after its original start tim
   assert.equal(playbackPlan(media, true, 15000, 'scheduled_content').show, false);
   assert.equal(playbackPlan(media, true, 15000, 'present_question').show, true);
 });
+test('an explicit playback end stops at its boundary before a new server snapshot arrives', () => {
+  const media = {
+    start_at_ms: 10000,
+    paused_position_ms: 0,
+    duration_ms: 8000,
+    playback_end_position_ms: 1000
+  };
+  assert.equal(playbackPlan(media, false, 10999).play, true);
+  const ended = playbackPlan(media, false, 11300);
+  assert.equal(ended.play, false);
+  assert.equal(ended.position, 1);
+  assert.equal(ended.show, true);
+});
+test('a last media fragment cannot play after presentation advances to another game stage', () => {
+  const media = {
+    start_at_ms: 10000,
+    paused_position_ms: 0,
+    duration_ms: 8000,
+    playback_end_position_ms: 8000
+  };
+  for (const stage of [
+    'prepare_content',
+    'buzz_open',
+    'buzz_window',
+    'collect_answer',
+    'judge',
+    'resolved'
+  ]) {
+    assert.equal(playbackPlan(media, false, 11000, stage).play, false, stage);
+  }
+  for (const stage of ['scheduled_content', 'present_question', 'present_answer']) {
+    assert.equal(playbackPlan(media, false, 11000, stage).play, true, stage);
+  }
+});
+test('a server-stopped position, including zero, survives elapsed time, pause and reconnect', () => {
+  for (const stopped of [0, 1250]) {
+    const media = {
+      start_at_ms: 10000,
+      paused_position_ms: 6000,
+      duration_ms: 8000,
+      playback_end_position_ms: 8000,
+      stopped_position_ms: stopped
+    };
+    for (const paused of [false, true]) {
+      const plan = playbackPlan(media, paused, 17000, 'present_answer');
+      assert.equal(plan.play, false);
+      assert.equal(plan.position, stopped / 1000);
+      assert.equal(plan.show, true);
+    }
+  }
+});
+test('a stopped static image remains visible in the following game stage', () => {
+  const media = {
+    start_at_ms: 10000,
+    paused_position_ms: 0,
+    duration_ms: 0,
+    playback_end_position_ms: 0,
+    stopped_position_ms: 0
+  };
+  const plan = playbackPlan(media, false, 19000, 'buzz_open');
+  assert.equal(plan.show, true);
+  assert.equal(plan.play, false);
+  assert.equal(plan.position, 0);
+});

@@ -11,25 +11,38 @@ export class ServerClock {
   }
 }
 export function playbackPlan(
-  media: { start_at_ms: number; paused_position_ms: number; duration_ms: number },
+  media: {
+    start_at_ms: number;
+    paused_position_ms: number;
+    duration_ms: number;
+    playback_end_position_ms?: number;
+    stopped_position_ms?: number;
+  },
   paused: boolean,
   serverNow: number,
   stageKind = 'present_question'
 ) {
   const started = media.start_at_ms > 0;
   const wait = started ? Math.max(0, media.start_at_ms - serverNow) : 0;
-  const position = paused
-    ? media.paused_position_ms
-    : started
-      ? Math.max(0, serverNow - media.start_at_ms)
-      : 0;
-  const milliseconds = media.duration_ms > 0 ? Math.min(media.duration_ms, position) : position;
+  const stopped = media.stopped_position_ms !== undefined;
+  const end = media.playback_end_position_ms ?? media.duration_ms;
+  const position =
+    media.stopped_position_ms ??
+    (paused ? media.paused_position_ms : started ? Math.max(0, serverNow - media.start_at_ms) : 0);
+  const milliseconds = end > 0 ? Math.min(end, position) : position;
   return {
     show:
       started &&
       !(paused && ['prepare_content', 'scheduled_content'].includes(stageKind)) &&
       (wait === 0 || (paused && position > 0)),
-    play: started && wait === 0 && !paused,
+    play:
+      started &&
+      wait === 0 &&
+      !paused &&
+      !stopped &&
+      end > 0 &&
+      position < end &&
+      ['scheduled_content', 'present_question', 'present_answer'].includes(stageKind),
     position: milliseconds / 1000,
     wait
   };

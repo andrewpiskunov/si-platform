@@ -200,6 +200,7 @@ func load(ctx context.Context, tx pgx.Tx, packID string, revision int) (Draft, e
 			return d, err
 		}
 	}
+	refreshMediaDiagnostics(&d)
 	d.PlayIssues = playpack.ValidateMedia(d.Document, MediaLookup(d.Assets))
 	return d, nil
 }

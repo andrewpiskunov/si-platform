@@ -129,7 +129,7 @@ func (p *Processor) Prepare(ctx context.Context, kind string, source io.Reader, 
 	if err = p.decode(ctx, input, output, "/input/source", kind, meta); err != nil {
 		return nil, err
 	}
-	result.Prepared = Prepared{Kind: kind, DurationMS: meta.durationMS, Width: meta.width, Height: meta.height}
+	result.Prepared = Prepared{Kind: kind, DurationMS: meta.durationMS}
 	for _, economy := range []bool{false, true} {
 		name := "standard"
 		if economy {
@@ -188,6 +188,8 @@ func (p *Processor) Prepare(ctx context.Context, kind string, source io.Reader, 
 			result.Prepared.Economy = variant
 		} else {
 			result.Prepared.Standard = variant
+			result.Prepared.Width = outMeta.width
+			result.Prepared.Height = outMeta.height
 		}
 		result.Files = append(result.Files, Output{Key: variant.Key, Path: localPath, MIME: mime, Size: n})
 	}

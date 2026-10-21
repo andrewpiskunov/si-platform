@@ -25,7 +25,11 @@
         step="1"
         value={item.duration_ms ?? 0}
         onchange={(event) => onchange({ duration_ms: Number(event.currentTarget.value) })}
-      /><span class="helper">0 — без автоматического перехода.</span></label
+      /><span class="helper"
+        >{['audio', 'video'].includes(item.type)
+          ? '0 — до конца файла с автоматическим переходом. Ручное завершение ниже отключает переход, но не ограничение воспроизведения.'
+          : '0 — без автоматического перехода.'}</span
+      ></label
     ><label class="check"
       ><input
         type="checkbox"

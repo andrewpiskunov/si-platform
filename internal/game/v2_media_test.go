@@ -110,6 +110,122 @@ func TestV2MediaReadinessSchedulesAllTwelvePlayers(t *testing.T) {
 	}
 	rejected(t, s, "p1", "media_ready", map[string]any{"stage_id": initial["stage_id"], "instance_id": initial["instance_id"], "status": "hidden"}, 3000)
 }
+
+func mediaPlaybackField(t *testing.T, s State, now int64, field string) (int64, bool) {
+	t.Helper()
+	b, err := json.Marshal(ProjectAt(s, "p1", now).Gameplay.Question.Media)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]json.RawMessage
+	if err = json.Unmarshal(b, &fields); err != nil {
+		t.Fatal(err)
+	}
+	raw, ok := fields[field]
+	if !ok {
+		return 0, false
+	}
+	var value int64
+	if err = json.Unmarshal(raw, &value); err != nil {
+		t.Fatal(err)
+	}
+	return value, true
+}
+
+func TestV2MediaPlaybackLimitSurvivesLateTimer(t *testing.T) {
+	for _, kind := range []string{"audio", "video"} {
+		for _, wait := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/wait=%v", kind, wait), func(t *testing.T) {
+				q := mediaQuestion(kind)
+				q.Question[0].DurationMS, q.Question[0].WaitForFinish = 1000, wait
+				s := readyPlayers(t, startMedia(t, v2Fixture(), q))
+				s, _ = AdvanceAt(s, 1750)
+				if limit, ok := mediaPlaybackField(t, s, 1800, "playback_end_position_ms"); !ok || limit != 1000 {
+					t.Fatalf("client cannot stop at configured limit before next snapshot: %d %v", limit, ok)
+				}
+				s, _ = AdvanceAt(s, 4000)
+				wantStage := "buzz_open"
+				if wait {
+					wantStage = "present_question"
+				}
+				if s.Gameplay.Stage.Kind != wantStage {
+					t.Fatal(s.Gameplay.Stage)
+				}
+				position, stopped := mediaPlaybackField(t, s, 4500, "stopped_position_ms")
+				if !wait && (!stopped || position != 1000) {
+					t.Fatalf("late timer exceeded author limit: %d %v", position, stopped)
+				}
+			})
+		}
+	}
+}
+
+func TestV2MediaManualStopPersistsThroughPauseAndReconnect(t *testing.T) {
+	for _, command := range []string{"advance", "open_buzzer", "finish"} {
+		t.Run(command, func(t *testing.T) {
+			s := readyPlayers(t, startMedia(t, v2Fixture(), mediaQuestion("video")))
+			s, _ = AdvanceAt(s, 1750)
+			var data any = dep(s)
+			if command == "finish" {
+				data = EmptyPayload{}
+			}
+			s = doAt(t, s, "host", command, data, 2250)
+			if position, ok := mediaPlaybackField(t, s, 3000, "stopped_position_ms"); !ok || position != 500 {
+				t.Fatalf("manual stop: %d %v", position, ok)
+			}
+			if command != "finish" {
+				s = doAt(t, s, "host", "pause", EmptyPayload{}, 3500)
+				s = doAt(t, s, "host", "resume", EmptyPayload{}, 8000)
+			}
+			b, _ := json.Marshal(s)
+			var restored State
+			if err := json.Unmarshal(b, &restored); err != nil {
+				t.Fatal(err)
+			}
+			if position, ok := mediaPlaybackField(t, restored, 9000, "stopped_position_ms"); !ok || position != 500 {
+				t.Fatalf("stop changed after pause/reconnect: %d %v", position, ok)
+			}
+		})
+	}
+}
+
+func TestV2AnswerMediaStopsAtTimedOrManualEnd(t *testing.T) {
+	for _, automatic := range []bool{false, true} {
+		t.Run(fmt.Sprint(automatic), func(t *testing.T) {
+			q := mediaQuestion("image")
+			q.Answer = []TextStep{{Media: mediaFixture("audio", "answer-media"), DurationMS: 1000}}
+			s := readyPlayers(t, startMedia(t, v2Fixture(), q))
+			s, _ = AdvanceAt(s, 1750)
+			s = doAt(t, s, "host", "open_buzzer", dep(s), 2000)
+			s = doAt(t, s, "host", "reveal", dep(s), 2000)
+			s = readyPlayersAt(t, s, 2000)
+			s, _ = AdvanceAt(s, 2750)
+			want := int64(0)
+			if automatic {
+				s, _ = AdvanceAt(s, 5000)
+				want = 1000
+			} else {
+				s = doAt(t, s, "host", "advance", dep(s), 2750)
+			}
+			if s.Gameplay.Stage.Kind != "resolved" {
+				t.Fatal(s.Gameplay.Stage)
+			}
+			if stop, ok := mediaPlaybackField(t, s, 5500, "stopped_position_ms"); !ok || stop != want {
+				t.Fatalf("answer did not stop: %d %v", stop, ok)
+			}
+		})
+	}
+}
+
+func TestV2MediaFinishWhilePausedKeepsPausedPosition(t *testing.T) {
+	s := readyPlayers(t, startMedia(t, v2Fixture(), mediaQuestion("audio")))
+	s, _ = AdvanceAt(s, 1750)
+	s = doAt(t, s, "host", "pause", EmptyPayload{}, 2250)
+	s = doAt(t, s, "host", "finish", EmptyPayload{}, 8000)
+	if stop, ok := mediaPlaybackField(t, s, 9000, "stopped_position_ms"); !ok || stop != 500 {
+		t.Fatalf("paused finish: %d %v", stop, ok)
+	}
+}
 func TestV2MediaErrorHiddenAndDuplicateReadiness(t *testing.T) {
 	s := startMedia(t, v2Fixture(), mediaQuestion("audio"))
 	s = do(t, s, "p1", "media_ready", with(s, "status", "error"))

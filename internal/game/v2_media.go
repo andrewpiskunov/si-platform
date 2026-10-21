@@ -221,9 +221,40 @@ func pauseMedia(s *State, now int64) {
 		return
 	}
 	g.Content.PausedPositionMS = 0
-	if g.Content.StartAtMS > 0 && step.Media.DurationMS > 0 {
-		g.Content.PausedPositionMS = min(step.Media.DurationMS, max(int64(0), now-g.Content.StartAtMS))
+	if g.Content.StoppedPositionMS != nil {
+		g.Content.PausedPositionMS = *g.Content.StoppedPositionMS
+	} else if g.Content.StartAtMS > 0 && step.Media.DurationMS > 0 {
+		g.Content.PausedPositionMS = min(playbackEndPosition(step), max(int64(0), now-g.Content.StartAtMS))
 	}
+}
+
+// The transition deadline and the playback limit are distinct: wait-for-finish
+// and host timer extensions may delay a transition but cannot disclose more of
+// a recording than the author configured.
+func playbackEndPosition(step TextStep) int64 {
+	if step.Media == nil || step.Media.DurationMS == 0 {
+		return 0
+	}
+	if step.DurationMS > 0 {
+		return min(step.DurationMS, step.Media.DurationMS)
+	}
+	return step.Media.DurationMS
+}
+
+func stopMedia(s *State, now int64) {
+	g := s.Gameplay
+	step, ok := currentContentStep(*s)
+	if !ok || g.Content.StoppedPositionMS != nil {
+		return
+	}
+	c := g.Content
+	position := int64(0)
+	if s.Phase == Paused {
+		position = c.PausedPositionMS
+	} else if c.StartAtMS > 0 {
+		position = min(playbackEndPosition(step), max(int64(0), now-c.StartAtMS))
+	}
+	c.StoppedPositionMS = &position
 }
 func resumeMedia(s *State, now int64) {
 	g := s.Gameplay

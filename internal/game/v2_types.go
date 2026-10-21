@@ -332,15 +332,17 @@ type MediaVariantView struct {
 	Size int64  `json:"size"`
 }
 type MediaView struct {
-	ID               string           `json:"id"`
-	Kind             string           `json:"kind"`
-	DurationMS       int64            `json:"duration_ms"`
-	Width            int              `json:"width"`
-	Height           int              `json:"height"`
-	Standard         MediaVariantView `json:"standard"`
-	Economy          MediaVariantView `json:"economy"`
-	StartAtMS        int64            `json:"start_at_ms"`
-	PausedPositionMS int64            `json:"paused_position_ms"`
+	ID                    string           `json:"id"`
+	Kind                  string           `json:"kind"`
+	DurationMS            int64            `json:"duration_ms"`
+	Width                 int              `json:"width"`
+	Height                int              `json:"height"`
+	Standard              MediaVariantView `json:"standard"`
+	Economy               MediaVariantView `json:"economy"`
+	StartAtMS             int64            `json:"start_at_ms"`
+	PausedPositionMS      int64            `json:"paused_position_ms"`
+	PlaybackEndPositionMS int64            `json:"playback_end_position_ms"`
+	StoppedPositionMS     *int64           `json:"stopped_position_ms,omitempty"`
 }
 type Readiness struct {
 	ID     string `json:"id"`
@@ -349,12 +351,13 @@ type Readiness struct {
 
 // ContentState refers to exactly one currently authorized question/answer step.
 type ContentState struct {
-	Group            string      `json:"group"`
-	Index            int         `json:"index"`
-	ReturnStage      string      `json:"return_stage"`
-	Readiness        []Readiness `json:"readiness"`
-	StartAtMS        int64       `json:"start_at_ms"`
-	PausedPositionMS int64       `json:"paused_position_ms"`
+	Group             string      `json:"group"`
+	Index             int         `json:"index"`
+	ReturnStage       string      `json:"return_stage"`
+	Readiness         []Readiness `json:"readiness"`
+	StartAtMS         int64       `json:"start_at_ms"`
+	PausedPositionMS  int64       `json:"paused_position_ms"`
+	StoppedPositionMS *int64      `json:"stopped_position_ms,omitempty"`
 }
 type MediaReadyPayload struct {
 	StageID    string `json:"stage_id"`

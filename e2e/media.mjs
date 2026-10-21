@@ -92,6 +92,10 @@ try {
   const content = (kind, name) => ({ type: kind, value: asset(name).name.split('/').slice(1).join('/'), is_ref: true, wait_for_finish: true });
   question.params[0].items = [content('image', picture.name), content('audio', sound.name), content('video', movie.name)];
   question.params.push({ name: 'answer', type: 'content', items: [content('image', answer.name)] });
+  for (const [kind, file, price] of [['audio', sound, 200], ['video', movie, 300]]) {
+    document.rounds[0].themes[0].questions.push({ id: randomUUID(), type: 'simple', price, info: {},
+      params: [{ name: 'question', type: 'content', items: [{ ...content(kind, file.name), duration_ms: 2000, wait_for_finish: false }] }], right: ['Ответ'] });
+  }
   draft = await request(ownerContext, 'PUT', `/drafts/${draft.card.id}`, { base_revision: draft.card.revision, document });
   assert.equal((draft.play_issues || []).filter(i => i.severity === 'error').length, 0);
   checkpoint = 'editor prepared asset preview';
@@ -190,6 +194,15 @@ try {
   await host.page.screenshot({ path: output + '/media-host.png', fullPage: true });
   checkpoint = 'answer media reveal and revocation';
   await button(host, 'Открыть кнопку'); await stage(host, 'buzz_open');
+  for (const p of players) {
+    await stage(p, 'buzz_open');
+    const stop = game(p).question.media.stopped_position_ms;
+    assert.ok(Number.isFinite(stop) && stop > 0 && stop < 8000, 'manual stop position missing');
+    await until(() => p.page.locator('.media-player video').evaluate((el, seconds) => el.paused && Math.abs(el.currentTime - seconds) < .15, stop / 1000), 'last video kept playing after manual stop');
+  }
+  await players[0].page.reload();
+  await players[0].page.getByRole('status').filter({ hasText: 'В сети' }).waitFor();
+  await until(() => players[0].page.locator('.media-player video').evaluateAll(els => els.length === 1 && els[0].readyState >= 2 && els[0].paused), 'stopped video resumed on reconnect');
   await button(host, 'Раскрыть ответ');
   await until(() => game(host).question.media?.kind === 'image' && game(host).question.media.id !== imageID, 'answer media not revealed');
   await stage(host, 'present_answer');
@@ -199,6 +212,22 @@ try {
     const beforeReveal = p.wire.filter(s => s.gameplay?.question?.instance_id === game(host).question.instance_id && s.gameplay.question.answer === undefined);
     assert.ok(beforeReveal.every(s => s.gameplay.question.media?.id !== answerID), 'answer media was projected before reveal');
   }
+  await button(host, 'Следующий фрагмент ответа'); await stage(host, 'resolved');
+  for (const [kind, price] of [['audio', 200], ['video', 300]]) {
+    checkpoint = `${kind} explicit duration stops last fragment`;
+    const timed = draft.document.rounds[0].themes[0].questions.find(q => q.price === price);
+    await request(ownerContext, 'POST', `/rooms/${hostCredentials.room_id}/select`, { question_id: timed.id, command_id: randomUUID(), expected_seq: host.state.seq }, hostCredentials.token);
+    await stage(host, 'present_question');
+    for (const p of players) await playing(p, kind);
+    await stage(host, 'buzz_open');
+    for (const p of players) {
+      await stage(p, 'buzz_open');
+      assert.equal(game(p).question.media.playback_end_position_ms, 2000);
+      assert.equal(game(p).question.media.stopped_position_ms, 2000);
+      await until(() => p.page.locator(`.media-player ${kind}`).evaluate(el => el.paused && Math.abs(el.currentTime - 2) < .15), 'explicit duration did not stop native playback');
+    }
+    await button(host, 'Раскрыть ответ'); await stage(host, 'resolved');
+  }
   const original = await ownerContext.request.get(`${base}/api/drafts/${draft.card.id}/assets/${asset(sound.name).key}?revision=${draft.card.revision}`);
   assert.equal(original.status(), 200); assert.deepEqual(await original.body(), sound.data, 'original audio changed');
   const archive = await ownerContext.request.get(`${base}/api/drafts/${draft.card.id}/export?revision=${draft.card.revision}`);
@@ -207,7 +236,7 @@ try {
   await writeFile(archivePath, await archive.body());
   await run('python3', ['-c', 'import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); assert z.read(sys.argv[2]) == open(sys.argv[3],"rb").read()', archivePath, asset(sound.name).name, sound.path], { timeout: 10000 });
   assert.equal(pageErrors.length, 0, JSON.stringify(pageErrors));
-  console.log(JSON.stringify({ media_upload: true, editor_upload: true, unsaved_edit_preserved: true, prepared_editor: true, slow_readiness: true, media_error_retry: true, hidden_readiness: true, explicit_wait: true, image: true, audio: true, video: true, synchronized: true, no_duplicate_preload: true, pause: true, reconnect: true, answer_private: true, original_preserved: true, siq_original_preserved: true, mobile_overflow: false, page_errors: 0 }));
+  console.log(JSON.stringify({ media_upload: true, editor_upload: true, unsaved_edit_preserved: true, prepared_editor: true, slow_readiness: true, media_error_retry: true, hidden_readiness: true, explicit_wait: true, image: true, audio: true, video: true, synchronized: true, no_duplicate_preload: true, pause: true, reconnect: true, manual_playback_stop: true, timed_audio_video_stop: true, stopped_reconnect: true, answer_private: true, original_preserved: true, siq_original_preserved: true, mobile_overflow: false, page_errors: 0 }));
 } catch (err) {
   if (ownerContext) for (const [index, p] of ownerContext.pages().entries()) await p.screenshot({ path: `${output}/media-owner-failure-${index}.png`, fullPage: true }).catch(() => {});
   for (const c of clients) await c.page.screenshot({ path: `${output}/media-failure-${c.credentials.participant_id}.png`, fullPage: true }).catch(() => {});

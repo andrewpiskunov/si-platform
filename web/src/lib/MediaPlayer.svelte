@@ -164,17 +164,14 @@
       element.pause();
       return;
     }
+    if (!plan.play) element.pause();
     if (element.readyState < 2) return;
-    if (Math.abs(element.currentTime - plan.position) > 0.35) {
+    if (Math.abs(element.currentTime - plan.position) > (plan.play ? 0.35 : 0.01)) {
       try {
         element.currentTime = plan.position;
       } catch {}
     }
-    if (!plan.play) {
-      element.pause();
-      return;
-    }
-    if (media.duration_ms > 0 && plan.position >= media.duration_ms / 1000) return;
+    if (!plan.play) return;
     if (element.paused && !playing && (!autoplay || gesture)) {
       playing = true;
       const target = element;

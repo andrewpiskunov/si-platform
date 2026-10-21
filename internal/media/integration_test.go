@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -21,6 +22,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"siplatform/internal/game"
 )
 
 func integrationOptions(t *testing.T) Options {
@@ -149,6 +152,43 @@ func TestIntegrationRealPreparation(t *testing.T) {
 				t.Fatal("result not cleaned")
 			}
 		})
+	}
+}
+
+func TestIntegrationPreparedVideoDimensionsMatchStandardOutput(t *testing.T) {
+	p := integrationProcessor(t)
+	data := ffmpegFixture(t, p, "-f", "lavfi", "-i", "color=c=red:s=2560x1440:r=2:d=1", "-c:v", "libx264", "-threads", "2", "-f", "mp4")
+	result, err := p.Prepare(context.Background(), "video", bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("prepare supported 1440p video: %v", err)
+	}
+	defer result.Close()
+	if len(result.Files) != 2 || result.Files[0].Key != result.Prepared.Standard.Key || result.Files[1].Key != result.Prepared.Economy.Key {
+		t.Fatalf("missing prepared variants: %+v", result)
+	}
+	for i, want := range []string{"1920,1080", "640,360"} {
+		out, err := exec.Command(p.options.FFprobe, "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", result.Files[i].Path).Output()
+		if err != nil || strings.TrimSpace(string(out)) != want {
+			t.Fatalf("variant %d dimensions: %q want %s: %v", i, out, want, err)
+		}
+		if i == 0 {
+			reported := fmt.Sprintf("%d,%d", result.Prepared.Width, result.Prepared.Height)
+			if reported != strings.TrimSpace(string(out)) {
+				t.Errorf("prepared dimensions %s do not match standard output %s", reported, want)
+			}
+		}
+	}
+	m := result.Prepared
+	if m.DurationMS != 1000 {
+		t.Errorf("prepared duration: %d want 1000", m.DurationMS)
+	}
+	spec := game.MediaSpec{
+		ID: "video_1440p", Kind: m.Kind, DurationMS: m.DurationMS, Width: m.Width, Height: m.Height,
+		Standard: game.MediaVariant{Key: m.Standard.Key, MIME: m.Standard.MIME, Size: m.Standard.Size},
+		Economy:  game.MediaVariant{Key: m.Economy.Key, MIME: m.Economy.MIME, Size: m.Economy.Size},
+	}
+	if err := spec.Validate(); err != nil {
+		t.Errorf("prepared video cannot be played: %v", err)
 	}
 }
 

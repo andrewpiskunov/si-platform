@@ -161,6 +161,7 @@ func prepare(ctx context.Context, in Save) (Draft, error) {
 			seenIssues[issue] = true
 		}
 	}
+	refreshMediaDiagnostics(&d)
 	d.PlayIssues = playpack.ValidateMedia(d.Document, MediaLookup(d.Assets))
 	return d, nil
 }

@@ -39,6 +39,9 @@ func ProjectAt(s State, id string, nowMS int64) View {
 		if m, ok := CurrentMedia(n, id); ok {
 			c := g.Content
 			qv.Media = &MediaView{ID: m.ID, Kind: m.Kind, DurationMS: m.DurationMS, Width: m.Width, Height: m.Height, Standard: MediaVariantView{MIME: m.Standard.MIME, Size: m.Standard.Size}, Economy: MediaVariantView{MIME: m.Economy.MIME, Size: m.Economy.Size}, StartAtMS: c.StartAtMS, PausedPositionMS: c.PausedPositionMS}
+			step, _ := currentContentStep(n)
+			qv.Media.PlaybackEndPositionMS = playbackEndPosition(step)
+			qv.Media.StoppedPositionMS = c.StoppedPositionMS
 			gv.Readiness = append(gv.Readiness, c.Readiness...)
 		}
 		if q.Spec.Type != "secret" || q.RecipientID != "" {

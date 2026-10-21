@@ -52,6 +52,8 @@ export interface MediaView {
   id: string;
   kind: string;
   duration_ms: number;
+  playback_end_position_ms: number;
+  stopped_position_ms?: number;
   width: number;
   height: number;
   standard: { mime: string; size: number };
