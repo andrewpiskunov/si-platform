@@ -221,6 +221,18 @@ try {
   assert.equal(new URL(list.page.url()).searchParams.get('limit'), '1');
   assert.notEqual(await list.page.locator('article.public-room h2').innerText(), firstRoomTitle);
   await list.page.getByRole('navigation', { name: 'Основная навигация' }).getByRole('link', { name: 'Модерация', exact: true }).waitFor();
+  const beforeRefresh = await list.page.locator('article.public-room h2').allTextContents();
+  const cursorURL = list.page.url();
+  const abortRefresh = route => route.abort('connectionfailed');
+  await list.page.route(/\/(?:api\/rooms|rooms\/__data\.json)\?/, abortRefresh);
+  await list.page.getByRole('button', { name: 'Обновить список комнат', exact: true }).click();
+  await list.page.getByRole('button', { name: 'Повторить загрузку комнат', exact: true }).waitFor();
+  assert.deepEqual(await list.page.locator('article.public-room h2').allTextContents(), beforeRefresh);
+  assert.equal(list.page.url(), cursorURL);
+  await list.page.unroute(/\/(?:api\/rooms|rooms\/__data\.json)\?/, abortRefresh);
+  await list.page.getByRole('button', { name: 'Повторить загрузку комнат', exact: true }).click();
+  await until(async () => await list.page.getByRole('alert').count() === 0, 'list retry failed');
+  assert.deepEqual(await list.page.locator('article.public-room h2').allTextContents(), beforeRefresh);
   await overflow(list, 'rooms-list');
   await overflow(hp, 'rooms-host');
   await overflow(player, 'rooms-player');

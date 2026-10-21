@@ -1,8 +1,12 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import { invalidateAll } from '$app/navigation';
+  import { api } from '#lib/api.ts';
+  import type { PublicRooms } from '#lib/types.ts';
+  import { roomListQuery } from '#lib/room-preferences.ts';
   import { roomContext, contextLink } from '#lib/appearance.ts';
   let { data } = $props();
+  let refreshed = $state.raw<{ source: typeof data; value: typeof data } | null>(null);
+  const displayed = $derived(refreshed?.source === data ? refreshed.value : data);
   let refreshing = $state(false),
     refreshError = $state('');
   const context = $derived(roomContext(page.url));
@@ -15,16 +19,32 @@
     paused: 'Пауза'
   };
   function nextLink() {
-    const query = new URLSearchParams({ after: data.next, limit: String(data.limit) });
+    const query = new URLSearchParams({ after: displayed.next, limit: String(displayed.limit) });
     return contextLink(`/rooms?${query}`, context);
   }
   async function refresh() {
+    if (refreshing || displayed.error === 'invalid') return;
+    const source = data;
     refreshing = true;
     refreshError = '';
     try {
-      await invalidateAll();
+      const query = roomListQuery(
+        new URLSearchParams({ after: source.after, limit: String(source.limit) })
+      );
+      const result = await api<PublicRooms>(
+        `/rooms?${query}`,
+        'GET',
+        undefined,
+        undefined,
+        AbortSignal.timeout(10000)
+      );
+      if (data === source)
+        refreshed = {
+          source,
+          value: { ...source, items: result.items || [], next: result.next_after || '', error: '' }
+        };
     } catch {
-      refreshError = 'Не удалось обновить список. Попробуйте ещё раз.';
+      if (data === source) refreshError = 'Не удалось обновить список. Попробуйте ещё раз.';
     } finally {
       refreshing = false;
     }
@@ -45,20 +65,21 @@
       >{refreshing ? 'Обновляем…' : 'Обновить список комнат'}</button
     >
   </div>
-  {#if data.error || refreshError}<div class="notice error" role="alert">
+  {#if displayed.error || refreshError}<div class="notice error" role="alert">
       <p>
         {refreshError ||
-          (data.error === 'invalid'
+          (displayed.error === 'invalid'
             ? 'Некорректный адрес страницы списка.'
             : 'Не удалось загрузить комнаты. Попробуйте ещё раз.')}
       </p>
-      {#if data.error === 'invalid'}<a class="button" href={contextLink('/rooms', context)}
+      {#if displayed.error === 'invalid'}<a class="button" href={contextLink('/rooms', context)}
           >К началу списка</a
         >
       {:else}<button disabled={refreshing} onclick={refresh}>Повторить загрузку комнат</button>{/if}
-    </div>{:else}
+    </div>{/if}
+  {#if !displayed.error}
     <div class="room-cards">
-      {#each data.items as room (room.room_id)}<article class="panel stack public-room">
+      {#each displayed.items as room (room.room_id)}<article class="panel stack public-room">
           <div>
             <p class="eyebrow">{phases[room.phase] || 'Игра'}</p>
             <h2>{room.title || 'Игровая комната'}</h2>
@@ -87,9 +108,10 @@
       списка.
     </p>
     <div class="row">
-      {#if data.after}<a class="button" href={contextLink('/rooms', context)}>К началу списка</a
+      {#if displayed.after}<a class="button" href={contextLink('/rooms', context)}
+          >К началу списка</a
         >{/if}
-      {#if data.next}<a class="button" href={nextLink()}>Следующие комнаты →</a>{/if}
+      {#if displayed.next}<a class="button" href={nextLink()}>Следующие комнаты →</a>{/if}
     </div>
   {/if}
 </section>

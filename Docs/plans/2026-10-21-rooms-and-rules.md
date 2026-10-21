@@ -59,5 +59,5 @@
 
 - [x] RED→GREEN Chromium full settings/list/join/invite/rules/voice/dirty/reconnect flows with real API and synthetic users. Verify no voice request and no page errors; 390/820/1440 overflow checks.
 - [x] Fresh full Go race with DB/MEDIA, vet/build; web full tests/check/build; all existing7 e2e plus rooms. Restart only owned API/Vite, check readiness.
-- [ ] One fresh whole-stage reviewer on strongest model with spec/plan/ledger/package; Important/Critical one RED→GREEN correction pass and relevant/full suite; record rulings and deferred limitations.
-- [ ] Update actual docs/status, commits, FF local main, continue guest removal/ban/history and remaining P0 without stopping for authorization.
+- [x] One fresh whole-stage reviewer on strongest model with spec/plan/ledger/package; Important/Critical one RED→GREEN correction pass and relevant/full suite; record rulings and deferred limitations.
+- [x] Update actual docs/status, commits, FF local main, continue guest removal/ban/history and remaining P0 without stopping for authorization.
