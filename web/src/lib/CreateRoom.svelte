@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { saveRoomCredentials } from './room-credentials.ts';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { api, errorText } from './api';
@@ -42,14 +43,7 @@
         rules,
         settings
       });
-      sessionStorage.setItem(
-        `room:${credentials.room_id}`,
-        JSON.stringify({
-          room_id: credentials.room_id,
-          participant_id: credentials.participant_id,
-          token: credentials.token
-        })
-      );
+      saveRoomCredentials(credentials);
       await goto(
         `/rooms/${credentials.room_id}${credentials.invite_token ? `#invite=${encodeURIComponent(credentials.invite_token)}` : ''}`
       );

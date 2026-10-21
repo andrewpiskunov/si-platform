@@ -1,4 +1,9 @@
 <script lang="ts">
+  import {
+    readRoomCredentials,
+    saveRoomCredentials,
+    clearRoomCredentials
+  } from '#lib/room-credentials.ts';
   import { onMount, getContext } from 'svelte';
   import { page } from '$app/state';
   import { api, APIError, errorText } from '#lib/api.ts';
@@ -41,7 +46,8 @@
     confirmFinish = $state(false),
     mounted = $state(false),
     resultsOpen = $state(false),
-    rotating = $state(false);
+    rotating = $state(false),
+    revoked = $state(false);
   let connection: RoomConnection | null = null;
   let roomID = $state('');
   const boardLoader = new BoardLoader<Board>();
@@ -50,7 +56,9 @@
     roomState?.participants.find((participant) => participant.id === roomState?.you)
   );
   const players = $derived(
-    (roomState?.participants || []).filter((participant) => participant.role === 'player')
+    (roomState?.participants || []).filter(
+      (participant) => participant.role === 'player' && !participant.removed
+    )
   );
   const isHost = $derived(me?.role === 'host');
   const canBuzz = $derived(
@@ -86,6 +94,7 @@
     connection?.close();
     boardLoader.reset();
     roomID = id;
+    revoked = false;
     board = null;
     boardError = '';
     boardLoading = false;
@@ -96,10 +105,7 @@
     invitationClosed = false;
     role = page.url.searchParams.get('role') === 'spectator' ? 'spectator' : 'player';
     invite = new URLSearchParams(location.hash.slice(1)).get('invite') || '';
-    try {
-      const stored = JSON.parse(sessionStorage.getItem(`room:${roomID}`) || 'null');
-      if (stored?.room_id === roomID && typeof stored.token === 'string') credentials = stored;
-    } catch {}
+    credentials = readRoomCredentials(roomID);
     if (credentials) connect();
   }
   function connect() {
@@ -117,6 +123,10 @@
     const connectedRoom = roomID;
     connection = new RoomConnection(roomID, credentials.token, (protocol, status, code) => {
       if (!alive || connectedRoom !== roomID) return;
+      if (status === 'revoked') {
+        releaseRevoked();
+        return;
+      }
       const previousVisibility = roomState
         ? normalizedSettings(roomState.settings).visibility
         : null;
@@ -159,7 +169,10 @@
         if (roundIndex >= result.rounds.length) roundIndex = 0;
       }
     } catch (e) {
-      if (alive && loadingRoom === roomID) boardError = errorText(e);
+      if (alive && loadingRoom === roomID) {
+        if (e instanceof APIError && e.status === 401) connection?.revoke();
+        else boardError = errorText(e);
+      }
     } finally {
       if (alive && loadingRoom === roomID) boardLoading = boardLoader.pending;
     }
@@ -174,12 +187,13 @@
         role,
         invite_token: invite
       });
-      try {
-        sessionStorage.setItem(`room:${roomID}`, JSON.stringify(credentials));
-      } catch {}
+      saveRoomCredentials(credentials);
       connect();
     } catch (e) {
-      error = errorText(e);
+      error =
+        e instanceof APIError && e.status === 401
+          ? 'Приглашение недействительно или устарело. Попросите ведущего прислать новую полную ссылку.'
+          : errorText(e);
     } finally {
       joining = false;
     }
@@ -248,7 +262,8 @@
       selection = null;
       await loadBoard(true);
     } catch (e) {
-      error = errorText(e);
+      if (e instanceof APIError && e.status === 401) connection?.revoke();
+      else error = errorText(e);
       if (e instanceof APIError && e.status < 500) selection = null;
     } finally {
       selecting = false;
@@ -300,14 +315,31 @@
       error = 'Не удалось скопировать ссылку. Скопируйте её из поля приглашения.';
     }
   }
+  function releaseRevoked() {
+    connection?.close();
+    clearRoomCredentials(roomID);
+    boardLoader.reset();
+    roomTheme.reset();
+    credentials = null;
+    roomState = null;
+    board = null;
+    boardError = '';
+    boardLoading = false;
+    ready = false;
+    pending = 0;
+    resultsOpen = false;
+    selection = null;
+    error = '';
+    revoked = true;
+  }
   function reset() {
     connection?.close();
     boardLoader.reset();
     boardError = '';
     boardLoading = false;
-    try {
-      sessionStorage.removeItem(`room:${roomID}`);
-    } catch {}
+    clearRoomCredentials(roomID);
+    revoked = false;
+    board = null;
     credentials = null;
     roomTheme.enter(roomID, '', themePreferences(null));
     roomState = null;
@@ -326,16 +358,32 @@
   /></svelte:head
 >
 <section class="page">
+  {#if mounted && credentials && connectionStatus === 'failed'}
+    <div class="notice error" role="alert">
+      <p>Подключение не удалось. Повторите явно.</p>
+      <button onclick={() => connection?.connect()}>Повторить подключение</button>
+    </div>
+  {/if}
   {#if boardError}<div class="notice error board-error" role="alert">
       <p>{boardError}</p>
       <button class="small" disabled={boardLoading || !ready} onclick={() => void loadBoard(true)}
         >Повторить загрузку табло</button
       >
     </div>{/if}
-  {#if !mounted}<p class="loading" role="status">Открываем комнату…</p>{:else if !credentials}<div
-      class="narrow"
-      style="margin:auto"
+  {#if !mounted}<p class="loading" role="status">Открываем комнату…</p>{:else if revoked}<div
+      class="narrow panel stack"
+      role="alert"
+      aria-label="Доступ к комнате прекращён"
     >
+      <h1>Доступ к комнате прекращён</h1>
+      <p>
+        Ваше место удалено или доступ отозван. Автоматического повторного входа не будет. После
+        удаления можно войти заново с нулевым счётом, если вход разрешён; запрет сессии проверит
+        сервер.
+      </p>
+      <button onclick={reset}>Войти заново по приглашению</button>
+      <a class="button" href="/rooms">Выйти к списку комнат</a>
+    </div>{:else if !credentials}<div class="narrow" style="margin:auto">
       <p class="eyebrow">{invite ? 'Вас пригласили играть' : 'Вход в комнату'}</p>
       <h1>Занимайте место.</h1>
       <p class="muted">
@@ -433,6 +481,7 @@
         {ready}
         pending={pending + (selection || selecting ? 1 : 0)}
         onsend={sendV2}
+        onunauthorized={() => connection?.revoke()}
         onround={(id) => roomAction('round', id)}
         onselect={(id, replay) => roomAction('select', id, false, replay)}
         onresults={() => (resultsOpen = true)}
@@ -441,6 +490,7 @@
           {roomID}
           token={credentials.token}
           onclose={() => (resultsOpen = false)}
+          onunauthorized={() => connection?.revoke()}
         />{/if}
     </div>{:else}<div class="room">
       {#if roomState}<VoiceLink value={normalizedSettings(roomState.settings).voice_url} />{/if}
@@ -478,7 +528,12 @@
             >{/if}
         </div>{/if}{#if !roomState}<div class="empty" style="margin-top:30px">
           <h2>Ждём соединение</h2>
-          <p>Ваше место восстановится автоматически.</p>
+          <p>
+            {connectionStatus === 'failed'
+              ? 'Подключение не удалось. Повторите явно.'
+              : 'Ваше место восстановится автоматически.'}
+          </p>
+
           <button class="small" onclick={reset}>Войти по приглашению заново</button>
         </div>{:else}<div class="room-grid">
           <div class="stack">

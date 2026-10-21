@@ -1,5 +1,6 @@
+import { clearRoomCredentials } from './room-credentials.ts';
 import { writable } from 'svelte/store';
-import { api } from './api.ts';
+import { api, APIError } from './api.ts';
 import {
   appearanceKey,
   AppearanceResources,
@@ -181,27 +182,64 @@ export class AppearanceConnection {
   private room: string;
   private token: string;
   private refresh: () => void;
-  constructor(room: string, token: string, refresh: () => void) {
+  private revoked: () => void;
+  constructor(room: string, token: string, refresh: () => void, revoked: () => void = () => {}) {
     this.room = room;
     this.token = token;
     this.refresh = refresh;
+    this.revoked = revoked;
   }
-  connect() {
+  private connecting = false;
+  async connect() {
+    if (this.stopped || this.connecting) return;
+    this.connecting = true;
+    try {
+      await api(
+        `/rooms/${encodeURIComponent(this.room)}/session`,
+        'POST',
+        {},
+        this.token,
+        AbortSignal.timeout(10000)
+      );
+    } catch (error) {
+      if (this.stopped) return;
+      if (error instanceof APIError && error.status === 401) {
+        clearRoomCredentials(this.room);
+        this.token = '';
+        this.close();
+        this.revoked();
+        return;
+      }
+      if (!(error instanceof APIError && error.code === 'guest_session_mismatch')) return;
+    } finally {
+      this.connecting = false;
+    }
     if (this.stopped) return;
     const url = new URL(`/api/rooms/${this.room}/ws?appearance_only=1`, location.origin);
     url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const socket = new WebSocket(url);
     this.socket = socket;
-    socket.onopen = () =>
+    socket.onopen = () => {
+      if (this.stopped) {
+        socket.close();
+        return;
+      }
       socket.send(JSON.stringify({ v: 1, type: 'authenticate', token: this.token }));
+    };
     socket.onmessage = (event) => {
       try {
+        if (this.stopped) return;
         const message = JSON.parse(event.data);
         if (message.type === 'appearance_refresh') {
           this.attempts = 0;
           this.refresh();
         }
-        if (message.code === 'unauthorized') this.close();
+        if (message.code === 'unauthorized') {
+          clearRoomCredentials(this.room);
+          this.token = '';
+          this.close();
+          this.revoked();
+        }
       } catch {}
     };
     socket.onclose = () => {

@@ -154,6 +154,7 @@ const fields: Record<string, string[]> = {
   adjust_score: ['target_id', 'delta', 'reason'],
   appeal: ['judgement_id', 'reason'],
   resolve_appeal: ['appeal_id', 'reason'],
+  remove_participant: ['target_id', 'mode'],
   transfer_host: ['target_id']
 };
 const staged = new Set([
@@ -232,6 +233,8 @@ export function prepareAction(
     (!action.modes?.includes(String(input.mode)) ||
       (input.mode !== 'bid' && input.amount !== undefined))
   )
+    throw new Error('invalid_mode');
+  if (type === 'remove_participant' && !['kick', 'ban_guest_session'].includes(String(input.mode)))
     throw new Error('invalid_mode');
   const amountField =
     ['wager', 'select_price'].includes(type) || (type === 'bid' && input.mode === 'bid')

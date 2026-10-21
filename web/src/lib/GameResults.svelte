@@ -16,18 +16,26 @@
       created_at: string;
       decisions: Decision[] | null;
       appeals?: Appeal[];
+      removed_ids?: string[];
+      chooser_change?: { from: string; to: string };
       rules_change?: { version: number; rules: Rules };
       changes: { participant_id: string; delta: number; score: number }[] | null;
     }[];
     next_after_seq?: number;
   };
-  let { roomID, token, onclose }: { roomID: string; token: string; onclose: () => void } = $props();
+  let {
+    roomID,
+    token,
+    onclose,
+    onunauthorized
+  }: { roomID: string; token: string; onclose: () => void; onunauthorized: () => void } = $props();
   let entries = $state<Results['items']>([]),
     participants = $state<Participant[]>([]),
     next = $state<number | undefined>(),
     busy = $state(false),
     error = $state('');
   const names: Record<string, string> = {
+    remove_participant: 'Удаление участника',
     judge: 'Оценка ответа',
     correct_judgement: 'Исправление решения',
     adjust_score: 'Изменение счёта',
@@ -68,11 +76,14 @@
         undefined,
         token
       );
-      participants = result.participants;
+      participants = after
+        ? [...new Map([...participants, ...result.participants].map((p) => [p.id, p])).values()]
+        : result.participants;
       entries = after ? [...entries, ...result.items] : result.items;
       next = result.next_after_seq;
     } catch (e) {
-      error = errorText(e);
+      if (e instanceof Error && e.message === 'unauthorized') onunauthorized();
+      else error = errorText(e);
     } finally {
       busy = false;
     }
@@ -91,7 +102,9 @@
     {#each [...participants]
       .filter((p) => p.role === 'player')
       .sort((a, b) => b.score - a.score) as participant}<div class="score-item">
-        <span>{participant.name}</span><strong>{participant.score}</strong>
+        <span>{participant.name}{participant.removed ? ' · удалён' : ''}</span><strong
+          >{participant.score}</strong
+        >
       </div>{/each}
   </div>
   <div class="results-list">
@@ -102,7 +115,11 @@
           )}
         </p>
         <strong>{names[entry.kind] || 'Изменение состояния игры'}</strong
-        >{#if entry.rules_change}<details>
+        >{#if entry.removed_ids?.length}<p>
+            Удалены: {entry.removed_ids.map(name).join(', ')}
+          </p>{/if}{#if entry.chooser_change}<p>
+            Право выбора: {name(entry.chooser_change.from)} → {name(entry.chooser_change.to)}
+          </p>{/if}{#if entry.rules_change}<details>
             <summary>Правила · версия {entry.rules_change.version}</summary>
             <RulesSummary rules={entry.rules_change.rules} />
           </details>{/if}{#each entry.decisions || [] as decision}<p>

@@ -1,3 +1,5 @@
+import { clearRoomCredentials } from './room-credentials.ts';
+import { api, APIError } from './api.ts';
 import type { Appearance } from './appearance.ts';
 import type { SessionView, V2Command } from './game-v2.ts';
 import type { RoomSettings } from './types.ts';
@@ -6,6 +8,7 @@ export interface Participant {
   name: string;
   role: 'host' | 'player' | 'spectator';
   score: number;
+  removed?: boolean;
 }
 export interface RoomState {
   room_id: string;
@@ -40,6 +43,7 @@ export class RoomProtocol {
   token: string;
   state: RoomState | null = null;
   ready = false;
+  revoked = false;
   appearanceEpoch = 0;
   pending = new Map<string, Command>();
   private known = new Map<string, string>();
@@ -47,6 +51,7 @@ export class RoomProtocol {
     this.token = token;
   }
   connected() {
+    if (this.revoked) throw new Error('unauthorized');
     this.ready = false;
     return { v: 1, type: 'authenticate', token: this.token };
   }
@@ -81,6 +86,16 @@ export class RoomProtocol {
     return command;
   }
   receive(message: Message): Command[] {
+    if (this.revoked) return [];
+    if (message.code === 'unauthorized') {
+      this.revoked = true;
+      this.ready = false;
+      this.token = '';
+      this.state = null;
+      this.pending.clear();
+      this.known.clear();
+      return [];
+    }
     if (message.v !== 1 && message.v !== 2) return [];
     if (message.type === 'appearance_refresh') {
       this.appearanceEpoch++;
@@ -119,19 +134,60 @@ export class RoomConnection {
     this.protocol = new RoomProtocol(token);
     this.update = update;
   }
-  connect() {
+  private bootstrapping = false;
+  async connect() {
+    if (this.stopped || this.bootstrapping || this.socket?.readyState === WebSocket.OPEN) return;
+    this.bootstrapping = true;
+    this.update(this.protocol, 'connecting');
+    try {
+      await api(
+        `/rooms/${encodeURIComponent(this.room)}/session`,
+        'POST',
+        {},
+        this.protocol.token,
+        AbortSignal.timeout(10000)
+      );
+    } catch (error) {
+      if (this.stopped) return;
+      if (error instanceof APIError && error.status === 401) {
+        this.revoke();
+        return;
+      }
+      if (!(error instanceof APIError && error.code === 'guest_session_mismatch')) {
+        // Explicit retry only: bootstrap failure must not loop indefinitely.
+        this.update(
+          this.protocol,
+          'failed',
+          error instanceof Error ? error.message : 'unavailable'
+        );
+        return;
+      }
+    } finally {
+      this.bootstrapping = false;
+    }
     if (this.stopped) return;
     this.update(this.protocol, 'connecting');
     const url = new URL(`/api/rooms/${encodeURIComponent(this.room)}/ws`, location.origin);
     url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const socket = new WebSocket(url);
     this.socket = socket;
-    socket.onopen = () => socket.send(JSON.stringify(this.protocol.connected()));
+    socket.onopen = () => {
+      if (this.stopped) {
+        socket.close();
+        return;
+      }
+      socket.send(JSON.stringify(this.protocol.connected()));
+    };
     socket.onmessage = (event) => {
       let message: Message;
       try {
         message = JSON.parse(event.data);
       } catch {
+        return;
+      }
+      if (this.stopped || socket !== this.socket) return;
+      if (message.code === 'unauthorized') {
+        this.revoke();
         return;
       }
       for (const command of this.protocol.receive(message)) socket.send(JSON.stringify(command));
@@ -141,8 +197,7 @@ export class RoomConnection {
         this.protocol.ready ? 'connected' : 'connecting',
         message.code && message.code !== 'ok' ? message.code : undefined
       );
-      if (message.code === 'unauthorized') this.close();
-      else if (
+      if (
         message.type === 'error' &&
         ['unavailable', 'ownership_lost'].includes(message.code || '')
       )
@@ -155,6 +210,12 @@ export class RoomConnection {
       this.timer = setTimeout(() => this.connect(), Math.min(1000 * 2 ** this.attempts++, 15000));
     };
     socket.onerror = () => socket.close();
+  }
+  revoke() {
+    this.protocol.receive({ v: 1, type: 'error', code: 'unauthorized' });
+    clearRoomCredentials(this.room);
+    this.close();
+    this.update(this.protocol, 'revoked', 'unauthorized');
   }
   send(type: string, fields: { question_id?: string; correct?: boolean } = {}) {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) throw new Error('disconnected');

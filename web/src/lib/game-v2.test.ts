@@ -200,3 +200,29 @@ test('serialized answer budget includes escaped characters and reasons use UTF-8
     /reason_too_long/
   );
 });
+test('removal sends only selected target and valid mode under sequence control', () => {
+  const current = view([{ type: 'remove_participant', targets: ['guest'], requires_seq: true }]);
+  const command = prepareAction(current, 12, 'remove_participant', {
+    target_id: 'guest',
+    mode: 'ban_guest_session'
+  });
+  assert.deepEqual(command.data, { target_id: 'guest', mode: 'ban_guest_session' });
+  assert.equal(command.expected_seq, 12);
+  assert.throws(
+    () => prepareAction(current, 12, 'remove_participant', { target_id: 'host', mode: 'kick' }),
+    /invalid_target/
+  );
+  assert.throws(
+    () => prepareAction(current, 12, 'remove_participant', { target_id: 'guest', mode: 'ban_ip' }),
+    /invalid_mode/
+  );
+  assert.throws(
+    () =>
+      prepareAction(current, 12, 'remove_participant', {
+        target_id: 'guest',
+        mode: 'kick',
+        targets: ['other']
+      }),
+    /invalid_action_data/
+  );
+});

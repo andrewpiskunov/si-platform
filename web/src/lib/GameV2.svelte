@@ -10,6 +10,7 @@
   } from './game-v2.ts';
   import type { RoomState } from './room-client.ts';
   import type { Board } from './types.ts';
+  import RoomParticipants from './RoomParticipants.svelte';
   import GameActionForm from './GameActionForm.svelte';
   import RoomPreferences from './RoomPreferences.svelte';
   import MediaPlayer from './MediaPlayer.svelte';
@@ -26,7 +27,8 @@
     onsend,
     onround,
     onselect,
-    onresults
+    onresults,
+    onunauthorized
   }: {
     room: RoomState;
     roomToken: string;
@@ -38,6 +40,7 @@
     onround: (id: string) => void;
     onselect: (id: string, replay?: boolean) => void;
     onresults: () => void;
+    onunauthorized: () => void;
   } = $props();
   let error = $state(''),
     selectedRound = $state(''),
@@ -46,7 +49,7 @@
   const round = $derived(
     board?.rounds.find((item) => item.id === (selectedRound || view.round?.id)) || board?.rounds[0]
   );
-  const players = $derived(room.participants.filter((p) => p.role === 'player'));
+  const players = $derived(room.participants.filter((p) => p.role === 'player' && !p.removed));
   const isHost = $derived(room.participants.some((p) => p.id === room.you && p.role === 'host'));
   const blocked = $derived(!ready || pending > 0);
   const visibleSubmissions = $derived(
@@ -338,6 +341,14 @@
           Ведущий: {name(room.participants.find((p) => p.role === 'host')?.id)}
         </p>
       </div>
+      <RoomParticipants
+        {room}
+        {view}
+        token={roomToken}
+        disabled={blocked}
+        {onsend}
+        {onunauthorized}
+      />
       <RoomPreferences {room} {view} {ready} {pending} {onsend} />
       {#if (view.allowed_actions || []).some((action) => administrative.has(action.type))}<details>
           <summary>Управление и апелляции</summary

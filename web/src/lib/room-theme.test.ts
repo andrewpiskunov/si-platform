@@ -60,3 +60,61 @@ test('unrelated game snapshots reuse appearance and refresh only on an epoch or 
   assert.equal(requests, 3);
   theme.reset();
 });
+test('appearance revocation clears saved credential and releases theme without reconnect', async () => {
+  const { AppearanceConnection } = await import('./room-theme.ts');
+  const { saveRoomCredentials, readRoomCredentials } = await import('./room-credentials.ts');
+  const originals = new Map(
+    ['fetch', 'WebSocket', 'location'].map((key) => [
+      key,
+      Object.getOwnPropertyDescriptor(globalThis, key)
+    ])
+  );
+  let socket: FakeSocket | undefined,
+    count = 0;
+  class FakeSocket {
+    onmessage?: (event: { data: string }) => void;
+    onclose?: () => void;
+    constructor() {
+      socket = this;
+      count++;
+    }
+    close() {
+      this.onclose?.();
+    }
+  }
+  Object.defineProperty(globalThis, 'fetch', {
+    configurable: true,
+    value: async () => new Response(null, { status: 204 })
+  });
+  Object.defineProperty(globalThis, 'WebSocket', { configurable: true, value: FakeSocket });
+  Object.defineProperty(globalThis, 'location', {
+    configurable: true,
+    value: { origin: 'http://localhost', protocol: 'http:' }
+  });
+  try {
+    const theme = createRoomTheme();
+    theme.select('pirate');
+    saveRoomCredentials({
+      room_id: 'appearance-revoked',
+      participant_id: 'guest',
+      token: 'secret'
+    });
+    const connection = new AppearanceConnection(
+      'appearance-revoked',
+      'secret',
+      () => {},
+      () => theme.reset()
+    );
+    await connection.connect();
+    socket?.onmessage?.({ data: JSON.stringify({ v: 1, type: 'error', code: 'unauthorized' }) });
+    assert.equal(readRoomCredentials('appearance-revoked'), null);
+    assert.equal(get(theme), null);
+    await connection.connect();
+    assert.equal(count, 1);
+  } finally {
+    for (const [key, descriptor] of originals) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+});

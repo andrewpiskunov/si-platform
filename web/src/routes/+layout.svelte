@@ -1,5 +1,6 @@
 <script lang="ts">
   import '../app.css';
+  import { readRoomCredentials } from '#lib/room-credentials.ts';
   import { onMount, setContext, untrack } from 'svelte';
   import { beforeNavigate } from '$app/navigation';
   import { page } from '$app/state';
@@ -24,11 +25,9 @@
     const room = context,
       game = inGame;
     untrack(() => {
-      let token = '',
+      let token = readRoomCredentials(room)?.token || '',
         preferences = themePreferences(null, matchMedia('(max-width: 700px)').matches);
       try {
-        const credentials = JSON.parse(sessionStorage.getItem(`room:${room}`) || 'null');
-        if (credentials?.room_id === room) token = credentials.token || '';
         preferences = themePreferences(
           sessionStorage.getItem(`appearance:${room}`),
           matchMedia('(max-width: 700px)').matches
@@ -36,7 +35,12 @@
       } catch {}
       roomTheme.enter(room, token, preferences);
       if (room && token && !game) {
-        watcher = new AppearanceConnection(room, token, () => void roomTheme.refresh());
+        watcher = new AppearanceConnection(
+          room,
+          token,
+          () => void roomTheme.refresh(),
+          () => roomTheme.reset()
+        );
         watcher.connect();
       }
     });
