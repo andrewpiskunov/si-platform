@@ -40,3 +40,5 @@ Docker Compose подготовлен для самостоятельного р
 - [Модерация: история и рассмотрение жалоб](Docs/20-MODERATION-COMPLETION.md).
 
 - [Видимые квоты аккаунта](Docs/21-QUOTA-VISIBILITY.md).
+
+Выгрузка собственных данных и ограничения этапа: [Docs/22-ACCOUNT-DATA-EXPORT.md](Docs/22-ACCOUNT-DATA-EXPORT.md).

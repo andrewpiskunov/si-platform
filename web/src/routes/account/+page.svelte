@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AccountExport from '#lib/AccountExport.svelte';
   import UsagePanel from '#lib/UsagePanel.svelte';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
@@ -106,7 +107,7 @@
 <svelte:head><title>Аккаунт — Своя игра</title></svelte:head>
 <section class="page">
   <div class="section-head row between">
-    <div>
+    <div class="account-identity">
       <p class="eyebrow">Личный кабинет</p>
       <h1>{$user?.display_name || 'Аккаунт'}</h1>
       <p>{$user ? `@${$user.username}` : 'Войдите, чтобы управлять своим аккаунтом.'}</p>
@@ -144,19 +145,15 @@
             ><button disabled={busy}>Сохранить пароль</button>
           </form>
         </div>
-        <div class="panel">
-          <h2>Ваши данные</h2>
-          <p class="muted">
-            Данные профиля и сведения о выданных токенах в JSON. Пакеты доступны для экспорта в
-            мастерской.
-          </p>
-          <a class="button" href="/api/account/export" download>↓ Экспортировать данные аккаунта</a>
-        </div>
+        <AccountExport />
         <details>
           <summary>Удалить аккаунт</summary>
           <form class="stack" onsubmit={remove}>
             <p class="muted">
-              Аккаунт будет удалён, доступ к нему и вашим публикациям будет закрыт.
+              Доступ к аккаунту и вашим публикациям будет закрыт, профиль будет обезличен.
+              Сохранённые версии и файлы, привязки материалов в зависимых комнатах и журнал действий
+              пока не удаляются физически. Сроки хранения и физическая очистка ещё не реализованы.
+              Перед удалением скачайте свои данные.
             </p>
             <label
               >Подтвердите паролем<input
@@ -225,3 +222,11 @@
       </div>
     </div>{/if}
 </section>
+
+<style>
+  .account-identity {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+</style>
