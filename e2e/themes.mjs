@@ -111,7 +111,20 @@ async function stage(client, kind) {
 }
 async function applyAppearance(host, value) {
   const panel = await details(host.page, '.theme-apply');
-  if (value.theme_id) await panel.getByLabel('Моя тема', { exact: true }).selectOption(value.theme_id);
+  if (value.theme_id) {
+    let release, started;
+    const held = new Promise(resolve => { release = resolve; });
+    const requested = new Promise(resolve => { started = resolve; });
+    const pattern = `**/api/themes/${value.theme_id}`;
+    await host.page.route(pattern, async route => { started(); await held; await route.continue(); });
+    try {
+      await panel.getByLabel('Моя тема', { exact: true }).selectOption(value.theme_id);
+      await requested;
+      assert.equal(await panel.getByRole('button', { name: 'Применить оформление', exact: true }).isDisabled(), true, 'Apply must wait for selected theme version');
+    } finally { release(); }
+    await until(() => panel.getByRole('button', { name: 'Применить оформление', exact: true }).isEnabled(), 'theme version did not load');
+    await host.page.unroute(pattern);
+  }
   else await panel.getByRole('button', { name: { classic: 'Эфир', pirate: 'Пираты', anime: 'Аниме' }[value.builtin], exact: true }).click();
   await panel.getByRole('button', { name: 'Применить оформление', exact: true }).click();
   try {

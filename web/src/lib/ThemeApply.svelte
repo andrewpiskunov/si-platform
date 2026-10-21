@@ -22,7 +22,8 @@
   } = $props();
   let selected = $state<Appearance>({ builtin: 'classic' }),
     error = $state(''),
-    busy = $state(false);
+    busy = $state(false),
+    selecting = $state(false);
   let pending = $state<{ appearance: Appearance; command_id: string; expected_seq: number } | null>(
     null
   );
@@ -35,7 +36,7 @@
     });
   });
   async function apply() {
-    if (busy || !ready) return;
+    if (busy || selecting || !ready) return;
     busy = true;
     error = '';
     pending ||= { appearance: selected, command_id: crypto.randomUUID(), expected_seq: seq };
@@ -67,8 +68,9 @@
           pending = null;
         }}
         disabled={busy}
+        onloading={(value) => (selecting = value)}
       />
-      <button disabled={busy || !ready} onclick={apply}
+      <button disabled={busy || selecting || !ready} onclick={apply}
         >{busy ? 'Применяем…' : pending ? 'Повторить применение' : 'Применить оформление'}</button
       >
       {#if error}<p class="notice error" role="alert">{error}</p>{/if}

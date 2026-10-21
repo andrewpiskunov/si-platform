@@ -26,10 +26,11 @@
   let host = $state(''),
     title = $state(''),
     busy = $state(false),
+    selecting = $state(false),
     error = $state('');
   async function create(event: SubmitEvent) {
     event.preventDefault();
-    if (!mounted || disabled || !validRoomSettings(settings)) return;
+    if (!mounted || busy || selecting || disabled || !validRoomSettings(settings)) return;
     busy = true;
     error = '';
     try {
@@ -74,7 +75,12 @@
         maxlength="32"
       /></label
     >
-    <ThemeChooser value={appearance} onchange={(value) => (appearance = value)} disabled={busy} />
+    <ThemeChooser
+      value={appearance}
+      onchange={(value) => (appearance = value)}
+      disabled={busy}
+      onloading={(value) => (selecting = value)}
+    />
     <RoomSettingsFields {settings} onchange={(value) => (settings = value)} disabled={busy} />
     <details>
       <summary>Правила и таймеры</summary><GameRules
@@ -85,7 +91,7 @@
     </details>
     {#if error}<div class="notice error" role="alert">{error}</div>{/if}{#if $user}<button
         class="primary"
-        disabled={busy || disabled || !validRoomSettings(settings)}
+        disabled={busy || selecting || disabled || !validRoomSettings(settings)}
         >{busy ? 'Создаём комнату…' : 'Создать комнату →'}</button
       >{:else}<a class="button primary" href="/login">Войти и создать комнату</a>{/if}
   </fieldset>

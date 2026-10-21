@@ -6,8 +6,14 @@
   let {
     value,
     onchange,
-    disabled = false
-  }: { value: Appearance; onchange: (value: Appearance) => void; disabled?: boolean } = $props();
+    disabled = false,
+    onloading = (_loading: boolean) => {}
+  }: {
+    value: Appearance;
+    onchange: (value: Appearance) => void;
+    disabled?: boolean;
+    onloading?: (loading: boolean) => void;
+  } = $props();
   let cards = $state<ThemeCard[]>([]),
     error = $state(''),
     busy = $state(false),
@@ -29,6 +35,7 @@
   async function custom(id: string) {
     if (!id) return;
     busy = true;
+    onloading(true);
     error = '';
     try {
       const version = await api<ThemeVersion>(`/themes/${id}`);
@@ -37,6 +44,7 @@
       error = errorText(e);
     } finally {
       busy = false;
+      onloading(false);
     }
   }
 </script>

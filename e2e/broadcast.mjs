@@ -26,6 +26,16 @@ try {
     await page.setViewportSize({width, height:900});
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `catalogue overflow at ${width}`);
   }
+  await page.evaluate(() => {
+    const room = document.createElement('div'); room.className = 'game-v2 layout-probe';
+    room.innerHTML = '<div class="room-grid"><section>Табло</section><aside><div class="score-list"><div class="score-item"><img class="participant-avatar" src="/avatars/anna.svg" alt=""><div class="participant-name">ДлинноеИмяУчастникаБезПробелов12345</div><strong>100000</strong></div></div></aside></div>';
+    document.querySelector('main').append(room);
+  });
+  for (const width of [950, 951, 975, 1000, 1001]) {
+    await page.setViewportSize({width, height:900});
+    const name = await page.locator('.layout-probe .participant-name').boundingBox();
+    assert.ok(name.width >= 50 && name.height < 200, `unreadable participant at ${width}: ${JSON.stringify(name)}`);
+  }
   assert.deepEqual(errors, []);
   console.log('Broadcast default, nested custom palette/font/shape, responsive catalogue PASS');
 } finally { await browser.close(); }

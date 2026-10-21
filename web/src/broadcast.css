@@ -353,7 +353,7 @@ details,
     gap: 8px 24px;
   }
 }
-@media (max-width: 950px) {
+@media (max-width: 1000px) {
   .game-v2 .room-grid {
     grid-template-columns: minmax(0, 1fr);
   }
