@@ -13,9 +13,11 @@ type reply struct {
 	err   error
 }
 type job struct {
-	ctx    context.Context
-	run    func(context.Context, *room) (any, error)
-	result chan reply
+	submitted time.Time
+	kind      string
+	ctx       context.Context
+	run       func(context.Context, *room) (any, error)
+	result    chan reply
 }
 type room struct {
 	done              chan struct{}
@@ -82,11 +84,18 @@ func (r *room) run() {
 				r.timerC = r.timer.C
 			}
 		case j := <-r.requests:
+			start := time.Now()
+			queued := time.Duration(0)
+			if !j.submitted.IsZero() {
+				queued = start.Sub(j.submitted)
+			}
 			if r.stopped.Load() {
+				r.server.metrics.ObserveRoom(j.kind, queued, 0, true)
 				j.result <- reply{err: game.Fault("room_expired")}
 				continue
 			}
 			if j.ctx.Err() != nil {
+				r.server.metrics.ObserveRoom(j.kind, queued, 0, true)
 				j.result <- reply{err: j.ctx.Err()}
 				continue
 			}
@@ -95,15 +104,19 @@ func (r *room) run() {
 			value, err := j.run(ctx, r)
 			stop()
 			cancel()
+			r.server.metrics.ObserveRoom(j.kind, queued, time.Since(start), err != nil)
 			j.result <- reply{value: value, err: err}
 		}
 	}
 }
 func (r *room) do(ctx context.Context, run func(context.Context, *room) (any, error)) (any, error) {
+	return r.doKind(ctx, "work", run)
+}
+func (r *room) doKind(ctx context.Context, kind string, run func(context.Context, *room) (any, error)) (any, error) {
 	if r.stopped.Load() {
 		return nil, game.Fault("room_expired")
 	}
-	j := job{ctx: ctx, result: make(chan reply, 1), run: func(ctx context.Context, r *room) (any, error) {
+	j := job{submitted: time.Now(), kind: kind, ctx: ctx, result: make(chan reply, 1), run: func(ctx context.Context, r *room) (any, error) {
 		if err := r.checkRetention(ctx); err != nil {
 			return nil, err
 		}
@@ -182,7 +195,7 @@ func (r *room) attach(ctx context.Context, c *client) error {
 }
 func (r *room) detach(c *client) {
 	// Removal must not be dropped when the ordinary command queue is full.
-	j := job{ctx: r.server.ctx, result: make(chan reply, 1), run: func(ctx context.Context, r *room) (any, error) {
+	j := job{submitted: time.Now(), kind: "work", ctx: r.server.ctx, result: make(chan reply, 1), run: func(ctx context.Context, r *room) (any, error) {
 		delete(r.clients, c)
 		if err := r.checkRetention(ctx); err != nil {
 			return nil, err
@@ -232,7 +245,7 @@ func (r *room) resolvePause(ctx context.Context) error {
 	return nil
 }
 func (r *room) command(ctx context.Context, c *client, cmd game.Command) error {
-	_, err := r.do(ctx, func(ctx context.Context, r *room) (any, error) {
+	_, err := r.doKind(ctx, "command", func(ctx context.Context, r *room) (any, error) {
 		if c.appearanceOnly {
 			return nil, game.Fault("forbidden")
 		}

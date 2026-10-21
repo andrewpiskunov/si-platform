@@ -1,0 +1,58 @@
+groups:
+  - name: si-platform
+    interval: 15s
+    rules:
+      - alert: SIServiceMetricsUnavailable
+        expr: up{job="si-platform"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: Metrics endpoint unavailable
+          description: Check the process, private network and metrics credential; probe public readiness separately.
+      - alert: SIHTTPFailures
+        expr: sum(rate(si_http_requests_total{status="5xx"}[5m])) / clamp_min(sum(rate(si_http_requests_total[5m])), 1) > 0.02
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: HTTP server error ratio exceeds 2 percent}
+      - alert: SICommandLatency
+        expr: histogram_quantile(0.95, sum by (le) (rate(si_room_processing_seconds_bucket{kind="command",outcome="ok"}[5m]))) > 0.03
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: Room command processing p95 exceeds 30 milliseconds}
+      - alert: SIMemoryBudget
+        expr: process_resident_memory_bytes{job="si-platform"} > 3758096384
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: Process RSS is approaching the 4 GiB node budget}
+      - alert: SIRoomQueue
+        expr: si_room_jobs_queued > 1000
+        for: 2m
+        labels: {severity: warning}
+        annotations: {summary: Room job queue exceeds the provisional threshold}
+      - alert: SIStaleDatabaseSample
+        expr: time() - si_database_sample_last_success_timestamp_seconds > 60
+        for: 2m
+        labels: {severity: warning}
+        annotations: {summary: Database metrics are stale; old values are not current zeros}
+      - alert: SIDatabasePoolPressure
+        expr: si_db_pool_acquired / clamp_min(si_db_pool_maximum, 1) > 0.9
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: Database pool is near its connection limit}
+      - alert: SIUploadCapacity
+        expr: sum(si_upload_jobs{status=~"uploading|queued|processing"}) >= 14
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: Upload admission is near its 16-job limit}
+      - alert: SIAICapacity
+        expr: sum(si_ai_jobs{status=~"queued|running"}) >= 18
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: AI queue is near its 20-job limit}
+      - alert: SIAIUncertainOutcome
+        expr: si_ai_jobs{status="uncertain"} > 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: AI provider outcome needs operator reconciliation
+          description: Inspect the provider billing records and reserved budget; do not retry uncertain paid calls automatically.

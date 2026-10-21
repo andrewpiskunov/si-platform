@@ -19,10 +19,12 @@ import (
 	"siplatform/internal/ingest"
 	"siplatform/internal/library"
 	"siplatform/internal/storage/postgres"
+	"siplatform/internal/telemetry"
 	"siplatform/internal/themes"
 )
 
 type Options struct {
+	Metrics         *telemetry.Metrics
 	ExportDirectory string
 	Origin          string
 	Accounts        *accounts.Service
@@ -33,6 +35,7 @@ type Options struct {
 	Themes          *themes.Service
 }
 type Server struct {
+	metrics         *telemetry.Metrics
 	store           *postgres.Store
 	options         Options
 	ctx             context.Context
@@ -54,6 +57,12 @@ type Server struct {
 func New(store *postgres.Store, options Options) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &Server{store: store, options: options, ctx: ctx, cancel: cancel, rooms: make(map[string]*room), roomGates: make(map[string]*roomGate), connections: make(chan struct{}, 10000), exports: make(chan struct{}, 2), httpLimit: newBucket()}
+	if options.Metrics == nil {
+		s.metrics = telemetry.New()
+	} else {
+		s.metrics = options.Metrics
+	}
+	s.metrics.SetLive(s.liveMetrics)
 	// Tickets are short lived and intentionally expire on a server restart.
 	// crypto/rand.Read is guaranteed to fill the buffer or terminate in Go 1.24+.
 	_, _ = rand.Read(s.mediaSecret[:])
@@ -84,6 +93,7 @@ func (s *Server) track() bool {
 }
 func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
+	r.Use(s.measureHTTP)
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"status": "ok"}) })
 	r.Get("/readyz", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), time.Second)

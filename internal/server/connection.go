@@ -13,6 +13,7 @@ import (
 	"github.com/coder/websocket/wsjson"
 	"github.com/go-chi/chi/v5"
 	"siplatform/internal/game"
+	"siplatform/internal/telemetry"
 )
 
 type Message struct {
@@ -49,6 +50,7 @@ func (b *outbox) push(data []byte) bool {
 func (b *outbox) sent(size int) { b.mu.Lock(); b.bytes -= size; b.mu.Unlock() }
 
 type client struct {
+	metrics        *telemetry.Metrics
 	revoked        atomic.Bool
 	expired        atomic.Bool
 	appearanceOnly bool
@@ -65,7 +67,14 @@ func (c *client) send(m Message) bool {
 	}
 	m.Version, m.ServerTime = 1, time.Now().UnixMilli()
 	data, err := json.Marshal(m)
-	if err != nil || !c.out.push(data) {
+	if err != nil {
+		c.cancel()
+		return false
+	}
+	if !c.out.push(data) {
+		if c.metrics != nil {
+			c.metrics.SlowClient()
+		}
 		c.cancel()
 		return false
 	}
@@ -105,6 +114,9 @@ func (c *client) writer() {
 			}
 			ctx, cancel := context.WithTimeout(c.ctx, 5*time.Second)
 			err := c.conn.Write(ctx, websocket.MessageText, b)
+			if err == nil && c.metrics != nil {
+				c.metrics.WSBytes(len(b))
+			}
 			cancel()
 			if err != nil {
 				c.cancel()
@@ -188,7 +200,7 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 		_ = wsjson.Write(errorCtx, ws, Message{Version: 1, Type: "error", Code: game.Code(err), ServerTime: time.Now().UnixMilli()})
 		return
 	}
-	c := &client{appearanceOnly: mode == "1", id: id, ctx: ctx, cancel: cancel, conn: ws, out: newOutbox()}
+	c := &client{metrics: s.metrics, appearanceOnly: mode == "1", id: id, ctx: ctx, cancel: cancel, conn: ws, out: newOutbox()}
 	loadCtx, loadCancel := context.WithTimeout(ctx, 5*time.Second)
 	rm, err := s.getRoom(loadCtx, chi.URLParam(r, "room"))
 	if err == nil {

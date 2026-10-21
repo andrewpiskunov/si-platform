@@ -34,6 +34,10 @@ func main() {
 func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	metricsConfig, err := metricsOptions(os.Getenv)
+	if err != nil {
+		return err
+	}
 	pool, err := postgres.Connect(ctx, os.Getenv("DATABASE_URL"))
 	if err != nil {
 		return err
@@ -108,6 +112,12 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	defer listener.Close()
+	metricsRuntime, err := startMetrics(ctx, app.Metrics(), pool, metricsConfig)
+	if err != nil {
+		return err
+	}
+	defer metricsRuntime.Close()
 	httpServer := &http.Server{Handler: app.Handler(), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	served := make(chan error, 1)
 	go func() { served <- httpServer.Serve(listener) }()

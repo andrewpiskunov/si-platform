@@ -7,6 +7,7 @@ RUN CGO_ENABLED=0 go build -trimpath -o /out/server ./cmd/server \
  && CGO_ENABLED=0 go build -trimpath -o /out/migrate ./cmd/migrate \
  && CGO_ENABLED=0 go build -trimpath -o /out/demo ./cmd/demo \
  && CGO_ENABLED=0 go build -trimpath -o /out/admin ./cmd/admin \
+ && CGO_ENABLED=0 go build -trimpath -o /out/catalogue-import ./cmd/catalogue-import \
  && mkdir -p /runtime-data /runtime-tmp
 
 FROM debian:trixie-slim
