@@ -73,11 +73,11 @@ type Save struct {
 	Issues      []packs.Issue
 }
 type Filter struct {
-	Query, Language, Tag string
-	Difficulty           *int
-	HasMedia             *bool
-	MaxBytes             int64
-	Offset, Limit        int
+	Query, Language, Tag, Age string
+	Difficulty                *int
+	HasMedia                  *bool
+	MaxBytes                  int64
+	Offset, Limit             int
 }
 type Report struct {
 	ID         string    `json:"id"`

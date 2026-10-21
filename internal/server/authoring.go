@@ -123,7 +123,7 @@ func queryInt(r *http.Request, name string, def int) (int, error) {
 	return n, nil
 }
 func (s *Server) catalogue(w http.ResponseWriter, r *http.Request) {
-	f := library.Filter{Query: r.URL.Query().Get("q"), Language: r.URL.Query().Get("language"), Tag: r.URL.Query().Get("tag"), Limit: 50}
+	f := library.Filter{Query: r.URL.Query().Get("q"), Language: r.URL.Query().Get("language"), Tag: r.URL.Query().Get("tag"), Age: r.URL.Query().Get("age"), Limit: 50}
 	var err error
 	f.Offset, err = queryInt(r, "offset", 0)
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -100,6 +101,11 @@ func (s *Service) Withdraw(ctx context.Context, actor accounts.Identity, packID 
 const publicJoin = " FROM library_packs p JOIN library_revisions r ON r.pack_id=p.id AND r.revision=p.published_revision JOIN account_users u ON u.id=p.owner_id WHERE p.deleted_at IS NULL AND NOT p.blocked AND u.deleted_at IS NULL"
 
 func (s *Service) Catalogue(ctx context.Context, f Filter) ([]Card, error) {
+	switch f.Age {
+	case "", "unrated", "0", "6", "12", "16", "18":
+	default:
+		return nil, ErrInvalid
+	}
 	if f.Offset < 0 || f.Offset > 100000 || f.Limit < 0 || f.MaxBytes < 0 || len(f.Query) > 256 || len(f.Language) > 64 || len(f.Tag) > 256 {
 		return nil, ErrInvalid
 	}
@@ -120,7 +126,13 @@ func (s *Service) Catalogue(ctx context.Context, f Filter) ([]Card, error) {
 		query += " AND " + fmt.Sprintf(clause, len(args))
 	}
 	if text := strings.TrimSpace(f.Query); text != "" {
-		add("position(lower($%d) in lower((r.card->>'name') || ' ' || (r.card->>'author'))) > 0", text)
+		add(`r.search_text ILIKE $%d ESCAPE '\'`, literalSearchPattern(text))
+	}
+	if f.Age == "unrated" {
+		query += " AND r.age_rating IS NULL"
+	} else if f.Age != "" {
+		age, _ := strconv.Atoi(f.Age)
+		add("r.age_rating <= $%d", age)
 	}
 	if f.Language != "" {
 		add("r.card->>'language'=$%d", f.Language)

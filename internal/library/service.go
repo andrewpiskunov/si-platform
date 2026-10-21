@@ -329,7 +329,8 @@ func insert(ctx context.Context, tx pgx.Tx, d Draft) error {
 		}
 		values[i] = b
 	}
-	_, err := tx.Exec(ctx, `INSERT INTO library_revisions(pack_id,revision,card,document,assets,original_key,issues,size_bytes,asset_issues) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, d.Card.ID, d.Card.Revision, values[0], values[1], values[2], d.OriginalKey, values[3], d.Card.SizeBytes, values[4])
+	searchText, ageRating := catalogueMetadata(d.Card, d.Document)
+	_, err := tx.Exec(ctx, `INSERT INTO library_revisions(pack_id,revision,card,document,assets,original_key,issues,size_bytes,asset_issues,search_text,age_rating) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, d.Card.ID, d.Card.Revision, values[0], values[1], values[2], d.OriginalKey, values[3], d.Card.SizeBytes, values[4], searchText, ageRating)
 	return err
 }
 func (s *Service) Update(ctx context.Context, actor accounts.Identity, packID string, base int, in Save) (Draft, error) {
