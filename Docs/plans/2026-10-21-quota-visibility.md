@@ -41,5 +41,5 @@ Files newweb/src/lib/{UsagePanel.svelte,usage-model.ts,usage-model.test.ts}; acc
 ## Task3 — Acceptance root
 
 Files e2e/usage.mjs/package.json, Docs11/21/README/ledger.
-- [ ] RealChromium account/authoring/media/themes panelsbeforePOSTupload; countersupdate afterowncreate/version/upload; retainedtheme semantics viaAPItest; mocked503preserves usageandunsavedform, loginasother nooldcache, mobile/keyboard.
-- [ ] Full relevantGo/web andallbrowser, onefreshwhole-stagereview, onefixpass REDGREEN; factualstatus/scopedcommit/FFmain. Continueprivacy/contentexport/retention.
+- [x] RealChromium account/authoring/media/themes panelsbeforePOSTupload; countersupdate afterowncreate/version/upload; retainedtheme semantics viaAPItest; mocked503preserves usageandunsavedform, loginasother nooldcache, mobile/keyboard.
+- [x] Full relevantGo/web andallbrowser, onefreshwhole-stagereview, onefixpass REDGREEN; factualstatus/scopedcommit/FFmain. Continueprivacy/contentexport/retention.

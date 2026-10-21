@@ -4,7 +4,7 @@
   import { onMount, setContext, untrack } from 'svelte';
   import { beforeNavigate } from '$app/navigation';
   import { page } from '$app/state';
-  import { refreshUser, user } from '#lib/session.ts';
+  import { refreshUser, user, sessionEpoch, watchAuthentication } from '#lib/session.ts';
   import { createRoomTheme, roomThemeContext, AppearanceConnection } from '#lib/room-theme.ts';
   import { roomContext, contextLink, themePreferences } from '#lib/appearance.ts';
   import ThemePreferences from '#lib/ThemePreferences.svelte';
@@ -53,12 +53,14 @@
   let { children } = $props();
   onMount(() => {
     mounted = true;
+    const stopAuthentication = watchAuthentication();
     void refreshUser();
     const visible = () => {
       if (document.visibilityState === 'visible') void roomTheme.refresh();
     };
     document.addEventListener('visibilitychange', visible);
     return () => {
+      stopAuthentication();
       document.removeEventListener('visibilitychange', visible);
       watcher?.close();
       roomTheme.reset();
@@ -129,7 +131,7 @@
         <a class="text-link" href={`/rooms/${context}`}>← В комнату</a><ThemePreferences />
       </div>{/if}{#if $themeDetail.notice}<p class="notice theme-fallback" role="status">
         {$themeDetail.notice}
-      </p>{/if}{@render children()}
+      </p>{/if}{#key $sessionEpoch}{@render children()}{/key}
   </main>
   <footer class="site-footer">
     <span>Своя игра <span class="muted">· Вопросы, которые нас собирают</span></span><a

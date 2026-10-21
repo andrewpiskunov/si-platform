@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { api, errorText } from '#lib/api.ts';
-  import { refreshUser } from '#lib/session.ts';
+  import { refreshUser, authenticationChanged } from '#lib/session.ts';
   let register = $state(false),
     username = $state(''),
     password = $state(''),
@@ -19,6 +19,7 @@
         register ? { username, password, display_name: displayName } : { username, password }
       );
       password = '';
+      authenticationChanged();
       await refreshUser();
       await goto('/studio');
     } catch (e) {

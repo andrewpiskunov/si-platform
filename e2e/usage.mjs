@@ -145,6 +145,7 @@ try {
     if (r.method() === "POST" && r.url().endsWith("/api/media-uploads"))
       uploadSeen = true;
   });
+  const beforeMedia = (await api(owner, "GET", "/usage")).storage.used_bytes;
   await page.getByLabel("Медиафайл", { exact: true }).setInputFiles(png);
   assert.equal(uploadSeen, false);
   assert.ok(
@@ -166,10 +167,13 @@ try {
     "media attached",
   );
   assert.equal(uploadSeen, true);
+  const afterMedia = (await api(owner, "GET", "/usage")).storage.used_bytes;
+  assert.ok(afterMedia > beforeMedia, "attachment increases charged storage");
+  const { formatUsageBytes } = await import("../web/src/lib/usage-model.ts");
   await until(async () => {
     const text = await page.getByTestId("quota-storage").innerText();
-    return !text.startsWith("0 Б") && !text.startsWith("Неизвестно");
-  }, "storage refreshed");
+    return text.startsWith(formatUsageBytes(afterMedia) + " из ");
+  }, "storage matches authoritative post-attachment usage");
   checkpoint = "usage failure preserves form and snapshot";
   const prior = await page.getByTestId("quota-storage").innerText();
   await page.route("**/api/usage", (route) =>

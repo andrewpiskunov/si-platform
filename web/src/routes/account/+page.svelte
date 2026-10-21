@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { api, errorText } from '#lib/api.ts';
-  import { user, refreshUser } from '#lib/session.ts';
+  import { user, refreshUser, authenticationChanged } from '#lib/session.ts';
   import type { Token } from '#lib/types.ts';
   let tokens = $state<Token[]>([]),
     error = $state(''),
@@ -30,7 +30,7 @@
     busy = true;
     try {
       await api('/account/logout', 'POST');
-      user.set(null);
+      authenticationChanged();
       await goto('/login');
     } catch (e) {
       error = errorText(e);
@@ -44,7 +44,7 @@
     error = '';
     try {
       await api('/account/password', 'POST', { current_password: current, new_password: password });
-      user.set(null);
+      authenticationChanged();
       current = '';
       password = '';
       await goto('/login');
@@ -62,7 +62,7 @@
     try {
       await api('/account/me', 'DELETE', { password: deletePassword });
       deletePassword = '';
-      user.set(null);
+      authenticationChanged();
       await goto('/');
     } catch (e) {
       error = errorText(e);

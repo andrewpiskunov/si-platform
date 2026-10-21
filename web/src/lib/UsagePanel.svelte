@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { api, APIError } from './api.ts';
-  import { user } from './session.ts';
+  import { user, sessionEpoch } from './session.ts';
   import type { Usage } from './types.ts';
   import { formatUsageBytes, usageFailure, usageLimits, UsageRequestScope } from './usage-model.ts';
 
@@ -28,6 +28,7 @@
   $effect(() => {
     const account = $user?.id ?? null;
     refreshTrigger;
+    $sessionEpoch;
     if (!mounted) return;
     untrack(() => {
       if (account !== previousAccount) {
@@ -40,8 +41,10 @@
     });
   });
   async function refresh() {
+    const epoch = $sessionEpoch;
     const request = scope.begin($user?.id ?? null);
-    const current = () => scope.current(request, () => $user?.id ?? null);
+    const current = () =>
+      epoch === $sessionEpoch && scope.current(request, () => $user?.id ?? null);
     pending = true;
     error = false;
     try {
