@@ -43,7 +43,7 @@
           max="120"
           required
           value={Number(rules[key])}
-          onchange={(event) => change({ [key]: Number(event.currentTarget.value) })}
+          oninput={(event) => change({ [key]: Number(event.currentTarget.value) })}
         /></label
       >{/each}<label
       >Кнопка<select
@@ -60,7 +60,7 @@
           min="100"
           max="300"
           value={rules.window_ms}
-          onchange={(event) => change({ window_ms: Number(event.currentTarget.value) })}
+          oninput={(event) => change({ window_ms: Number(event.currentTarget.value) })}
         /></label
       >{/if}{#if rules.false_start}<label
         >Блокировка фальстарта, секунд<input
@@ -68,7 +68,7 @@
           min="1"
           max="5"
           value={rules.false_start_seconds}
-          onchange={(event) => change({ false_start_seconds: Number(event.currentTarget.value) })}
+          oninput={(event) => change({ false_start_seconds: Number(event.currentTarget.value) })}
         /></label
       >{/if}
   </div>

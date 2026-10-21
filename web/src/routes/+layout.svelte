@@ -103,6 +103,9 @@
     >
     <nav aria-label="Основная навигация">
       <a class:active={page.url.pathname === '/'} href={contextLink('/', context)}>Каталог</a><a
+        class:active={page.url.pathname === '/rooms'}
+        href={contextLink('/rooms', context)}>Комнаты</a
+      ><a
         class:active={page.url.pathname.startsWith('/studio')}
         href={contextLink('/studio', context)}>Мастерская</a
       ><a class:active={page.url.pathname === '/themes'} href={contextLink('/themes', context)}

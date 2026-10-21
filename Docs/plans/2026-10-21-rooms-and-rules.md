@@ -47,17 +47,17 @@
 **Files:** web only, room types, CreateRoom, GameV2/Rules/Results, room route, new rooms index SSR+page, layout/CSS as needed; helper tests. Не менять Go/e2e, не перезапускать сервисы.
 **Consumes:** contract spec. Settings through RoomClient.send v2; no new HTTP settings endpoint. Rules journal PublicEvent optional rules_change.
 
-- [ ] RED unit helper tests version observation across reconnect/tab reload/storage denial, dirty forms preserved/explicit reset; safe public list query/cursor as useful.
-- [ ] Add creation visibility/voice controls and host lobby/paused editor, all-role summary and voice link. Dirty forms never silently reset; stale conflicts remain explicit. Use existing action availability and pending command handling.
-- [ ] Add /rooms list, no autojoin, separate guest player/spectator entry without invite; existing private fragment flow retained. Old invitation cleared/warning on public→private; existing rotate button issues fresh link. Accessible rules notice plus result rendering.
-- [ ] `npm test`, `npm run check`, `npm run build` → GREEN; no own reviewer/commit.
+- [x] RED unit helper tests version observation across reconnect/tab reload/storage denial, dirty forms preserved/explicit reset; safe public list query/cursor as useful.
+- [x] Add creation visibility/voice controls and host lobby/paused editor, all-role summary and voice link. Dirty forms never silently reset; stale conflicts remain explicit. Use existing action availability and pending command handling.
+- [x] Add /rooms list, no autojoin, separate guest player/spectator entry without invite; existing private fragment flow retained. Old invitation cleared/warning on public→private; existing rotate button issues fresh link. Accessible rules notice plus result rendering.
+- [x] `npm test`, `npm run check`, `npm run build` → GREEN; no own reviewer/commit.
 
 ## Task 4 — Integration and acceptance (root)
 
 **Files:** e2e/rooms.mjs/package.json, README/Docs11/13/18/plan, integration fixes.
 **Consumes:** Tasks1–3, exact labels obtain from worker.
 
-- [ ] RED→GREEN Chromium full settings/list/join/invite/rules/voice/dirty/reconnect flows with real API and synthetic users. Verify no voice request and no page errors; 390/820/1440 overflow checks.
-- [ ] Fresh full Go race with DB/MEDIA, vet/build; web full tests/check/build; all existing7 e2e plus rooms. Restart only owned API/Vite, check readiness.
+- [x] RED→GREEN Chromium full settings/list/join/invite/rules/voice/dirty/reconnect flows with real API and synthetic users. Verify no voice request and no page errors; 390/820/1440 overflow checks.
+- [x] Fresh full Go race with DB/MEDIA, vet/build; web full tests/check/build; all existing7 e2e plus rooms. Restart only owned API/Vite, check readiness.
 - [ ] One fresh whole-stage reviewer on strongest model with spec/plan/ledger/package; Important/Critical one RED→GREEN correction pass and relevant/full suite; record rulings and deferred limitations.
 - [ ] Update actual docs/status, commits, FF local main, continue guest removal/ban/history and remaining P0 without stopping for authorization.

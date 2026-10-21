@@ -11,6 +11,8 @@
   import { roomThemeContext, type RoomTheme } from '#lib/room-theme.ts';
   import ThemeApply from '#lib/ThemeApply.svelte';
   import { themePreferences } from '#lib/appearance.ts';
+  import { normalizedSettings } from '#lib/room-preferences.ts';
+  import VoiceLink from '#lib/VoiceLink.svelte';
   const roomTheme = getContext<RoomTheme>(roomThemeContext);
   let credentials = $state<Credentials | null>(null),
     roomState = $state<RoomState | null>(null),
@@ -26,6 +28,7 @@
     connectionStatus = $state('connecting'),
     pending = $state(0),
     copied = $state(false),
+    invitationClosed = $state(false),
     roundIndex = $state(0),
     selection = $state<{
       question_id?: string;
@@ -90,6 +93,8 @@
     ready = false;
     credentials = null;
     selection = null;
+    invitationClosed = false;
+    role = page.url.searchParams.get('role') === 'spectator' ? 'spectator' : 'player';
     invite = new URLSearchParams(location.hash.slice(1)).get('invite') || '';
     try {
       const stored = JSON.parse(sessionStorage.getItem(`room:${roomID}`) || 'null');
@@ -100,18 +105,32 @@
   function connect() {
     if (!credentials) return;
     connection?.close();
+    let preferences = null;
+    try {
+      preferences = sessionStorage.getItem(`appearance:${roomID}`);
+    } catch {}
     roomTheme.enter(
       roomID,
       credentials.token,
-      themePreferences(
-        sessionStorage.getItem(`appearance:${roomID}`),
-        matchMedia('(max-width: 700px)').matches
-      )
+      themePreferences(preferences, matchMedia('(max-width: 700px)').matches)
     );
     const connectedRoom = roomID;
     connection = new RoomConnection(roomID, credentials.token, (protocol, status, code) => {
       if (!alive || connectedRoom !== roomID) return;
+      const previousVisibility = roomState
+        ? normalizedSettings(roomState.settings).visibility
+        : null;
       roomState = protocol.state;
+      if (
+        previousVisibility === 'public' &&
+        roomState &&
+        normalizedSettings(roomState.settings).visibility === 'private'
+      ) {
+        invite = '';
+        copied = false;
+        invitationClosed = true;
+        history.replaceState(history.state, '', `${location.pathname}${location.search}`);
+      }
       ready = protocol.ready;
       connectionStatus = status;
       pending = protocol.pending.size;
@@ -155,7 +174,9 @@
         role,
         invite_token: invite
       });
-      sessionStorage.setItem(`room:${roomID}`, JSON.stringify(credentials));
+      try {
+        sessionStorage.setItem(`room:${roomID}`, JSON.stringify(credentials));
+      } catch {}
       connect();
     } catch (e) {
       error = errorText(e);
@@ -256,6 +277,7 @@
         credentials.token
       );
       invite = result.invite_token;
+      invitationClosed = false;
       history.replaceState(
         history.state,
         '',
@@ -283,7 +305,9 @@
     boardLoader.reset();
     boardError = '';
     boardLoading = false;
-    sessionStorage.removeItem(`room:${roomID}`);
+    try {
+      sessionStorage.removeItem(`room:${roomID}`);
+    } catch {}
     credentials = null;
     roomTheme.enter(roomID, '', themePreferences(null));
     roomState = null;
@@ -312,9 +336,11 @@
       class="narrow"
       style="margin:auto"
     >
-      <p class="eyebrow">Вас пригласили играть</p>
+      <p class="eyebrow">{invite ? 'Вас пригласили играть' : 'Вход в комнату'}</p>
       <h1>Занимайте место.</h1>
-      <p class="muted">Представьтесь друзьям и присоединяйтесь к комнате.</p>
+      <p class="muted">
+        Представьтесь и выберите роль. Вход произойдёт только после нажатия кнопки.
+      </p>
       <form class="panel stack" onsubmit={join}>
         <label
           >Ваше имя<input
@@ -331,10 +357,11 @@
             ></select
           ></label
         >{#if !invite}<div class="notice">
-            В этой ссылке нет приглашения. Попросите ведущего прислать полную ссылку.
+            В публичную комнату можно войти без приглашения. Для приватной комнаты попросите
+            ведущего прислать полную ссылку. Доступ и места проверяются при входе.
           </div>{/if}{#if error}<div class="notice error" role="alert">{error}</div>{/if}<button
           class="primary"
-          disabled={joining || !invite}>{joining ? 'Подключаемся…' : 'Войти в комнату →'}</button
+          disabled={joining}>{joining ? 'Подключаемся…' : 'Войти в комнату →'}</button
         >
       </form>
     </div>{:else if roomState?.gameplay}<div class="room">
@@ -362,6 +389,15 @@
             >
           </div>{/if}
       </div>
+      {#if isHost && invitationClosed}<p class="notice" role="status">
+          Комната теперь по приглашению. Прежние ссылки отключены; нажмите «Создать приглашение»,
+          чтобы выдать новую.
+        </p>{/if}
+      {#if isHost && normalizedSettings(roomState.settings).visibility === 'public'}<p
+          class="helper"
+        >
+          Обновление приглашения не закрывает свободный вход в публичную комнату.
+        </p>{/if}
       {#if isHost && invite}<details class="invite-details">
           <summary>Ссылка приглашения</summary><input
             readonly
@@ -407,6 +443,7 @@
           onclose={() => (resultsOpen = false)}
         />{/if}
     </div>{:else}<div class="room">
+      {#if roomState}<VoiceLink value={normalizedSettings(roomState.settings).voice_url} />{/if}
       <div class="row between">
         <div>
           <p class="eyebrow">{board?.pack_name || 'Своя игра'}</p>

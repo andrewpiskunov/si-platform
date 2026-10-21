@@ -1,5 +1,6 @@
 import type { Appearance } from './appearance.ts';
 import type { SessionView, V2Command } from './game-v2.ts';
+import type { RoomSettings } from './types.ts';
 export interface Participant {
   id: string;
   name: string;
@@ -10,6 +11,7 @@ export interface RoomState {
   room_id: string;
   seq: number;
   appearance?: Appearance;
+  settings?: RoomSettings;
   gameplay?: SessionView;
   phase: 'running' | 'lobby' | 'open' | 'answering' | 'resolved' | 'paused' | 'finished';
   participants: Participant[];

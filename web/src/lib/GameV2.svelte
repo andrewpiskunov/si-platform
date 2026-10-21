@@ -5,15 +5,13 @@
     prepareAction,
     stageNames,
     questionTypes,
-    classicRules,
     type SessionView,
-    type V2Command,
-    type Rules
+    type V2Command
   } from './game-v2.ts';
   import type { RoomState } from './room-client.ts';
   import type { Board } from './types.ts';
   import GameActionForm from './GameActionForm.svelte';
-  import GameRules from './GameRules.svelte';
+  import RoomPreferences from './RoomPreferences.svelte';
   import MediaPlayer from './MediaPlayer.svelte';
   import SoundCheck from './SoundCheck.svelte';
   import GameTimer from './GameTimer.svelte';
@@ -44,15 +42,7 @@
   let error = $state(''),
     selectedRound = $state(''),
     finishConfirm = $state(false),
-    replay = $state(false),
-    rules = $state<Rules>(classicRules()),
-    rulesVersion = 0;
-  $effect(() => {
-    if (rulesVersion !== view.rules_version) {
-      rules = { ...view.rules };
-      rulesVersion = view.rules_version;
-    }
-  });
+    replay = $state(false);
   const round = $derived(
     board?.rounds.find((item) => item.id === (selectedRound || view.round?.id)) || board?.rounds[0]
   );
@@ -348,20 +338,7 @@
           Ведущий: {name(room.participants.find((p) => p.role === 'host')?.id)}
         </p>
       </div>
-      {#if actionFor(view, 'set_rules')}<details>
-          <summary>Правила игры</summary>
-          <form
-            class="stack"
-            onsubmit={(event) => {
-              event.preventDefault();
-              send('set_rules', { rules });
-            }}
-          >
-            <GameRules {rules} onchange={(value) => (rules = value)} disabled={blocked} /><button
-              disabled={blocked}>Применить правила</button
-            >
-          </form>
-        </details>{/if}
+      <RoomPreferences {room} {view} {ready} {pending} {onsend} />
       {#if (view.allowed_actions || []).some((action) => administrative.has(action.type))}<details>
           <summary>Управление и апелляции</summary
           >{#key `${view.stage.id}:${view.stage.kind}:${view.stage.instance_id || ''}`}{#each (view.allowed_actions || []).filter( (action) => administrative.has(action.type) ) as action (action.type)}<GameActionForm

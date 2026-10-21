@@ -1,3 +1,4 @@
+import { validRoomSettings } from './room-preferences.ts';
 export interface Rules {
   preset: 'classic' | 'friends' | 'custom';
   selection_seconds: number;
@@ -132,6 +133,7 @@ const fields: Record<string, string[]> = {
   wait_media: [],
   skip_question: ['reason'],
   set_rules: ['rules'],
+  set_room_settings: ['settings'],
   pause: [],
   resume: [],
   finish: [],
@@ -272,6 +274,8 @@ export function prepareAction(
   )
     throw new Error('invalid_action_data');
   if (type === 'set_rules' && (!input.rules || typeof input.rules !== 'object'))
+    throw new Error('invalid_action_data');
+  if (type === 'set_room_settings' && !validRoomSettings(input.settings))
     throw new Error('invalid_action_data');
   return { v: 2, id, type, ...(action.requires_seq ? { expected_seq: seq } : {}), data };
 }

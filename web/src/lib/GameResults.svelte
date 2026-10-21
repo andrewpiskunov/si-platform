@@ -2,7 +2,8 @@
   import { onMount } from 'svelte';
   import { api, errorText } from './api.ts';
   import type { Participant } from './room-client.ts';
-  import type { Decision, Appeal } from './game-v2.ts';
+  import type { Decision, Appeal, Rules } from './game-v2.ts';
+  import RulesSummary from './RulesSummary.svelte';
   type Results = {
     room_id: string;
     seq: number;
@@ -15,6 +16,7 @@
       created_at: string;
       decisions: Decision[] | null;
       appeals?: Appeal[];
+      rules_change?: { version: number; rules: Rules };
       changes: { participant_id: string; delta: number; score: number }[] | null;
     }[];
     next_after_seq?: number;
@@ -41,6 +43,7 @@
     extend: 'Продление времени',
     restart_stage: 'Перезапуск этапа',
     set_rules: 'Настройка правил',
+    set_room_settings: 'Настройки комнаты',
     advance: 'Следующий этап',
     timeout: 'Время вышло',
     answer: 'Ответ принят',
@@ -99,7 +102,10 @@
           )}
         </p>
         <strong>{names[entry.kind] || 'Изменение состояния игры'}</strong
-        >{#each entry.decisions || [] as decision}<p>
+        >{#if entry.rules_change}<details>
+            <summary>Правила · версия {entry.rules_change.version}</summary>
+            <RulesSummary rules={entry.rules_change.rules} />
+          </details>{/if}{#each entry.decisions || [] as decision}<p>
             {name(decision.participant_id)} — {decision.correct
               ? 'верно'
               : 'неверно'}{decision.supersedes ? ' (исправление)' : ''}{decision.reason

@@ -140,6 +140,25 @@ export interface Credentials {
   token: string;
   invite_token?: string;
 }
+export interface RoomSettings {
+  visibility: 'private' | 'public';
+  voice_url: string;
+}
+export interface PublicRoom {
+  room_id: string;
+  title: string;
+  phase: string;
+  players: number;
+  spectators: number;
+  player_limit: 12;
+  spectator_limit: 20;
+  can_join_player: boolean;
+  can_join_spectator: boolean;
+}
+export interface PublicRooms {
+  items: PublicRoom[] | null;
+  next_after?: string;
+}
 export interface Board {
   title: string;
   theme: string;
