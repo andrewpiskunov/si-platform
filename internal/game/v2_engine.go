@@ -353,7 +353,7 @@ func AdvanceAt(s State, nowMS int64) (State, bool) {
 		} else {
 			st = q.Spec.Question[q.ContentIndex]
 		}
-		if (st.DurationMS > 0 || st.Media != nil && st.Media.DurationMS > 0) && !st.WaitForFinish {
+		if (st.DurationMS > 0 || st.Media != nil && st.Media.DurationMS > 0 || g.Stage.Kind == "present_question" && st.Media == nil && q.Rules.AutoOpen) && !st.WaitForFinish {
 			_ = advanceQuestion(&n, nowMS)
 		} else {
 			g.Stage.Expired = true

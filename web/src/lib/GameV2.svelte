@@ -1,8 +1,10 @@
 <script lang="ts">
   import Avatar from './Avatar.svelte';
+  import GameBuzzer from './GameBuzzer.svelte';
   import Lobby from './Lobby.svelte';
   import {
     actionFor,
+    isBoardStage,
     captureScope,
     prepareAction,
     stageNames,
@@ -44,6 +46,7 @@
     onresults: () => void;
     onunauthorized: (room: string, token: string) => void;
   } = $props();
+  let toolsDialog: HTMLDialogElement;
   let error = $state(''),
     selectedRound = $state(''),
     finishConfirm = $state(false),
@@ -88,6 +91,8 @@
     'restart_stage'
   ]);
   const choosing = $derived(actionFor(view, 'begin_question'));
+  const showBoard = $derived(isBoardStage(view.stage.kind));
+  const isPlayer = $derived(players.some((p) => p.id === room.you));
   const roundAction = $derived(actionFor(view, 'begin_round'));
   function send(type: string, data: Record<string, unknown> = {}) {
     error = '';
@@ -134,17 +139,8 @@
     </div>
   {/if}
   {#if error}<div class="notice error" role="alert">{error}</div>{/if}
-  <div class="row game-controls">
-    {#each [{ type: 'pause', label: 'Пауза Ⅱ' }, { type: 'resume', label: 'Продолжить ▶' }, { type: 'advance', label: view.stage.kind === 'present_answer' ? 'Следующий фрагмент ответа' : view.stage.kind === 'collect_answer' ? 'Ответ прозвучал' : view.stage.kind === 'collect_answers' ? 'Закрыть сбор ответов' : 'Продолжить →' }, { type: 'open_buzzer', label: 'Открыть кнопку' }, { type: 'wait_media', label: 'Ждать ещё 10 секунд' }, { type: 'continue_media', label: 'Продолжить без всех' }] as control}{#if actionFor(view, control.type)}<button
-          disabled={blocked}
-          onclick={() => send(control.type)}>{control.label}</button
-        >{/if}{/each}{#if actionFor(view, 'finish')}{#if finishConfirm}<span
-          >Завершить игру с текущим счётом?</span
-        ><button class="danger" disabled={blocked} onclick={() => send('finish')}>Завершить</button
-        ><button onclick={() => (finishConfirm = false)}>Отмена</button>{:else}<button
-          class="ghost"
-          onclick={() => (finishConfirm = true)}>Завершить игру</button
-        >{/if}{/if}
+  <div class="row room-toolbar">
+    <button class="small" onclick={() => toolsDialog.showModal()}>Настройки и управление</button>
   </div>
   {#if room.phase === 'paused'}<p class="notice">
       Игра на паузе. Остаток времени сохранён.
@@ -165,24 +161,30 @@
     />
     <SoundCheck />
   {/if}
-  <div class="room-grid" class:lobby-options={room.phase === 'lobby'}>
+  <div
+    class="room-grid"
+    class:lobby-options={room.phase === 'lobby'}
+    class:participant-view={!isHost}
+  >
     <div class="stack">
-      {#if room.phase !== 'lobby' && (roundAction || choosing)}<section class="stack">
+      {#if !isHost && view.stage.kind === 'resolved' && view.question?.answer !== undefined}<section class="notice revealed-answer"><h3>Правильный ответ</h3><p>{view.question.answer}</p></section>{/if}
+      {#if room.phase !== 'lobby' && showBoard}<section class="stack">
           <div class="row between">
-            <label
-              >Раунд<select
-                value={selectedRound || view.round?.id || board?.rounds[0]?.id || ''}
-                onchange={(event) => (selectedRound = event.currentTarget.value)}
-                >{#each board?.rounds || [] as option}<option value={option.id}
-                    >{option.name}{option.type === 'final' ? ' · финал' : ''}</option
-                  >{/each}</select
-              ></label
-            >{#if roundAction && round && (!roundAction.targets?.length || roundAction.targets.includes(round.id))}<button
-                disabled={blocked}
-                onclick={() => onround(round!.id)}>Начать раунд</button
-              >{/if}
+            {#if isHost}<label
+                >Раунд<select
+                  value={selectedRound || view.round?.id || board?.rounds[0]?.id || ''}
+                  onchange={(event) => (selectedRound = event.currentTarget.value)}
+                  >{#each board?.rounds || [] as option}<option value={option.id}
+                      >{option.name}{option.type === 'final' ? ' · финал' : ''}</option
+                    >{/each}</select
+                ></label
+              >{#if roundAction && round && (!roundAction.targets?.length || roundAction.targets.includes(round.id))}<button
+                  disabled={blocked}
+                  onclick={() => onround(round!.id)}>Начать раунд</button
+                >{/if}
+            {/if}
           </div>
-          {#if choosing && round}<div class="board-scroll">
+          {#if round && showBoard}<div class="board-scroll">
               <div class="board">
                 {#each round.themes as theme}<div
                     class="board-row"
@@ -201,10 +203,10 @@
                   </div>{/each}
               </div>
             </div>
-            <label class="check"
-              ><input type="checkbox" bind:checked={replay} />Разрешить явный повтор сыгранного
-              вопроса</label
-            >{/if}
+            {#if isHost}<label class="check"
+                ><input type="checkbox" bind:checked={replay} />Разрешить явный повтор сыгранного
+                вопроса</label
+              >{/if}{/if}
         </section>{/if}
       {#if view.final}<section class="panel">
           <h3>Темы финала</h3>
@@ -215,7 +217,11 @@
             Участвуют: {(view.final.eligible_ids || []).map(name).join(', ') || '—'}
           </p>
         </section>{/if}
-      {#if view.question}<div class="question-stage" class:media-question={!!view.question.media}>
+      {#if view.question && !showBoard}<div
+          class="question-stage"
+          class:buzzer-open={view.stage.kind === 'buzz_open' && room.phase !== 'paused'}
+          class:media-question={!!view.question.media}
+        >
           {#if !(view.question.type === 'secret' && view.stage.kind === 'select_recipient')}
             <p class="question-price">
               {view.question.theme}{view.question.theme ? ' · ' : ''}{view.question.price} очков
@@ -224,7 +230,7 @@
               {stageNames[view.stage.kind] || 'Готовимся к вопросу'}
             </h2>{/if}{#if view.question.content_total > 1}<p class="helper">
               Фрагмент {view.question.content_index + 1} из {view.question.content_total}
-            </p>{/if}{#if view.question.answer !== undefined}<div
+            </p>{/if}{#if !isHost && view.question.answer !== undefined}<div
               class="notice"
               style="margin-top:20px;width:100%;text-align:left"
             >
@@ -270,14 +276,14 @@
           Готовы к показу: {view.readiness.filter((p) => p.status === 'ready').length} из {view
             .readiness.length}.
         </p>{/if}
-      {#if actionFor(view, 'buzz')}<div>
-          <button class="buzz" disabled={blocked} onclick={() => send('buzz')}>Знаю ответ!</button>
-          <p class="helper" style="text-align:center;margin-top:12px">
-            Кнопка или пробел{view.stage.kind === 'present_question'
-              ? ' · Вопрос ещё читается: раннее нажатие может привести к фальстарту.'
-              : ''}
-          </p>
-        </div>{/if}
+      {#if isPlayer && view.question && ['withButton', 'simple'].includes(view.question.type) && !showBoard}<GameBuzzer
+          {view}
+          you={room.you}
+          connected={ready}
+          {pending}
+          paused={room.phase === 'paused'}
+          onsend={() => send('buzz')}
+        />{/if}
       {#if view.auction}<div class="notice">
           <strong
             >Текущая ставка: {view.auction.amount}{view.auction.all_in ? ' · ва-банк' : ''}</strong
@@ -297,14 +303,16 @@
               Ваш ответ: {view.self.answer}
             </p>{/if}
         </div>{/if}
-      {#key `${view.stage.id}:${view.stage.kind}:${view.stage.instance_id || ''}`}{#each (view.allowed_actions || []).filter((action) => formTypes.has(action.type) && !administrative.has(action.type)) as action (action.type)}<GameActionForm
-            {view}
-            seq={room.seq}
-            {action}
-            participants={room.participants}
-            disabled={blocked}
-            {onsend}
-          />{/each}{/key}
+      {#if !isHost}
+        {#key `${view.stage.id}:${view.stage.kind}:${view.stage.instance_id || ''}`}{#each (view.allowed_actions || []).filter((action) => formTypes.has(action.type) && !administrative.has(action.type)) as action (action.type)}<GameActionForm
+              {view}
+              seq={room.seq}
+              {action}
+              participants={room.participants}
+              disabled={blocked}
+              {onsend}
+            />{/each}{/key}
+      {/if}
       {#if visibleSubmissions.length}<section class="panel stack">
           <h3>Ответы участников</h3>
           {#each visibleSubmissions as submission}<div class="notice">
@@ -325,7 +333,7 @@
                 </p>{/if}
             </div>{/each}
         </section>{/if}
-      {#if room.phase !== 'lobby' && !view.question && !roundAction && !choosing && !view.final}<div
+      {#if room.phase !== 'lobby' && !showBoard && !view.question && !roundAction && !choosing && !view.final}<div
           class="empty"
         >
           <h3>{room.phase === 'finished' ? 'Спасибо за игру' : 'Ждём продолжения'}</h3>
@@ -336,36 +344,78 @@
           </p>
         </div>{/if}
     </div>
-    <aside class="stack">
-      {#if room.phase !== 'lobby'}<div>
-          <h3>Игроки · {players.length}/12</h3>
-          <div class="score-list">
-            {#each room.phase === 'finished' ? [...players].sort((a, b) => b.score - a.score) : players as participant}{@const status =
-                view.players?.find((p) => p.id === participant.id)}
-              <div class="score-item" class:winner={view.stage.turn_id === participant.id}>
-                <Avatar identity={participant.id} />
-                <div class="participant-name">
-                  {participant.name}{participant.id === room.you ? ' (вы)' : ''}
-                  <div class="helper">
-                    {status?.wager_submitted ? 'Ставка принята · ' : ''}{status?.answer_submitted
-                      ? 'Ответ принят'
-                      : status?.attempted
-                        ? 'Попытка использована'
-                        : ''}{status?.judged ? ' · Оценён' : ''}
-                  </div>
-                </div>
-                <strong>{participant.score}</strong>
-              </div>{/each}
-          </div>
-          {#if host}<div class="host-identity">
-              <Avatar identity={host.id} small />
-              <div>
-                <span class="helper">Ведущий</span>
-                <div>{host.name}</div>
-              </div>
-            </div>{/if}
+    {#if isHost && room.phase !== 'lobby'}<aside
+        class="stack host-console"
+        aria-label="Пульт ведущего"
+      >
+        <h3>Пульт ведущего</h3>
+        {#if view.question?.answer !== undefined}<section class="host-answer">
+            <p class="helper">Правильный ответ · только ведущему</p>
+            <p>{view.question.answer}</p>
+          </section>{/if}
+        {#if view.stage.turn_id}<p>
+            Сейчас отвечает / действует: <strong>{name(view.stage.turn_id)}</strong>
+          </p>{/if}
+        <div class="row game-controls">
+          {#each [{ type: 'pause', label: 'Пауза Ⅱ' }, { type: 'resume', label: 'Продолжить ▶' }, { type: 'advance', label: view.stage.kind === 'present_answer' ? 'Следующий фрагмент ответа' : view.stage.kind === 'collect_answer' ? 'Ответ прозвучал' : view.stage.kind === 'collect_answers' ? 'Закрыть сбор ответов' : 'Продолжить →' }, { type: 'open_buzzer', label: 'Открыть кнопку' }, { type: 'wait_media', label: 'Ждать ещё 10 секунд' }, { type: 'continue_media', label: 'Продолжить без всех' }] as control}{#if actionFor(view, control.type)}<button
+                disabled={blocked}
+                onclick={() => send(control.type)}>{control.label}</button
+              >{/if}{/each}{#if actionFor(view, 'finish')}{#if finishConfirm}<span
+                >Завершить игру с текущим счётом?</span
+              ><button class="danger" disabled={blocked} onclick={() => send('finish')}
+                >Завершить</button
+              ><button onclick={() => (finishConfirm = false)}>Отмена</button>{:else}<button
+                class="ghost"
+                onclick={() => (finishConfirm = true)}>Завершить игру</button
+              >{/if}{/if}
         </div>
-      {/if}
+        {#key `${view.stage.id}:${view.stage.kind}:${view.stage.instance_id || ''}`}{#each (view.allowed_actions || []).filter((action) => formTypes.has(action.type) && !administrative.has(action.type)) as action (action.type)}<GameActionForm
+              {view}
+              seq={room.seq}
+              {action}
+              participants={room.participants}
+              disabled={blocked}
+              {onsend}
+            />{/each}{/key}
+      </aside>{/if}
+  </div>
+  <section class="participants-strip" aria-label="Счёт игроков">
+    {#if room.phase !== 'lobby'}<div>
+        <h3>Игроки · {players.length}/12</h3>
+        <div class="score-list">
+          {#each room.phase === 'finished' ? [...players].sort((a, b) => b.score - a.score) : players as participant}{@const status =
+              view.players?.find((p) => p.id === participant.id)}
+            <div class="score-item" class:winner={view.stage.turn_id === participant.id}>
+              <Avatar identity={participant.id} />
+              <div class="participant-name">
+                {participant.name}{participant.id === room.you ? ' (вы)' : ''}
+                <div class="helper">
+                  {status?.wager_submitted ? 'Ставка принята · ' : ''}{status?.answer_submitted
+                    ? 'Ответ принят'
+                    : status?.attempted
+                      ? 'Попытка использована'
+                      : ''}{status?.judged ? ' · Оценён' : ''}
+                </div>
+              </div>
+              <strong>{participant.score}</strong>
+            </div>{/each}
+        </div>
+        {#if host}<div class="host-identity">
+            <Avatar identity={host.id} small />
+            <div>
+              <span class="helper">Ведущий</span>
+              <div>{host.name}</div>
+            </div>
+          </div>{/if}
+      </div>
+    {/if}
+  </section>
+  <dialog class="game-tools" bind:this={toolsDialog} aria-label="Настройки и управление">
+    <div class="row between">
+      <h2>Настройки и управление</h2>
+      <button class="small" onclick={() => toolsDialog.close()}>Закрыть</button>
+    </div>
+    <div class="stack">
       <RoomParticipants
         {room}
         {view}
@@ -412,23 +462,121 @@
         </div>
       </details>
       <button class="small" onclick={onresults}>Журнал и результаты</button>
-    </aside>
-  </div>
+    </div>
+  </dialog>
 </div>
 
 <style>
-  .room-grid.lobby-options {
+  .room-grid.lobby-options,
+  .room-grid.participant-view {
     display: block;
   }
-  .lobby-options > .stack:empty {
-    display: none;
+  .room-toolbar {
+    justify-content: flex-end;
+    margin-bottom: 12px;
   }
-  .lobby-options > aside {
+  .host-console {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px;
+    align-self: start;
+  }
+  .host-console h3 {
+    margin: 0;
+    font-size: 18px;
+  }
+  .host-answer {
+    border-left: 3px solid var(--accent);
+    padding-left: 14px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .host-answer p {
+    margin: 6px 0;
+  }
+  .host-console .game-controls {
     display: flex;
     flex-direction: column;
-    margin-top: 20px;
-    gap: 12px;
+    align-items: stretch;
   }
-  .lobby-options > aside > :global(*) { width: 100%; }
-  .lobby-options :global(section.stack) { gap: 12px; }
+  .question-stage {
+    min-height: clamp(340px, 51vh, 650px);
+    border: 2px solid var(--line);
+  }
+  .question-stage.buzzer-open {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+  .question-stage h2 {
+    font-size: clamp(27px, 3.2vw, 54px);
+    line-height: 1.3;
+    text-wrap: balance;
+  }
+  .participants-strip {
+    margin-top: 20px;
+  }
+  .participants-strip :global(.score-list) {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .participants-strip :global(.score-item) {
+    min-width: 0;
+  }
+  .game-tools {
+    position: fixed;
+    inset: 0 0 0 auto;
+    margin: 0;
+    width: min(540px, 100%);
+    height: 100dvh;
+    max-height: 100dvh;
+    max-width: 100vw;
+    overflow-y: auto;
+    padding: 24px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 0;
+  }
+  .game-tools::backdrop {
+    background: #0009;
+  }
+  .game-tools > .row {
+    margin-bottom: 20px;
+  }
+  @media (min-width: 1001px) {
+    .room-grid:not(.lobby-options):not(.participant-view) {
+      grid-template-columns: minmax(0, 1fr) 310px;
+      gap: 20px;
+    }
+  }
+  @media (min-width: 1300px) {
+    .participants-strip :global(.score-list:has(.score-item:nth-child(4))) {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 700px) {
+    .participants-strip :global(.score-list) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .question-stage {
+      min-height: 300px;
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .question-stage {
+      animation: question-in 0.3s ease-out;
+    }
+    @keyframes question-in {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+  }
 </style>

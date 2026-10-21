@@ -35,6 +35,33 @@
       ><option value="custom">Свои настройки</option></select
     ></label
   >
+  <label
+    >Открытие кнопки<select
+      value={rules.auto_open ? 'auto' : 'manual'}
+      onchange={(event) =>
+        change({
+          auto_open: event.currentTarget.value === 'auto',
+          reading_seconds: rules.reading_seconds || 10
+        })}
+      ><option value="auto">Автоматически после показа вопроса</option><option value="manual"
+        >Вручную ведущим</option
+      ></select
+    ></label
+  >
+  {#if rules.auto_open}<label
+      >Время чтения фрагмента, секунд<input
+        type="number"
+        min="1"
+        max="120"
+        required
+        value={rules.reading_seconds || 10}
+        oninput={(event) => change({ reading_seconds: Number(event.currentTarget.value) })}
+      /></label
+    >
+    <p class="helper">
+      После последнего фрагмента откроется кнопка. Длительность из пакета имеет приоритет; медиа без
+      указанной длительности и фрагменты с ожиданием ведущего продолжаются вручную.
+    </p>{/if}
   <div class="form-grid">
     {#each timers as [key, label]}<label
         >{label}, секунд<input

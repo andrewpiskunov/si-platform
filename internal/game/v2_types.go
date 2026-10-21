@@ -2,6 +2,8 @@ package game
 
 // Rules is the versioned, per-question rules snapshot. Durations are seconds.
 type Rules struct {
+	AutoOpen          bool   `json:"auto_open,omitempty"`
+	ReadingSeconds    int    `json:"reading_seconds,omitempty"`
 	Preset            string `json:"preset"`
 	SelectionSeconds  int    `json:"selection_seconds"`
 	AnswerSeconds     int    `json:"answer_seconds"`

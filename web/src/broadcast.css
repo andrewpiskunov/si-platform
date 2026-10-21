@@ -433,3 +433,8 @@ details,
     padding-bottom: 24px;
   }
 }
+
+/* In the active room the scene takes priority over navigation chrome. */
+.app-shell:has(.game-v2) .theme-context-bar {padding:6px 24px;margin:0;background:transparent;border:0;}
+.app-shell:has(.game-v2) .page {padding-top:16px;}
+.app-shell[data-theme='classic'] .game-v2 .question-stage:not(.theme-preview *) {background:radial-gradient(ellipse at 50% 40%,#16356c,#0a1935);}

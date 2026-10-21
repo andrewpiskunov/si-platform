@@ -93,12 +93,14 @@ try {
   await owner.waitForURL(/\/rooms\/[a-f0-9]{32}#invite=/);
   const invitation = owner.url();
   await owner.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await owner.getByRole('button',{name:'Комната',exact:true}).click();
   const invitePanel = owner.locator('.invite-details');
   await invitePanel.locator('summary').click();
   await invitePanel.getByRole('button', {name: 'Скопировать', exact: true}).click();
   await invitePanel.getByRole('button', {name: 'Скопировано', exact: true}).waitFor();
   assert.equal(await owner.evaluate(() => navigator.clipboard.readText()), invitation);
-  assert.equal(await owner.locator('.lobby-options > aside').evaluate(el => getComputedStyle(el).display), 'flex');
+  assert.equal(await owner.getByRole('button', {name:'Настройки и управление',exact:true}).count(),1);
+  await owner.getByRole('button',{name:'Закрыть',exact:true}).click();
   const players = [];
   for (let i = 0; i < 12; i++) {
     const player = await context(
@@ -143,7 +145,10 @@ try {
   await owner
     .getByRole("button", { name: "Новая тема, 100 очков", exact: true })
     .click();
-  await owner.getByRole("button", { name: "Открыть кнопку", exact: true }).click();
+  await players[0].getByRole('button',{name:'Ждите сигнала',exact:true}).click();
+  await players[0].getByRole('button',{name:/Фальстарт · ещё/}).waitFor();
+  // Real server timer opens the buzzer; no host command is sent.
+
   await players[0]
     .getByRole("button", { name: "Знаю ответ!", exact: true })
     .waitFor();
@@ -168,6 +173,7 @@ try {
     .getByRole("button", { name: "Знаю ответ!", exact: true })
     .click();
   await owner.getByRole("button", { name: /^✓ Верно/ }).click();
+  await players[0].getByText("Четыре", {exact:true}).waitFor();
   await until(
     async () =>
       (await players[0]

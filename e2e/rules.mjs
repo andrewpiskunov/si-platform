@@ -117,6 +117,7 @@ function form(client, title) {
     });
 }
 async function admin(client, title) {
+  if (!(await client.page.locator('dialog.game-tools').evaluate(el=>el.open))) await client.page.getByRole('button',{name:'Настройки и управление',exact:true}).click();
   const details = client.page
     .locator("details")
     .filter({
@@ -132,7 +133,9 @@ async function admin(client, title) {
   return target;
 }
 async function button(client, label) {
-  await client.page.getByRole("button", { name: label, exact: true }).click();
+  const target=client.page.getByRole("button", { name: label, exact: true });
+  if(await client.page.locator('dialog.game-tools').evaluate(el=>el.open) && !(await target.evaluate(el=>!!el.closest('dialog')))) await client.page.getByRole('button',{name:'Закрыть',exact:true}).click();
+  await target.click();
 }
 async function adjust(host, target, delta) {
   const controls = await admin(host, "Изменить счёт");
@@ -485,7 +488,7 @@ try {
   delayBoard = false;
   await stage(host, "present_question");
   await stage(players[0], "present_question");
-  await button(players[0], "Знаю ответ!");
+  await button(players[0], "Ждите сигнала");
   await until(() => state(players[0]).players.find((p) => p.id === players[0].credentials.participant_id)?.blocked_until_ms > Date.now(), "false-start was not recorded");
   await button(host, "Открыть кнопку");
   await stage(players[0], "buzz_open");
@@ -506,7 +509,7 @@ try {
     "mobile horizontal overflow",
   );
   const journalBox = await host.page
-    .getByRole("button", { name: "Журнал и результаты", exact: true })
+    .getByRole("button", { name: "Настройки и управление", exact: true })
     .boundingBox();
   assert.ok(
     journalBox.height < 80,

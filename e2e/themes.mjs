@@ -110,6 +110,7 @@ async function stage(client, kind) {
   await until(() => client.state?.gameplay?.stage.kind === kind, `${client.name}: stage ${kind}, got ${client.state?.gameplay?.stage.kind}`);
 }
 async function applyAppearance(host, value) {
+  await host.page.getByRole('button',{name:'Комната',exact:true}).click();
   const panel = await details(host.page, '.theme-apply');
   if (value.theme_id) {
     let release, started;
@@ -132,6 +133,7 @@ async function applyAppearance(host, value) {
   } catch (error) {
     throw new Error(`${error.message}; UI: ${await panel.locator('[role=alert]').allTextContents()}`);
   }
+  await host.page.getByRole('button',{name:'Закрыть',exact:true}).click();
 }
 async function uploadUI(page, data, name) {
   await page.getByLabel('ZIP темы', { exact: true }).setInputFiles({ name, mimeType: 'application/zip', buffer: data });

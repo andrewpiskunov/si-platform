@@ -1,5 +1,7 @@
 import { validRoomSettings } from './room-preferences.ts';
 export interface Rules {
+  auto_open?: boolean;
+  reading_seconds?: number;
   preset: 'classic' | 'friends' | 'custom';
   selection_seconds: number;
   answer_seconds: number;
@@ -355,3 +357,5 @@ export function answerBytes(value: string): number {
     ) - 2
   );
 }
+
+export function isBoardStage(kind: string): boolean { return ["select_question", "select_final", "resolved"].includes(kind); }

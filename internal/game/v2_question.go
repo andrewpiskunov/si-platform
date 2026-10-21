@@ -207,7 +207,11 @@ func presentStage(s *State, now int64) {
 	}
 	s.Gameplay.Content = nil
 	q.Shown = true
-	setStage(s, "present_question", "", now, q.Rules.SelectionSeconds)
+	seconds := q.Rules.SelectionSeconds
+	if q.Rules.AutoOpen {
+		seconds = q.Rules.ReadingSeconds
+	}
+	setStage(s, "present_question", "", now, seconds)
 	step := q.Spec.Question[q.ContentIndex]
 	if step.DurationMS > 0 {
 		s.Gameplay.Stage.DeadlineMS = now + step.DurationMS

@@ -12,7 +12,7 @@
   import ThemeChooser from './ThemeChooser.svelte';
   import type { Appearance } from './appearance.ts';
   let appearance = $state<Appearance>({ builtin: 'classic' });
-  let rules = $state<Rules>(classicRules());
+  let rules = $state<Rules>({ ...classicRules(), auto_open: true, reading_seconds: 10 });
   let settings = $state({
     ...normalizedSettings(),
     require_ready: true

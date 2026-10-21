@@ -236,3 +236,11 @@ test('lobby readiness is own boolean intent without global sequence or question 
   assert.throws(() => prepareAction(game, 18, 'set_ready', {ready: null}));
   assert.throws(() => prepareAction(game, 18, 'set_ready', {ready: true, target_id: 'other'}));
 });
+
+test('final question selection retains the board action', async () => {
+  const {isBoardStage} = await import('./game-v2.ts');
+  assert.equal(isBoardStage('select_final'),true);
+  assert.equal(isBoardStage('select_question'),true);
+  assert.equal(isBoardStage('resolved'),true);
+  assert.equal(isBoardStage('present_question'),false);
+});

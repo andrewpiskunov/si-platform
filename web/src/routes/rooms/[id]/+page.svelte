@@ -56,6 +56,7 @@
     retentionLoading = $state(false);
   let retentionRequestedAt = 0;
   let connection: RoomConnection | null = null;
+  let roomSetupDialog = $state<HTMLDialogElement>();
   let roomID = $state('');
   const boardLoader = new BoardLoader<Board>();
   let alive = true;
@@ -478,20 +479,6 @@
   /></svelte:head
 >
 <section class="page">
-  {#if mounted && credentials && !expired && !revoked}
-    <div class="notice" aria-label="Срок хранения комнаты">
-      <p>
-        {#if retention}Текущий срок комнаты: <time datetime={retention.expires_at}
-            >{new Date(retention.expires_at).toLocaleString('ru-RU')}</time
-          >.{:else}Срок комнаты пока недоступен.{/if}
-        Принятые действия могут продлить срок неактивности; общий предел — 90 дней с создания.
-      </p>
-      <a href="/privacy">Правила хранения данных</a>
-      <button class="small" disabled={retentionLoading} onclick={() => void loadRetention(true)}
-        >Обновить срок</button
-      >
-    </div>
-  {/if}
   {#if mounted && credentials && connectionStatus === 'failed'}
     <div class="notice error" role="alert">
       <p>Подключение не удалось. Повторите явно.</p>
@@ -571,6 +558,7 @@
                 : 'Подключаемся…'} · {phaseNames[roomState.phase] || 'Игра'}</span
           >
         </div>
+        <button class="small" onclick={() => roomSetupDialog?.showModal()}>Комната</button>
         {#if isHost}<div class="row">
             {#if invite}<button class="small" onclick={share}
                 >{copied ? 'Ссылка скопирована' : 'Пригласить друзей ↗'}</button
@@ -592,18 +580,6 @@
         >
           Обновление приглашения не закрывает свободный вход в публичную комнату.
         </p>{/if}
-      {#if isHost && invite}<details class="invite-details">
-          <summary>Ссылка приглашения</summary>
-          <div class="invitation-copy">
-            <input readonly value={`${location.origin}/rooms/${roomID}#invite=${encodeURIComponent(invite)}`}
-              aria-label="Ссылка приглашения" onclick={(event) => event.currentTarget.select()} />
-            <button onclick={share} disabled={rotating}>{copied ? 'Скопировано' : 'Скопировать'}</button>
-          </div>
-          <span class="helper" role="status" aria-live="polite">{copied ? 'Ссылка приглашения скопирована' : ''}</span>
-          <p class="helper">
-            Обновление приглашения отключает прежнюю ссылку. Участники комнаты сохраняют свои места.
-          </p>
-        </details>{/if}
       {#if error}<div class="notice error" role="alert">
           {error}{#if selection}<button
               class="small"
@@ -611,15 +587,61 @@
               onclick={retrySelection}>Повторить действие</button
             >{/if}
         </div>{/if}
-      {#if isHost}<ThemeApply
-          room={roomID}
-          token={credentials?.token || ''}
-          seq={roomState.seq}
-          phase={roomState.phase}
-          appearance={roomState.appearance}
-          {ready}
-          onapplied={() => void roomTheme.refresh()}
-        />{/if}
+      <dialog bind:this={roomSetupDialog} class="room-setup" aria-label="Комната и оформление">
+        <div class="row between">
+          <h2>Комната и оформление</h2>
+          <button onclick={() => roomSetupDialog?.close()}>Закрыть</button>
+        </div>
+        {#if mounted && credentials && !expired && !revoked}
+          <details class="room-storage" open={roomState?.phase === 'lobby'}>
+            <summary>О комнате и хранении данных</summary>
+            <div class="notice" aria-label="Срок хранения комнаты">
+              <p>
+                {#if retention}Текущий срок комнаты: <time datetime={retention.expires_at}
+                    >{new Date(retention.expires_at).toLocaleString('ru-RU')}</time
+                  >.{:else}Срок комнаты пока недоступен.{/if}
+                Принятые действия могут продлить срок неактивности; общий предел — 90 дней с создания.
+              </p>
+              <a href="/privacy">Правила хранения данных</a>
+              <button
+                class="small"
+                disabled={retentionLoading}
+                onclick={() => void loadRetention(true)}>Обновить срок</button
+              >
+            </div>
+          </details>
+        {/if}
+        {#if isHost && invite}<details class="invite-details">
+            <summary>Ссылка приглашения</summary>
+            <div class="invitation-copy">
+              <input
+                readonly
+                value={`${location.origin}/rooms/${roomID}#invite=${encodeURIComponent(invite)}`}
+                aria-label="Ссылка приглашения"
+                onclick={(event) => event.currentTarget.select()}
+              />
+              <button onclick={share} disabled={rotating}
+                >{copied ? 'Скопировано' : 'Скопировать'}</button
+              >
+            </div>
+            <span class="helper" role="status" aria-live="polite"
+              >{copied ? 'Ссылка приглашения скопирована' : ''}</span
+            >
+            <p class="helper">
+              Обновление приглашения отключает прежнюю ссылку. Участники комнаты сохраняют свои
+              места.
+            </p>
+          </details>{/if}
+        {#if isHost}<ThemeApply
+            room={roomID}
+            token={credentials?.token || ''}
+            seq={roomState.seq}
+            phase={roomState.phase}
+            appearance={roomState.appearance}
+            {ready}
+            onapplied={() => void roomTheme.refresh()}
+          />{/if}
+      </dialog>
       {#key credentials?.token}
         <GameV2
           room={roomState}
@@ -841,8 +863,44 @@
 </section>
 
 <style>
-  .invitation-copy { display: flex; gap: 12px; align-items: center; margin-top: 16px; }
-  .invitation-copy input { flex: 1; min-width: 0; margin: 0; }
-  .invitation-copy button { flex-shrink: 0; }
-  @media (max-width: 600px) { .invitation-copy { flex-direction: column; align-items: stretch; } }
+  .room-setup {
+    position: fixed;
+    inset: 0 0 0 auto;
+    margin: 0;
+    width: min(560px, 100%);
+    height: 100dvh;
+    max-height: 100dvh;
+    max-width: 100vw;
+    padding: 24px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--line);
+    overflow-y: auto;
+  }
+  .room-setup::backdrop {
+    background: #0009;
+  }
+  .room-setup > .row {
+    margin-bottom: 20px;
+  }
+  .invitation-copy {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-top: 16px;
+  }
+  .invitation-copy input {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+  }
+  .invitation-copy button {
+    flex-shrink: 0;
+  }
+  @media (max-width: 600px) {
+    .invitation-copy {
+      flex-direction: column;
+      align-items: stretch;
+    }
+  }
 </style>
