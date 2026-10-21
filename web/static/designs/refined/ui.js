@@ -18,19 +18,24 @@ const design = document.body.dataset.design;
 const titles = {broadcast: 'Эфир', club: 'Клуб', arena: 'Арена'};
 const used = new Set(), edits = new Map();
 let section = 'game', selection = [0,0], returnFocus, search = '';
-const players = [['Анна','А','1 200'],['Михаил','М','800'],['Елена','Е','600'],['Саша','С','−200']];
+const players = [['Анна','А','1 200','anna'],['Михаил','М','800','mikhail'],['Елена','Е','600','elena'],['Саша','С','−200','sasha']];
+function avatar(name, letter, css = '') {
+  return design === 'broadcast'
+    ? `<img class="avatar ${css}" src="avatars/${name}.svg" alt="" width="48" height="48">`
+    : `<span class="avatar ${css}">${letter}</span>`;
+}
 document.querySelector('#app').innerHTML = `
   <div class="review-bar"><a href="index.html">${icon('back')} Все варианты</a><span>${titles[design]} <span class="review-divider">/</span> Интерактивный макет</span><a href="/">Открыть сервис ${icon('arrow')}</a></div>
   <header class="header"><a class="brand" href="${design}.html"><span class="brand-symbol" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>своя игра</span></a>
     <nav aria-label="Разделы"><button data-section="game">Игра</button><button data-section="catalogue">Пакеты</button><button data-section="editor">Мастерская</button></nav>
-    <div class="header-end"><span class="room-label">Дружеская комната</span><span class="avatar">В</span></div>
+    <div class="header-end"><span class="room-label">Дружеская комната</span>${avatar('host', 'В')}</div>
   </header>
   <main id="main"></main>
   <footer class="footer"><span>Дизайн «${titles[design]}»</span><span>Вопросы настоящие. Участники и счёт — пример.</span><a href="../studio.html">Предыдущий макет</a></footer>
   <dialog aria-labelledby="dialog-title"><div class="question-top"><span id="dialog-topic"></span><button class="icon-button" id="close-question" aria-label="Закрыть вопрос">${icon('close')}</button></div><div class="question-value" id="dialog-value"></div><h2 id="dialog-title"></h2><p id="dialog-answer" hidden></p><div class="question-controls"><button class="button primary" id="answer">Показать ответ</button><button class="button subtle" id="return">К табло</button></div></dialog>`;
 const main = document.querySelector('#main'), dialog = document.querySelector('dialog');
 function playerList() {
-  return `<div class="players-head"><h2>Игроки <span>4 / 12</span></h2><span class="sample">Пример</span></div><div class="players">${players.map(([name,letter,score],i)=>`<div class="player ${i===0?'current':''}"><div class="player-person"><span class="avatar player-avatar p${i}">${letter}</span><div><strong>${name}</strong><span>${i===0?'Выбирает вопрос':'В игре'}</span></div></div><div class="score">${score}</div></div>`).join('')}</div><div class="host"><span class="avatar host-avatar">В</span><div><strong>Вы — ведущий</strong><span>Открываете вопросы и ответы</span></div></div>`;
+  return `<div class="players-head"><h2>Игроки <span>4 / 12</span></h2><span class="sample">Пример</span></div><div class="players">${players.map(([name,letter,score,portrait],i)=>`<div class="player ${i===0?'current':''}"><div class="player-person">${avatar(portrait, letter, `player-avatar p${i}`)}<div><strong>${name}</strong><span>${i===0?'Выбирает вопрос':'В игре'}</span></div></div><div class="score">${score}</div></div>`).join('')}</div><div class="host">${avatar('host', 'В', 'host-avatar')}<div><strong>Вы — ведущий</strong><span>Открываете вопросы и ответы</span></div></div>`;
 }
 function openQuestion(t,q,preview=false) {
   returnFocus = document.activeElement;

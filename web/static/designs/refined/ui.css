@@ -20,3 +20,21 @@ body.board-focus .game-layout{grid-template-columns:1fr}
 @media(max-width:600px){[data-design=broadcast] .player{padding:15px 12px}[data-design=broadcast] .score{font-size:23px}}
 .score{white-space:nowrap}
 @media(max-width:600px){body[data-design=broadcast] .player,body[data-design=club] .player{display:block}body[data-design=broadcast] .score,body[data-design=club] .score{margin:12px 0 0 33px}}
+/* Selected direction: readable sans-serif figures and illustrated demo avatars. */
+body[data-design=broadcast] .board button,
+body[data-design=broadcast] .question-value,
+body[data-design=broadcast] .cover-bottom strong{
+  font-family:Golos,sans-serif;
+  font-weight:500;
+  font-variant-numeric:lining-nums tabular-nums;
+  letter-spacing:-.025em;
+}
+body[data-design=broadcast] img.avatar{object-fit:cover;border-radius:50%;box-shadow:0 0 0 1px #ffffff18}
+body[data-design=broadcast] .player{display:grid;grid-template-columns:48px minmax(0,1fr);column-gap:14px;row-gap:7px;align-items:center}
+body[data-design=broadcast] .player-person{display:contents}
+body[data-design=broadcast] .player-avatar{width:48px;height:48px;grid-column:1;grid-row:1/3}
+body[data-design=broadcast] .player-person>div{grid-column:2;min-width:0}
+body[data-design=broadcast] .score{grid-column:2;margin:0;font-size:25px;line-height:1.1}
+body[data-design=broadcast] .host-avatar{width:36px;height:36px}
+@media(max-width:1150px){body[data-design=broadcast] .player{grid-template-columns:40px minmax(0,1fr);column-gap:10px}body[data-design=broadcast] .player-avatar{width:40px;height:40px}}
+@media(max-width:600px){body[data-design=broadcast] .player{padding:14px 10px;column-gap:9px}body[data-design=broadcast] .score{font-size:23px}body[data-design=broadcast] .player-person strong{font-size:12px}}
