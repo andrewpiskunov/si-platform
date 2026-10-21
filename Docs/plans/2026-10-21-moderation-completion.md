@@ -50,6 +50,6 @@ Files web/src/lib/{types.ts,ModerationHistory.svelte,moderation-model.ts,moderat
 ## Task4 — Integrated acceptance (root)
 
 Files e2e/moderation.mjs/package.json, Docs11/20/README, ledger.
-- [ ] Chromium authorpublish→modinspectimage/audio/videoanswerfragment→rejectreasonvisible→resubmitpublish→report→dismiss and resolve/oldrevisionblock; filterpages, latepreview/failure/mobile, no pageerrors. Synthetic own data cleanup.
-- [ ] Full relevantGo/web/allbrowser suite. Fresh whole-stage strongestreview, singleImportant/Criticalfixpass; rule on everydeclined-tojudge, no re-review.
-- [ ] Update factualstatus and scopedcommit/FFmain; continue quota/privacy P0.
+- [x] Chromium authorpublish→modinspectimage/audio/videoanswerfragment→rejectreasonvisible→resubmitpublish→report→dismiss and resolve/oldrevisionblock; filterpages, latepreview/failure/mobile, no pageerrors. Synthetic own data cleanup.
+- [x] Full relevantGo/web/allbrowser suite. Fresh whole-stage strongestreview, singleImportant/Criticalfixpass; rule on everydeclined-tojudge, no re-review.
+- [x] Update factualstatus and scopedcommit/FFmain; continue quota/privacy P0.
