@@ -68,6 +68,8 @@
 
 ## 4. Настройки игры
 
+Дополнительный визуальный референс: [настройки и комната SIGame по скриншотам пользователя](29-SIGAME-SCREENSHOT-ANALYSIS.md). Там разделены наблюдения, предложения и непроверенные детали; приоритеты ниже сохраняются.
+
 Функции существующего клиента сопоставлены по [AppSettings](https://github.com/VladimirKhil/SIOnline/blob/ac2e66190056beb141b450b9cb044e0e1e99aa6d/src/model/AppSettings.ts) и [TimeSettings](https://github.com/VladimirKhil/SIOnline/blob/ac2e66190056beb141b450b9cb044e0e1e99aa6d/src/model/TimeSettings.ts). Значения ниже предлагаются для нашего сервиса.
 
 | Группа | P0 | Отложено |
