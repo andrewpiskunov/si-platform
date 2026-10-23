@@ -72,6 +72,10 @@ func TestRealAPIImportPublicCatalogueAndReplay(t *testing.T) {
 	downloads := 0
 	sourceID := "123"
 	src := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/packages/"+sourceID {
+			fmt.Fprintf(w, `<article><h1 itemprop="name headline">Synthetic quiz</h1><span itemprop="alternateName">test.siq</span><a href="/authors/alice">Alice</a><a href="/packages/%s/direct_download">Download</a><table><tr><td>Категории</td></tr></table><p class="pt-2">Source description</p></article>`, sourceID)
+			return
+		}
 		if r.URL.Path != "/" {
 			downloads++
 			w.Write(archive.Bytes())
@@ -90,6 +94,18 @@ func TestRealAPIImportPublicCatalogueAndReplay(t *testing.T) {
 		t.Fatal(cards, e)
 	}
 	card := cards[0]
+	detail, err := lib.PublicSourceMetadata(ctx, card.ID)
+	if err != nil || detail.Metadata.Name != "Synthetic quiz" || len(detail.Metadata.Description) != 1 {
+		t.Fatal(detail, err)
+	}
+	opts.Mode = "metadata"
+	opts.ForceMetadata = true
+	refreshed, err := Run(ctx, p, opts)
+	if err != nil || refreshed.MetadataUpdated != 1 || downloads != 1 {
+		t.Fatal(refreshed, err, downloads)
+	}
+	opts.ForceMetadata = false
+
 	if card.Author != "Alice" || card.Rights.Confirmed || card.AllowDownload || card.Rights.SourceURL != "https://www.sibrowser.ru/packages/123" {
 		t.Fatal(card)
 	}

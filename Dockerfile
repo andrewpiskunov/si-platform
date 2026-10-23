@@ -14,6 +14,7 @@ RUN CGO_ENABLED=0 go build -trimpath -o /out/server ./cmd/server \
 FROM debian:trixie-slim
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates ffmpeg bubblewrap util-linux \
+ && for lib in /usr/lib/*-linux-gnu/pulseaudio/*.so; do ln -s "$lib" "$(dirname "$(dirname "$lib")")/$(basename "$lib")"; done \
  && apt-get clean \
  && find /var/lib/apt/lists -mindepth 1 -delete
 COPY --from=build /out/ /app/

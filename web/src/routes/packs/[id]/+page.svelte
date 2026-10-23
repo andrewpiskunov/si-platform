@@ -2,7 +2,9 @@
   import { page } from '$app/state';
   import { contextLink, roomContext } from '#lib/appearance.ts';
   const room = $derived(roomContext(page.url));
-  import CreateRoom from '#lib/CreateRoom.svelte';
+  import SourceDetails from '#lib/SourceDetails.svelte';
+ import PackCover from '#lib/PackCover.svelte';
+ import CreateRoom from '#lib/CreateRoom.svelte';
   import { api, bytes, errorText } from '#lib/api.ts';
   import { user } from '#lib/session.ts';
   let { data } = $props();
@@ -49,8 +51,9 @@
           <div><strong>{card.difficulty || '—'}</strong><span>сложность из 10</span></div>
         </div>
         <div class="stack">
+ {#if data.detail}<SourceDetails detail={data.detail} {card} />{/if}
           <p class="muted">
-            {card.has_media ? 'Содержит изображения, аудио или видео.' : 'Текстовые вопросы.'} Размер:
+            {card.has_media ? 'Содержит изображения, аудио или видео.' : 'Текстовые вопросы.'} Объём хранения:
             {bytes(card.size_bytes)}.
           </p>
           {#if card.allow_download}<a
@@ -60,7 +63,7 @@
             >{/if}
           <div class="panel subtle">
             <h3>Авторство и права</h3>
-            <p>{card.rights?.attribution || card.author}</p>
+            <p>{card.source ? card.author : card.rights?.attribution || card.author}</p>
             <p class="helper">{card.rights?.license || (card.rights?.origin === 'external_import' ? 'Лицензия источником не указана' : '')}</p>
             {#if card.rights?.source_url && /^https?:\/\//.test(card.rights.source_url)}<a
                 class="text-link"
@@ -86,7 +89,7 @@
             </details>{/if}
         </div>
       </div>
-      <aside class="panel"><CreateRoom packId={card.id} revision={card.revision} /></aside>
+      <aside class="stack">{#if card.cover_url}<div class="panel"><PackCover src={card.cover_url} name={card.name} large /></div>{/if}<div class="panel"><CreateRoom packId={card.id} revision={card.revision} /></div></aside>
     </div>{:else}<div class="empty">
       <h1>Пакет недоступен</h1>
       <p>{errorText(data.error)}</p>

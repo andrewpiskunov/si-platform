@@ -273,7 +273,10 @@ func parsePage(r io.Reader, current int) (Page, error) {
 				}
 			}
 			if strings.HasPrefix(href, "/authors/") {
-				item.Author = nodeText(c)
+				if item.Author != "" {
+					item.Author += ", "
+				}
+				item.Author += nodeText(c)
 			}
 		})
 		if item.ID == "" || item.Name == "" {

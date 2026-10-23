@@ -94,6 +94,7 @@ var projections = []projection{
 	{"api_tokens", `SELECT jsonb_build_object('id',id,'name',name,'scopes',scopes,'created_at',created_at,'expires_at',expires_at,'revoked_at',revoked_at) FROM account_credentials WHERE user_id=$1 AND kind='api' AND $2::text IS NOT NULL AND $3::text IS NOT NULL ORDER BY id`},
 	{"account_audit", `SELECT jsonb_build_object('id',id,'action',action,'target_id',CASE WHEN action IN ('token_created','token_revoked') THEN target_id ELSE '' END,'created_at',created_at) FROM account_audit WHERE user_id=$1 AND $2::text IS NOT NULL AND $3::text IS NOT NULL ORDER BY id`},
 	{"packs", `SELECT jsonb_build_object('id',id,'import_id',import_id,'current_revision',current_revision,'published_revision',published_revision,'pending_revision',pending_revision,'blocked',blocked,'created_at',created_at,'deleted_at',deleted_at) FROM library_packs WHERE owner_id=$1 AND ($2='' OR ($2='pack' AND id=$3)) ORDER BY id`},
+	{"source_metadata", `SELECT to_jsonb(m) FROM source_metadata m JOIN library_packs p ON p.id=m.pack_id WHERE p.owner_id=$1 AND ($2='' OR ($2='pack' AND p.id=$3)) ORDER BY m.pack_id`},
 	{"pack_revisions", `SELECT jsonb_build_object('pack_id',r.pack_id,'revision',r.revision,'card',r.card,'document',r.document,'assets',r.assets,'original_key',r.original_key,'issues',r.issues,'asset_issues',r.asset_issues,'size_bytes',r.size_bytes,'status',r.status,'rights',r.rights,'updated_at',r.updated_at) FROM library_revisions r JOIN library_packs p ON p.id=r.pack_id WHERE p.owner_id=$1 AND ($2='' OR ($2='pack' AND p.id=$3)) ORDER BY r.pack_id,r.revision`},
 	{"themes", `SELECT jsonb_build_object('id',id,'current_revision',current_revision,'blocked',blocked,'created_at',created_at,'updated_at',updated_at,'deleted_at',deleted_at) FROM themes WHERE owner_id=$1 AND ($2='' OR ($2='theme' AND id=$3)) ORDER BY id`},
 	{"theme_versions", `SELECT jsonb_build_object('theme_id',v.theme_id,'revision',v.revision,'prepared',v.prepared,'size_bytes',v.size_bytes,'created_at',v.created_at) FROM theme_versions v JOIN themes t ON t.id=v.theme_id WHERE t.owner_id=$1 AND ($2='' OR ($2='theme' AND t.id=$3)) ORDER BY v.theme_id,v.revision`},
@@ -223,6 +224,35 @@ func writeProjection(ctx context.Context, tx pgx.Tx, z *zip.Writer, p projection
 }
 func (s *Service) references(ctx context.Context, q querier, owner string, o Options, blockedOnly bool, wanted objectSet) (objectSet, error) {
 	refs := objectSet{}
+	coverRows, e := q.Query(ctx, `SELECT COALESCE(cover,'null') FROM source_metadata m JOIN library_packs p ON p.id=m.pack_id WHERE p.owner_id=$1 AND ($2='' OR ($2='pack' AND p.id=$3)) AND (NOT $4 OR p.blocked)`, owner, o.Kind, o.ID, blockedOnly)
+	if e != nil {
+		return nil, e
+	}
+	for coverRows.Next() {
+		var raw []byte
+		if e = coverRows.Scan(&raw); e != nil {
+			break
+		}
+		var cover *media.Prepared
+		if e = json.Unmarshal(raw, &cover); e != nil {
+			break
+		}
+		rowRefs := objectSet{}
+		if e = rowRefs.prepared(cover); e != nil {
+			break
+		}
+		if e = mergeReferences(refs, rowRefs, wanted); e != nil {
+			break
+		}
+	}
+	re := coverRows.Err()
+	coverRows.Close()
+	if e != nil {
+		return nil, e
+	}
+	if re != nil {
+		return nil, re
+	}
 	rows, e := q.Query(ctx, `SELECT r.original_key,r.assets FROM library_revisions r JOIN library_packs p ON p.id=r.pack_id WHERE p.owner_id=$1 AND ($2='' OR ($2='pack' AND p.id=$3)) AND (NOT $4 OR p.blocked OR r.status='blocked')`, owner, o.Kind, o.ID, blockedOnly)
 	if e != nil {
 		return nil, e

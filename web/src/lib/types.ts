@@ -15,6 +15,8 @@ export interface Rights {
   confirmed: boolean;
 }
 export interface Card {
+ cover_url?: string;
+ source?: { external_id: string; authors: SourceLink[]; published_date: string; downloads: number | null; updated_at: string };
   id: string;
   name: string;
   owner_id: string;
@@ -239,3 +241,12 @@ export type Usage = {
     theme_bytes: number;
   };
 };
+
+export interface SourceLink {name: string; url: string}
+export interface SourcePercent {name: string; percent: number}
+export interface SourceRound {name: string; themes: {name: string; questions: string[] | null}[] | null}
+export interface SourceDetail {
+ metadata: {name: string; authors: SourceLink[] | null; description: string[] | null; links: SourceLink[] | null; tags: SourceLink[] | null; published_date: string; filename: string; file_size_label: string; question_count: number | null; downloads: number | null; media: SourcePercent[] | null; categories: SourcePercent[] | null; originals: SourceLink[] | null; cover_url: string; rounds: SourceRound[] | null};
+ updated_at: string; original_bytes: number;
+ document: {name: string; date: string; publisher: string; language: string; restriction: string; difficulty: number; authors: string[] | null; sources: string[] | null; comments: string; tags: string[] | null; contact_uri: string; generator: string; rounds: SourceRound[] | null};
+}

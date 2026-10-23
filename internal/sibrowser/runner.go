@@ -16,6 +16,7 @@ type Options struct {
 	InsecureAPI                    bool
 	MaxPages, MaxItems             int
 	RetryRejected                  bool
+	ForceMetadata                  bool
 	Source                         *Source
 }
 type ItemError struct {
@@ -24,15 +25,18 @@ type ItemError struct {
 	Code  string `json:"code"`
 }
 type Report struct {
-	RunID      string      `json:"run_id"`
-	Mode       string      `json:"mode"`
-	Pages      int         `json:"pages"`
-	Discovered int         `json:"discovered"`
-	Published  int         `json:"published"`
-	Skipped    int         `json:"skipped"`
-	Errors     []ItemError `json:"errors"`
-	Complete   bool        `json:"complete"`
-	NextPage   int         `json:"next_page"`
+	MetadataUpdated int         `json:"metadata_updated"`
+	CoversUpdated   int         `json:"covers_updated"`
+	MetadataErrors  []ItemError `json:"metadata_errors"`
+	RunID           string      `json:"run_id"`
+	Mode            string      `json:"mode"`
+	Pages           int         `json:"pages"`
+	Discovered      int         `json:"discovered"`
+	Published       int         `json:"published"`
+	Skipped         int         `json:"skipped"`
+	Errors          []ItemError `json:"errors"`
+	Complete        bool        `json:"complete"`
+	NextPage        int         `json:"next_page"`
 }
 
 func Run(ctx context.Context, p *pgxpool.Pool, opt Options) (Report, error) {
@@ -40,7 +44,7 @@ func Run(ctx context.Context, p *pgxpool.Pool, opt Options) (Report, error) {
 	id := make([]byte, 16)
 	rand.Read(id)
 	report.RunID = hex.EncodeToString(id)
-	if opt.Mode != "full" && opt.Mode != "incremental" || opt.Directory == "" || opt.MaxPages < 0 || opt.MaxItems < 0 {
+	if opt.Mode != "full" && opt.Mode != "incremental" && opt.Mode != "metadata" || opt.Directory == "" || opt.MaxPages < 0 || opt.MaxItems < 0 {
 		return report, ErrConfig
 	}
 	api, e := newAPI(opt.APIURL, opt.Token, opt.InsecureAPI)
@@ -67,6 +71,17 @@ func Run(ctx context.Context, p *pgxpool.Pool, opt Options) (Report, error) {
 	if src == nil {
 		src = NewSource(time.Second)
 	}
+	if opt.Mode == "metadata" {
+		e = metadataPass(ctx, l, src, api, opt, &report, false)
+		report.Complete = e == nil
+		if e == nil && len(report.MetadataErrors) > 0 {
+			e = ErrIncomplete
+		}
+		return report, e
+	}
+	if e = metadataPass(ctx, l, src, api, opt, &report, true); e != nil {
+		return report, e
+	}
 	if opt.RetryRejected {
 		if e = l.retryRejected(); e != nil {
 			return report, e
@@ -92,6 +107,9 @@ func Run(ctx context.Context, p *pgxpool.Pool, opt Options) (Report, error) {
 			if e == nil {
 				report.Published++
 				if e = l.save(r, "published", "", pack, 0); e != nil {
+					return e
+				}
+				if e = metadataOne(ctx, l, src, api, r.Item.ID, &report); e != nil {
 					return e
 				}
 				continue
@@ -160,6 +178,11 @@ func Run(ctx context.Context, p *pgxpool.Pool, opt Options) (Report, error) {
 		}
 		report.Discovered += added
 		report.Skipped += len(listing.Items) - added
+		for _, item := range listing.Items {
+			if e = metadataOne(ctx, l, src, api, item.ID, &report); e != nil {
+				return report, e
+			}
+		}
 		if oldPage {
 			known++
 		} else {

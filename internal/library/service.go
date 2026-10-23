@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"siplatform/internal/accounts"
+	"siplatform/internal/blobrefs"
 	"siplatform/internal/packs"
 	"siplatform/internal/playpack"
 )
@@ -20,6 +22,7 @@ type Service struct{ pool *pgxpool.Pool }
 func New(pool *pgxpool.Pool) *Service { return &Service{pool: pool} }
 
 type packState struct {
+	id                 string
 	owner              string
 	current            int
 	published, pending *int
@@ -43,6 +46,9 @@ func moderator(a accounts.Identity) bool {
 // Lock account rows in a deterministic order before the pack. This coordinates
 // with account deletion and avoids deadlocks when moderators review each other.
 func (s *Service) begin(ctx context.Context, a accounts.Identity, scope string, session bool, packID string) (*access, error) {
+	return s.beginGuarded(ctx, a, scope, session, packID, false)
+}
+func (s *Service) beginGuarded(ctx context.Context, a accounts.Identity, scope string, session bool, packID string, guard bool) (*access, error) {
 	if a.User.ID == "" || a.SessionID == "" {
 		return nil, ErrUnauthorized
 	}
@@ -51,12 +57,18 @@ func (s *Service) begin(ctx context.Context, a accounts.Identity, scope string, 
 		return nil, err
 	}
 	out := &access{tx: tx, actor: a}
+	out.pack.id = packID
 	ok := false
 	defer func() {
 		if !ok {
 			_ = tx.Rollback(context.Background())
 		}
 	}()
+	if guard {
+		if _, err = tx.Exec(ctx, blobrefs.GuardSQL); err != nil {
+			return nil, err
+		}
+	}
 	ids := []string{a.User.ID}
 	if packID != "" {
 		err = tx.QueryRow(ctx, "SELECT owner_id FROM library_packs WHERE id=$1 AND deleted_at IS NULL", packID).Scan(&out.pack.owner)
@@ -143,17 +155,20 @@ func (a *access) reader() error {
 	return nil
 }
 
-const cardColumns = "r.card,r.status,r.rights,r.updated_at,p.blocked,COALESCE(p.published_revision,0),COALESCE(p.pending_revision,0)"
+const publicCardColumns = "r.card,r.status,r.rights,r.updated_at,p.blocked,COALESCE(p.published_revision,0),COALESCE(p.pending_revision,0),COALESCE((SELECT summary FROM source_metadata WHERE pack_id=p.id),'null'),(COALESCE(r.document->>'logo','')<>'' OR EXISTS(SELECT 1 FROM source_metadata WHERE pack_id=p.id AND cover IS NOT NULL AND cover<>'null'::jsonb))"
+
+const cardColumns = "r.card,r.status,r.rights,r.updated_at,p.blocked,COALESCE(p.published_revision,0),COALESCE(p.pending_revision,0),'null'::jsonb,false"
 
 type scanner interface{ Scan(...any) error }
 
 func scanCard(row scanner) (Card, error) {
 	var card Card
-	var metadata, rights []byte
+	var metadata, rights, source []byte
+	var hasCover bool
 	var status string
 	var blocked bool
 	var published, pending int
-	err := row.Scan(&metadata, &status, &rights, &card.UpdatedAt, &blocked, &published, &pending)
+	err := row.Scan(&metadata, &status, &rights, &card.UpdatedAt, &blocked, &published, &pending, &source, &hasCover)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return card, ErrNotFound
 	}
@@ -166,6 +181,37 @@ func scanCard(row scanner) (Card, error) {
 	}
 	if err = json.Unmarshal(rights, &card.Rights); err != nil {
 		return card, err
+	}
+	if string(source) != "null" {
+		var v struct {
+			SourceSummary
+			Name string   `json:"name"`
+			Tags []string `json:"tags"`
+		}
+		if err = json.Unmarshal(source, &v); err != nil {
+			return card, err
+		}
+		card.Source = &v.SourceSummary
+		card.Name = v.Name
+		names := []string{}
+		for _, a := range v.Authors {
+			names = append(names, a.Name)
+		}
+		card.Author = strings.Join(names, ", ")
+		for _, t := range v.Tags {
+			found := false
+			for _, old := range card.Tags {
+				if strings.EqualFold(old, t) {
+					found = true
+				}
+			}
+			if !found {
+				card.Tags = append(card.Tags, t)
+			}
+		}
+	}
+	if hasCover {
+		card.CoverURL = "/api/catalogue/" + card.ID + "/cover"
 	}
 	card.Status = status
 	card.PublishedRevision = published
@@ -345,11 +391,13 @@ func usage(ctx context.Context, tx pgx.Tx, userID string) (int64, error) {
 func StorageUsage(ctx context.Context, tx pgx.Tx, userID string) (int64, error) {
 	var n int64
 	err := tx.QueryRow(ctx, `SELECT
- COALESCE((SELECT sum(r.size_bytes) FROM library_revisions r JOIN library_packs p ON p.id=r.pack_id WHERE p.owner_id=$1 AND p.deleted_at IS NULL),0)::bigint
+ COALESCE((SELECT sum(m.size_bytes) FROM source_metadata m JOIN library_packs p ON p.id=m.pack_id WHERE p.owner_id=$1 AND p.deleted_at IS NULL),0)::bigint
+ + COALESCE((SELECT sum(r.size_bytes) FROM library_revisions r JOIN library_packs p ON p.id=r.pack_id WHERE p.owner_id=$1 AND p.deleted_at IS NULL),0)::bigint
  + COALESCE((SELECT sum(COALESCE((u.result_asset->>'size')::bigint,0)
      + COALESCE((u.result_asset->'prepared'->'standard'->>'size')::bigint,0)
      + COALESCE((u.result_asset->'prepared'->'economy'->>'size')::bigint,0))
    FROM uploads u WHERE u.owner_id=$1 AND u.purpose='media' AND u.status='ready'
+   AND NOT EXISTS(SELECT 1 FROM source_cover_receipts receipt WHERE receipt.upload_id=u.id)
    AND NOT EXISTS(SELECT 1 FROM library_media_receipts receipt JOIN library_packs p ON p.id=receipt.pack_id WHERE receipt.upload_id=u.id AND p.deleted_at IS NULL)),0)::bigint
  + COALESCE((SELECT sum(v.size_bytes) FROM theme_versions v JOIN themes t ON t.id=v.theme_id WHERE t.owner_id=$1),0)::bigint
  + COALESCE((SELECT sum((u.result_theme->>'size_bytes')::bigint) FROM uploads u

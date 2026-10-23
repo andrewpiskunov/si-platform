@@ -119,14 +119,14 @@ func (s *Service) Catalogue(ctx context.Context, f Filter) ([]Card, error) {
 	if limit > 50 {
 		limit = 50
 	}
-	query := "SELECT " + cardColumns + publicJoin
+	query := "SELECT " + publicCardColumns + publicJoin
 	args := []any{}
 	add := func(clause string, value any) {
 		args = append(args, value)
 		query += " AND " + fmt.Sprintf(clause, len(args))
 	}
 	if text := strings.TrimSpace(f.Query); text != "" {
-		add(`r.search_text ILIKE $%d ESCAPE '\'`, literalSearchPattern(text))
+		add(`(r.search_text || E'\n' || COALESCE((SELECT search_text FROM source_metadata WHERE pack_id=p.id),'')) ILIKE $%d ESCAPE '\'`, literalSearchPattern(text))
 	}
 	if f.Age == "unrated" {
 		query += " AND r.age_rating IS NULL"
@@ -138,7 +138,7 @@ func (s *Service) Catalogue(ctx context.Context, f Filter) ([]Card, error) {
 		add("r.card->>'language'=$%d", f.Language)
 	}
 	if f.Tag != "" {
-		add("(r.card->'tags') ? $%d", f.Tag)
+		add("((r.card->'tags') || COALESCE((SELECT tags FROM source_metadata WHERE pack_id=p.id),'[]'::jsonb)) ? $%d", f.Tag)
 	}
 	if f.Difficulty != nil {
 		add("(r.card->>'difficulty')::int=$%d", *f.Difficulty)
@@ -159,7 +159,7 @@ func (s *Service) Catalogue(ctx context.Context, f Filter) ([]Card, error) {
 	return listCards(ctx, tx, query, args...)
 }
 func (s *Service) Public(ctx context.Context, packID string) (Card, error) {
-	return scanCard(s.pool.QueryRow(ctx, "SELECT "+cardColumns+publicJoin+" AND p.id=$1", packID))
+	return scanCard(s.pool.QueryRow(ctx, "SELECT "+publicCardColumns+publicJoin+" AND p.id=$1", packID))
 }
 func (s *Service) ForPlay(ctx context.Context, actor accounts.Identity, packID string, revision int) (Draft, error) {
 	if actor.User.ID == "" {
