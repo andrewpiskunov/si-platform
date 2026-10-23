@@ -53,7 +53,7 @@
 - [x] Write CLI validation tests for modes, missing credentials, invalid quotas and exit status; run RED.
 - [x] Implement signal/timeout handling, source setup, JSON reports, image target, opt-in compose service and cron instructions. Document external robots restriction, VK dependency, full reconciliation, unsupported packages and operator retries.
 - [x] Run all Go tests with PostgreSQL, relevant race tests, vet and build; check compose configuration and diff.
-- [ ] Fresh whole-branch review; fix important findings with regression tests; commit final changes and summarize actual verification and operational limitations.
+- [x] Fresh whole-branch review; fix important findings with regression tests; commit final changes and summarize actual verification and operational limitations.
 
 ## Execution record
 
@@ -61,3 +61,6 @@
 - Execution follows approved design inline; no additional permission gate for already authorized implementation.
 
 - Verification: PostgreSQL full Go suite passed; focused race suite passed; vet and Go command builds passed; Svelte check passed, frontend tests 107/107 passed on Node 22, frontend production build passed; Compose validated with explicit project name.
+
+- Final review: three recovery defects reproduced and fixed: interrupted daily frontier, upload expiry classification, bounded full progress. All regression tests pass; real API test also expires an upload between lookup and PATCH and recovers with the same receipt.
+- Final verification after fixes: full Go suite with PostgreSQL, focused race suite, vet, command builds, Docker image build and in-image CLI help passed. Actual SIBrowser HTML pages 1, 2 and 2288 parsed successfully; no bulk production import was run.

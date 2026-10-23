@@ -10,6 +10,7 @@ import (
 	"siplatform/internal/library"
 	"siplatform/internal/storage/postgres"
 	"siplatform/internal/testutil"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -133,7 +134,7 @@ func TestLeaseLossCancelsAndPreventsCheckpointWrite(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("lost lock did not cancel")
 	}
-	if _, e = l.discover(Page{Items: []Item{{ID: "1", Name: "One"}}, Next: 2}, true); e == nil {
+	if _, _, e = l.discover(Page{Items: []Item{{ID: "1", Name: "One"}}, Next: 2}, true, false); e == nil {
 		t.Fatal("stale checkpoint write")
 	}
 	var n int
@@ -145,4 +146,114 @@ func TestLeaseLossCancelsAndPreventsCheckpointWrite(t *testing.T) {
 		t.Fatal(e)
 	}
 	next.close()
+}
+
+func TestInterruptedDailyDoesNotPromoteDiscoveredPagesToBoundary(t *testing.T) {
+	ctx := context.Background()
+	p := testutil.Pool(t)
+	if e := postgres.Migrate(ctx, p); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := p.Exec(ctx, `INSERT INTO account_users(id,username,display_name,password_hash,role) VALUES('owner','owner','Owner','unused','admin')`); e != nil {
+		t.Fatal(e)
+	}
+	if e := Configure(ctx, p, "owner", 1000, 1<<40); e != nil {
+		t.Fatal(e)
+	}
+	// Initial successful bootstrap with one package; later four pages are inserted.
+	total := 1
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			w.Write([]byte("PK\x03\x04test archive"))
+			return
+		}
+		page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+		next := ""
+		if page < total {
+			next = fmt.Sprintf(`<a rel="next" href="/?page=%d">Next</a>`, page+1)
+		}
+		fmt.Fprintf(w, `<div id="pagination">%s</div><div id="packages"><article><h1><a href="/packages/%d">Quiz</a></h1><a href="/authors/alice">Alice</a></article></div>`, next, total-page+1)
+	}))
+	defer source.Close()
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/external-imports/sibrowser/publish" {
+			json.NewEncoder(w).Encode(library.Card{ID: "pack", Revision: 1, Status: "published"})
+			return
+		}
+		json.NewEncoder(w).Encode(ingest.Upload{ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Size: 16, Offset: 16, Status: "ready", DraftID: "pack"})
+	}))
+	defer api.Close()
+	opt := Options{Mode: "full", APIURL: api.URL, Token: "token", Directory: t.TempDir(), Source: &Source{base: source.URL, http: source.Client()}}
+	if _, e := Run(ctx, p, opt); e != nil {
+		t.Fatal(e)
+	}
+	total = 5
+	opt.Mode = "incremental"
+	opt.MaxPages = 3
+	if _, e := Run(ctx, p, opt); e != ErrIncomplete {
+		t.Fatal(e)
+	}
+	opt.MaxPages = 0
+	if _, e := Run(ctx, p, opt); e != nil {
+		t.Fatal(e)
+	}
+	var n int
+	if e := p.QueryRow(ctx, `SELECT count(*) FROM source_items WHERE external_id='2' AND state='published'`).Scan(&n); e != nil || n != 1 {
+		t.Fatal("page 4 was skipped after interrupted daily", n, e)
+	}
+}
+
+func TestRepeatedSmallFullRunsMakeForwardProgress(t *testing.T) {
+	for _, limit := range []int{1, 2} {
+		t.Run(strconv.Itoa(limit), func(t *testing.T) {
+			ctx := context.Background()
+			p := testutil.Pool(t)
+			if e := postgres.Migrate(ctx, p); e != nil {
+				t.Fatal(e)
+			}
+			if _, e := p.Exec(ctx, `INSERT INTO account_users(id,username,display_name,password_hash,role) VALUES('owner','owner','Owner','unused','admin')`); e != nil {
+				t.Fatal(e)
+			}
+			if e := Configure(ctx, p, "owner", 1000, 1<<40); e != nil {
+				t.Fatal(e)
+			}
+			src := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/" {
+					w.Write([]byte("PK\x03\x04test archive"))
+					return
+				}
+				page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+				next := ""
+				if page < 6 {
+					next = fmt.Sprintf(`<a rel="next" href="/?page=%d">Next</a>`, page+1)
+				}
+				fmt.Fprintf(w, `<div id="pagination">%s</div><div id="packages"><article><h1><a href="/packages/%d">Quiz</a></h1><a href="/authors/a">A</a></article></div>`, next, page)
+			}))
+			defer src.Close()
+			api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/api/external-imports/sibrowser/publish" {
+					json.NewEncoder(w).Encode(library.Card{ID: "pack", Revision: 1, Status: "published"})
+					return
+				}
+				json.NewEncoder(w).Encode(ingest.Upload{ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Size: 16, Offset: 16, Status: "ready", DraftID: "pack"})
+			}))
+			defer api.Close()
+			opt := Options{Mode: "full", APIURL: api.URL, Token: "token", Directory: t.TempDir(), MaxPages: limit, Source: &Source{base: src.URL, http: src.Client()}}
+			complete := false
+			for range 12 {
+				r, e := Run(ctx, p, opt)
+				if e != nil && e != ErrIncomplete {
+					t.Fatal(e)
+				}
+				if r.Complete {
+					complete = true
+					break
+				}
+			}
+			var n int
+			if e := p.QueryRow(ctx, `SELECT count(*) FROM source_items WHERE state='published'`).Scan(&n); e != nil || n != 6 || !complete {
+				t.Fatal("bounded full import stuck", n, complete, e)
+			}
+		})
+	}
 }

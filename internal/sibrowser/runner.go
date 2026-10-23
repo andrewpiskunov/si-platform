@@ -62,6 +62,7 @@ func Run(ctx context.Context, p *pgxpool.Pool, opt Options) (Report, error) {
 	}
 	defer l.close()
 	ctx = l.ctx
+	report.NextPage = l.next
 	src := opt.Source
 	if src == nil {
 		src = NewSource(time.Second)
@@ -108,7 +109,7 @@ func Run(ctx context.Context, p *pgxpool.Pool, opt Options) (Report, error) {
 				if !f.Retryable {
 					state = "rejected"
 				}
-				if code == "publication_suppressed" || code == "api_http_404" || code == "api_http_409" || code == "api_blocked" {
+				if code == "publication_suppressed" || code == "receipt_suppressed" || code == "api_blocked" {
 					state = "suppressed"
 				}
 			}
@@ -128,16 +129,21 @@ func Run(ctx context.Context, p *pgxpool.Pool, opt Options) (Report, error) {
 	if e = process(); e != nil {
 		return report, e
 	}
-	full := opt.Mode == "full" || !l.bootstrap
+	full := opt.Mode == "full" || !l.bootstrap || l.reconciling
 	page := 1
 	if full {
 		page = max(1, l.next-2)
 	}
 	known := 0
-	reconcile := false
+	reconcile := l.reconciling
+	forwardFrom := 1
+	if full {
+		forwardFrom = l.next
+	}
+	budgetPages := 0
 	for {
 		report.NextPage = page
-		if opt.MaxPages > 0 && report.Pages >= opt.MaxPages {
+		if opt.MaxPages > 0 && budgetPages >= opt.MaxPages {
 			return report, ErrIncomplete
 		}
 		listing, e := src.Page(ctx, page)
@@ -145,13 +151,16 @@ func Run(ctx context.Context, p *pgxpool.Pool, opt Options) (Report, error) {
 			return report, e
 		}
 		report.Pages++
-		added, e := l.discover(listing, full && !reconcile)
+		if page >= forwardFrom {
+			budgetPages++
+		}
+		added, oldPage, e := l.discover(listing, full, reconcile)
 		if e != nil {
 			return report, e
 		}
 		report.Discovered += added
 		report.Skipped += len(listing.Items) - added
-		if added == 0 {
+		if oldPage {
 			known++
 		} else {
 			known = 0
@@ -163,14 +172,13 @@ func Run(ctx context.Context, p *pgxpool.Pool, opt Options) (Report, error) {
 		if end {
 			if full && !reconcile {
 				reconcile = true
+				forwardFrom = 1
 				known = 0
 				page = 1
 				continue
 			}
-			if full {
-				if e = l.complete(); e != nil {
-					return report, e
-				}
+			if e = l.complete(full); e != nil {
+				return report, e
 			}
 			report.Complete = true
 			report.NextPage = 1
@@ -191,7 +199,7 @@ func processItem(ctx context.Context, l *lease, src *Source, api *apiClient, dir
 		if e != nil {
 			return "", e
 		}
-		if u.Status == "failed" && retry {
+		if u.Status == "failed" && (retry || u.Error == "expired" || u.Error == "staging_unavailable") {
 			u, e = api.retry(ctx, *r.Input)
 			if e != nil {
 				return "", e

@@ -33,15 +33,18 @@ func Configure(ctx context.Context, p *pgxpool.Pool, owner string, count int, by
 }
 
 type lease struct {
-	conn      *pgx.Conn
-	mu        sync.Mutex
-	ctx       context.Context
-	cancel    context.CancelFunc
-	done      chan struct{}
-	epoch     int64
-	owner     string
-	next      int
-	bootstrap bool
+	reconciling bool
+	reconcileAt time.Time
+	boundary    time.Time
+	conn        *pgx.Conn
+	mu          sync.Mutex
+	ctx         context.Context
+	cancel      context.CancelFunc
+	done        chan struct{}
+	epoch       int64
+	owner       string
+	next        int
+	bootstrap   bool
 }
 
 func acquire(parent context.Context, p *pgxpool.Pool) (*lease, error) {
@@ -68,7 +71,7 @@ func acquire(parent context.Context, p *pgxpool.Pool) (*lease, error) {
 	if !locked {
 		return nil, ErrBusy
 	}
-	e = conn.QueryRow(ctx, `UPDATE external_sources SET epoch=epoch+1 WHERE source='sibrowser' AND EXISTS(SELECT 1 FROM account_users WHERE id=owner_id AND deleted_at IS NULL AND role='admin') RETURNING epoch,owner_id,next_page,bootstrap_complete`).Scan(&l.epoch, &l.owner, &l.next, &l.bootstrap)
+	e = conn.QueryRow(ctx, `UPDATE external_sources SET epoch=epoch+1 WHERE source='sibrowser' AND EXISTS(SELECT 1 FROM account_users WHERE id=owner_id AND deleted_at IS NULL AND role='admin') RETURNING epoch,owner_id,next_page,bootstrap_complete,last_success_at,reconciling,reconcile_at`).Scan(&l.epoch, &l.owner, &l.next, &l.bootstrap, &l.boundary, &l.reconciling, &l.reconcileAt)
 	if e != nil {
 		return nil, ErrConfig
 	}
@@ -125,10 +128,13 @@ func (l *lease) transaction(fn func(pgx.Tx) error) error {
 	}
 	return tx.Commit(l.ctx)
 }
-func (l *lease) discover(p Page, checkpoint bool) (int, error) {
+func (l *lease) discover(p Page, checkpoint, reconcile bool) (int, bool, error) {
 	added := 0
+	known := false
 	err := l.transaction(func(tx pgx.Tx) error {
+		ids := make([]string, 0, len(p.Items))
 		for _, item := range p.Items {
+			ids = append(ids, item.ID)
 			raw, _ := json.Marshal(item)
 			r, e := tx.Exec(l.ctx, `INSERT INTO source_items(source,external_id,metadata) VALUES('sibrowser',$1,$2) ON CONFLICT DO NOTHING`, item.ID, raw)
 			if e != nil {
@@ -136,21 +142,33 @@ func (l *lease) discover(p Page, checkpoint bool) (int, error) {
 			}
 			added += int(r.RowsAffected())
 		}
+		boundary := l.boundary
+		if reconcile {
+			boundary = l.reconcileAt
+		}
+		var old int
+		if e := tx.QueryRow(l.ctx, `SELECT count(*) FROM source_items WHERE source='sibrowser' AND external_id=ANY($1) AND discovered_at<=$2`, ids, boundary).Scan(&old); e != nil {
+			return e
+		}
+		known = old == len(p.Items)
 		if checkpoint {
 			next := p.Next
 			if next == 0 {
 				next = 1
+			}
+			if !reconcile && p.Next == 0 {
+				return tx.QueryRow(l.ctx, `UPDATE external_sources SET next_page=1,reconciling=true,reconcile_at=clock_timestamp() WHERE source='sibrowser' RETURNING reconcile_at`).Scan(&l.reconcileAt)
 			}
 			_, e := tx.Exec(l.ctx, `UPDATE external_sources SET next_page=$1 WHERE source='sibrowser'`, next)
 			return e
 		}
 		return nil
 	})
-	return added, err
+	return added, known, err
 }
-func (l *lease) complete() error {
+func (l *lease) complete(full bool) error {
 	return l.transaction(func(tx pgx.Tx) error {
-		_, e := tx.Exec(l.ctx, `UPDATE external_sources SET next_page=1,bootstrap_complete=true WHERE source='sibrowser'`)
+		_, e := tx.Exec(l.ctx, `UPDATE external_sources SET reconciling=CASE WHEN $1 THEN false ELSE reconciling END,next_page=CASE WHEN $1 THEN 1 ELSE next_page END,bootstrap_complete=bootstrap_complete OR $1,last_success_at=clock_timestamp() WHERE source='sibrowser'`, full)
 		return e
 	})
 }

@@ -75,6 +75,15 @@ func (c *apiClient) begin(ctx context.Context, in ingest.ExternalInput) (ingest.
 	var u ingest.Upload
 	raw, _ := json.Marshal(in)
 	e := c.call(ctx, "POST", "/api/external-imports/sibrowser", raw, nil, &u)
+	var f *Fault
+	if errors.As(e, &f) {
+		if f.Code == "api_http_404" || f.Code == "api_blocked" {
+			return u, fault("receipt_suppressed", false)
+		}
+		if f.Code == "api_http_409" {
+			return u, fault("source_receipt_conflict", false)
+		}
+	}
 	if e == nil && !validUpload(u, in) {
 		e = fault("api_invalid_upload", true)
 	}
@@ -110,7 +119,7 @@ func (c *apiClient) upload(ctx context.Context, name string, in ingest.ExternalI
 			before := u.Offset
 			oldID := u.ID
 			if e = c.call(ctx, "PATCH", "/api/uploads/"+u.ID, chunk, &before, &u); e != nil {
-				return "", e
+				return "", uploadError(e)
 			}
 			if !validUpload(u, in) || u.ID != oldID || u.Offset != before+int64(len(chunk)) {
 				return "", fault("api_invalid_offset", false)
@@ -118,7 +127,7 @@ func (c *apiClient) upload(ctx context.Context, name string, in ingest.ExternalI
 		}
 		oldID := u.ID
 		if e = c.call(ctx, "POST", "/api/uploads/"+u.ID+"/complete", nil, nil, &u); e != nil {
-			return "", e
+			return "", uploadError(e)
 		}
 		if u.ID != oldID {
 			return "", fault("api_invalid_upload", false)
@@ -126,18 +135,18 @@ func (c *apiClient) upload(ctx context.Context, name string, in ingest.ExternalI
 	}
 	for u.Status == "queued" || u.Status == "processing" {
 		if e := wait(ctx, time.Second); e != nil {
-			return "", e
+			return "", uploadError(e)
 		}
 		oldID := u.ID
 		if e := c.call(ctx, "GET", "/api/uploads/"+u.ID, nil, nil, &u); e != nil {
-			return "", e
+			return "", uploadError(e)
 		}
 		if u.ID != oldID {
 			return "", fault("api_invalid_upload", false)
 		}
 	}
 	if u.Status == "failed" {
-		return "", fault("processing_"+safeCode(u.Error), false)
+		return "", fault("processing_"+safeCode(u.Error), u.Error == "expired" || u.Error == "staging_unavailable")
 	}
 	if !validUpload(u, in) || u.Status != "ready" || u.DraftID == "" {
 		return "", fault("api_invalid_upload", true)
@@ -174,4 +183,14 @@ func (c *apiClient) retry(ctx context.Context, in ingest.ExternalInput) (ingest.
 		e = fault("api_invalid_upload", false)
 	}
 	return u, e
+}
+
+// Upload rows may expire between receipt lookup and chunk/status requests.
+// These conflicts are transient and say nothing about moderation of a pack.
+func uploadError(e error) error {
+	var f *Fault
+	if errors.As(e, &f) && (f.Code == "api_http_404" || f.Code == "api_http_409") {
+		return fault("upload_interrupted", true)
+	}
+	return e
 }

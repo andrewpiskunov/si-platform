@@ -26,7 +26,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, out, st
 	fs.SetOutput(stderr)
 	mode := fs.String("mode", "incremental", "full or incremental")
 	dir := fs.String("directory", getenv("SI_SYNC_DIR"), "scratch directory (default .local/sibrowser)")
-	pages := fs.Int("max-pages", 0, "maximum listing requests this run (0 unlimited)")
+	pages := fs.Int("max-pages", 0, "maximum forward pages this run, excluding up to 2 resume overlap pages (0 unlimited)")
 	items := fs.Int("max-items", 0, "maximum packages attempted this run (0 unlimited)")
 	timeout := fs.Duration("timeout", 23*time.Hour, "overall deadline; increase for initial full import")
 	interval := fs.Duration("interval", time.Second, "minimum source request interval, at least 1s")

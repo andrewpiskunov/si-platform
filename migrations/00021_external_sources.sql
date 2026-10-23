@@ -5,6 +5,9 @@ CREATE TABLE external_sources (
  pack_limit integer NOT NULL CHECK(pack_limit BETWEEN 1 AND 100000),
  storage_limit bigint NOT NULL CHECK(storage_limit>0 AND storage_limit<=1125899906842624),
  next_page integer NOT NULL DEFAULT 1 CHECK(next_page>0),
+ reconciling boolean NOT NULL DEFAULT false,
+ reconcile_at timestamptz NOT NULL DEFAULT '1970-01-01 00:00:00+00',
+ last_success_at timestamptz NOT NULL DEFAULT '1970-01-01 00:00:00+00',
  bootstrap_complete boolean NOT NULL DEFAULT false,
  epoch bigint NOT NULL DEFAULT 0
 );

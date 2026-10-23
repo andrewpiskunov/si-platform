@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"siplatform/internal/accounts"
+	"siplatform/internal/library"
 )
 
 const CatalogueReceiptLimit = 100000
@@ -119,7 +120,7 @@ func catalogueReplay(ctx context.Context, tx pgx.Tx, owner string, in CatalogueI
 		}
 		if blocked {
 			if in.Origin == "external_import" {
-				return Upload{}, false, ErrConflict
+				return Upload{}, false, library.ErrBlocked
 			}
 			return Upload{}, false, ErrForbidden
 		}
