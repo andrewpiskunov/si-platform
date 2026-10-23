@@ -38,6 +38,21 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+  sibrowser-sync:
+    image: si-platform-core:local
+    build: .
+    profiles: ["sync"]
+    entrypoint: ["/app/sibrowser-sync"]
+    command: ["--mode=incremental", "--allow-http-api"]
+    environment:
+      DATABASE_URL: postgres://si:${POSTGRES_PASSWORD:-local-dev-only}@db:5432/si?sslmode=disable
+      SI_API_URL: http://api:8080
+      SI_API_TOKEN: ${SI_SYNC_API_TOKEN:-}
+      SI_SYNC_DIR: /data/sibrowser
+    volumes:
+      - sync-data:/data
+    depends_on:
+      - api
   web:
     build: ./web
     environment:
@@ -59,3 +74,4 @@ services:
 volumes:
   app-data:
   postgres-data:
+  sync-data:

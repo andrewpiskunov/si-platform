@@ -181,6 +181,10 @@ func (s *Service) finish(ctx context.Context, j job, epoch int64, draftID string
 		tx, err := s.begin(ctx, actor, true)
 		if err == nil {
 			defer tx.Rollback(context.Background())
+			_, storageLimit, limitErr := library.AccountLimits(ctx, tx, j.owner)
+			if limitErr != nil {
+				return
+			}
 			used, usageErr := library.StorageUsage(ctx, tx, j.owner)
 			if usageErr != nil {
 				return
@@ -189,7 +193,7 @@ func (s *Service) finish(ctx context.Context, j job, epoch int64, draftID string
 				status = "failed"
 				code = "media_invalid"
 				resultAsset = nil
-			} else if used+asset.Size+asset.Prepared.Standard.Size+asset.Prepared.Economy.Size > 10<<30 {
+			} else if used+asset.Size+asset.Prepared.Standard.Size+asset.Prepared.Economy.Size > storageLimit {
 				status = "failed"
 				code = "draft_quota"
 				resultAsset = nil

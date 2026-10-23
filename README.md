@@ -58,3 +58,7 @@ Docker Compose подготовлен для самостоятельного р
 - [Интерактивный прототип игрового цикла](http://localhost:5173/designs/play/index.html): ведущий, игрок, общий экран; устная и автоматическая проверка; 3/12 игроков. Демонстрационные данные, отдельно от работающих комнат.
 
 - [Рабочий игровой экран](Docs/33-PRODUCT-GAME-SCREEN.md): перенос сцены и пульта в реальные комнаты, серверное открытие кнопки, границы этапа.
+
+### SIBrowser catalogue synchronization
+
+Operator CLI for initial full import and daily updates with automatic publication: [setup and recovery](Docs/35-SIBROWSER-SYNC.md).

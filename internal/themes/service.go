@@ -284,7 +284,11 @@ func (s *Service) Attach(ctx context.Context, actor accounts.Identity, id string
 	}
 	// The ready upload already pays these bytes. A global receipt transfers that
 	// charge exactly once into retained version storage, including after deletion.
-	if used > 10<<30 {
+	_, storageLimit, err := library.AccountLimits(ctx, a.tx, a.actor.User.ID)
+	if err != nil {
+		return Version{}, serviceError(ctx, err)
+	}
+	if used > storageLimit {
 		return Version{}, ErrQuota
 	}
 	if id == "" {

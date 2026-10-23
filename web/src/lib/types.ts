@@ -7,6 +7,7 @@ export interface User {
   created_at: string;
 }
 export interface Rights {
+  origin?: string;
   license: string;
   source_url: string;
   attribution: string;

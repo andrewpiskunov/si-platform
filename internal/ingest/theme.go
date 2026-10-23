@@ -194,11 +194,15 @@ func (s *Service) finishTheme(ctx context.Context, j job, epoch int64, prepared 
 			code = "theme_invalid"
 			issues = themeDiagnostics(err)
 		} else {
+			_, storageLimit, limitErr := library.AccountLimits(ctx, tx, j.owner)
+			if limitErr != nil {
+				return
+			}
 			used, usageErr := library.StorageUsage(ctx, tx, j.owner)
 			if usageErr != nil {
 				return
 			}
-			if used+prepared.SizeBytes > 10<<30 {
+			if used+prepared.SizeBytes > storageLimit {
 				code = "draft_quota"
 			} else {
 				raw, encodeErr := json.Marshal(prepared)

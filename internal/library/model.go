@@ -26,6 +26,7 @@ type Asset struct {
 	Prepared    *media.Prepared `json:"prepared,omitempty"`
 }
 type Rights struct {
+	Origin        string `json:"origin,omitempty"`
 	License       string `json:"license"`
 	SourceURL     string `json:"source_url"`
 	Attribution   string `json:"attribution"`

@@ -385,11 +385,23 @@ func (s *Service) removeStage(ctx context.Context, id string) {
 	if !validID(id) {
 		return
 	}
-	err := s.root.Remove(id)
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return
+	}
+	defer tx.Rollback(context.Background())
+	var status string
+	if err = tx.QueryRow(ctx, `SELECT status FROM uploads WHERE id=$1 FOR UPDATE`, id).Scan(&status); err != nil || status != "ready" && status != "failed" {
+		return
+	}
+	err = s.root.Remove(id)
 	if err != nil && !os.IsNotExist(err) {
 		return
 	}
-	_, _ = s.pool.Exec(ctx, `UPDATE uploads SET staged_deleted=true WHERE id=$1 AND status IN ('ready','failed')`, id)
+	if _, err = tx.Exec(ctx, `UPDATE uploads SET staged_deleted=true WHERE id=$1`, id); err != nil {
+		return
+	}
+	_ = tx.Commit(ctx)
 }
 func (s *Service) cleanup(ctx context.Context, epoch int64) {
 	// At most sixteen jobs can be active; terminal cleanup is paged in fixed batches.

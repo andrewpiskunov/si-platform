@@ -61,7 +61,7 @@
           <div class="panel subtle">
             <h3>Авторство и права</h3>
             <p>{card.rights?.attribution || card.author}</p>
-            <p class="helper">{card.rights?.license}</p>
+            <p class="helper">{card.rights?.license || (card.rights?.origin === 'external_import' ? 'Лицензия источником не указана' : '')}</p>
             {#if card.rights?.source_url && /^https?:\/\//.test(card.rights.source_url)}<a
                 class="text-link"
                 href={card.rights.source_url}

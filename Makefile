@@ -18,6 +18,7 @@ build:
 	go build -o bin/demo ./cmd/demo
 	go build -o bin/siq ./cmd/siq
 	go build -o bin/admin ./cmd/admin
+	go build -o bin/sibrowser-sync ./cmd/sibrowser-sync
 migrate:
 	go run ./cmd/migrate
 run:

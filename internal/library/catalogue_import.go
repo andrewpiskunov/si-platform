@@ -17,7 +17,7 @@ func catalogueForCreate(ctx context.Context, a *access, upload string) (catalogu
 	if upload == "" {
 		return c, nil
 	}
-	e := a.tx.QueryRow(ctx, `SELECT id,pack_id,license,source_url,attribution FROM catalogue_imports WHERE upload_id=$1 AND owner_id=$2`, upload, a.actor.User.ID).Scan(&c.id, &c.pack, &c.rights.License, &c.rights.SourceURL, &c.rights.Attribution)
+	e := a.tx.QueryRow(ctx, `SELECT id,pack_id,license,source_url,attribution,origin FROM catalogue_imports WHERE upload_id=$1 AND owner_id=$2`, upload, a.actor.User.ID).Scan(&c.id, &c.pack, &c.rights.License, &c.rights.SourceURL, &c.rights.Attribution, &c.rights.Origin)
 	if errors.Is(e, pgx.ErrNoRows) {
 		return catalogueImport{}, nil
 	}
@@ -26,6 +26,15 @@ func catalogueForCreate(ctx context.Context, a *access, upload string) (catalogu
 	}
 	if a.actor.User.Role != "admin" {
 		return c, ErrForbidden
+	}
+	if c.rights.Origin == "external_import" {
+		var allowed bool
+		if e := a.tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM external_sources WHERE source='sibrowser' AND owner_id=$1)`, a.actor.User.ID).Scan(&allowed); e != nil {
+			return c, e
+		}
+		if !allowed {
+			return c, ErrForbidden
+		}
 	}
 	return c, nil
 }

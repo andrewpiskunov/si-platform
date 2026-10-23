@@ -54,7 +54,11 @@ func (s *Service) Usage(ctx context.Context, actor accounts.Identity) (Usage, er
 	if err != nil {
 		return Usage{}, err
 	}
-	u := Usage{Storage: StorageQuota{UsedBytes: used, LimitBytes: StorageLimitBytes, RemainingBytes: max(0, StorageLimitBytes-used)}, Packs: CountQuota{Limit: PackCountLimit}, Themes: CountQuota{Limit: 100}, Uploads: UploadQuota{Limit: 2}, Limits: UsageLimits{PackRevisions: PackRevisionLimit, ThemeRevisions: 100, SIQBytes: 250 << 20, MediaBytes: 100 << 20, ThemeBytes: 5 << 20}}
+	packLimit, storageLimit, err := AccountLimits(ctx, a.tx, a.actor.User.ID)
+	if err != nil {
+		return Usage{}, err
+	}
+	u := Usage{Storage: StorageQuota{UsedBytes: used, LimitBytes: storageLimit, RemainingBytes: max(0, storageLimit-used)}, Packs: CountQuota{Limit: packLimit}, Themes: CountQuota{Limit: 100}, Uploads: UploadQuota{Limit: 2}, Limits: UsageLimits{PackRevisions: PackRevisionLimit, ThemeRevisions: 100, SIQBytes: 250 << 20, MediaBytes: 100 << 20, ThemeBytes: 5 << 20}}
 	err = a.tx.QueryRow(ctx, `SELECT
  (SELECT count(*) FROM library_packs WHERE owner_id=$1 AND deleted_at IS NULL),
  (SELECT count(*) FROM themes WHERE owner_id=$1),

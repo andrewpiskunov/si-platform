@@ -291,14 +291,18 @@ func createInAccess(ctx context.Context, a *access, in Save) (Draft, error) {
 	if err != nil {
 		return Draft{}, err
 	}
-	if count >= PackCountLimit {
+	limits, storageLimit, err := AccountLimits(ctx, a.tx, a.actor.User.ID)
+	if err != nil {
+		return Draft{}, err
+	}
+	if count >= limits {
 		return Draft{}, ErrQuota
 	}
 	used, err = usage(ctx, a.tx, a.actor.User.ID)
 	if err != nil {
 		return Draft{}, err
 	}
-	if used+d.Card.SizeBytes > StorageLimitBytes {
+	if used+d.Card.SizeBytes > storageLimit {
 		return Draft{}, ErrQuota
 	}
 	packID, err := id()
@@ -428,7 +432,11 @@ func updateInAccess(ctx context.Context, a *access, packID string, base int, in 
 	if err != nil {
 		return Draft{}, err
 	}
-	if used+d.Card.SizeBytes > StorageLimitBytes {
+	_, storageLimit, err := AccountLimits(ctx, a.tx, a.actor.User.ID)
+	if err != nil {
+		return Draft{}, err
+	}
+	if used+d.Card.SizeBytes > storageLimit {
 		return Draft{}, ErrQuota
 	}
 	d.Card.ID = packID

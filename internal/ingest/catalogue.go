@@ -18,6 +18,7 @@ import (
 const CatalogueReceiptLimit = 100000
 
 type CatalogueInput struct {
+	Origin          string `json:"origin,omitempty"`
 	Namespace       string `json:"namespace"`
 	ExternalID      string `json:"external_id"`
 	Name            string `json:"name"`
@@ -54,6 +55,9 @@ func (in CatalogueInput) Validate() error {
 	return nil
 }
 func (s *Service) CreateCatalogue(ctx context.Context, a accounts.Identity, in CatalogueInput) (Upload, error) {
+	if in.Origin != "" {
+		return Upload{}, ErrInvalid
+	}
 	if e := in.Validate(); e != nil {
 		return Upload{}, e
 	}
@@ -77,6 +81,15 @@ func catalogueReplay(ctx context.Context, tx pgx.Tx, owner string, in CatalogueI
 	}
 	raw, _ := json.Marshal(in)
 	sum := sha256.Sum256(raw)
+	if in.Origin == "external_import" {
+		var allowed bool
+		if e := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM external_sources WHERE source=$1 AND owner_id=$2)`, in.Namespace, owner).Scan(&allowed); e != nil {
+			return Upload{}, false, safeError(ctx, e)
+		}
+		if !allowed {
+			return Upload{}, false, ErrForbidden
+		}
+	}
 	var hash, upload, pack string
 	e := tx.QueryRow(ctx, `SELECT request_hash,upload_id,pack_id FROM catalogue_imports WHERE owner_id=$1 AND namespace=$2 AND external_id=$3`, owner, in.Namespace, in.ExternalID).Scan(&hash, &upload, &pack)
 	if errors.Is(e, pgx.ErrNoRows) {
@@ -105,6 +118,9 @@ func catalogueReplay(ctx context.Context, tx pgx.Tx, owner string, in CatalogueI
 			return Upload{}, false, safeError(ctx, e)
 		}
 		if blocked {
+			if in.Origin == "external_import" {
+				return Upload{}, false, ErrConflict
+			}
 			return Upload{}, false, ErrForbidden
 		}
 		return Upload{ID: upload, Size: in.Size, Offset: in.Size, Status: "ready", DraftID: pack, Purpose: "siq"}, true, nil
@@ -122,6 +138,6 @@ func catalogueInsert(ctx context.Context, tx pgx.Tx, owner, upload string, in Ca
 	if e != nil {
 		return e
 	}
-	_, e = tx.Exec(ctx, `INSERT INTO catalogue_imports(id,owner_id,namespace,external_id,request_hash,sha256,name,size,source_url,license,attribution,permission_basis,upload_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, id, owner, in.Namespace, in.ExternalID, hex.EncodeToString(sum[:]), in.SHA256, in.Name, in.Size, in.SourceURL, in.License, in.Attribution, in.PermissionBasis, upload)
+	_, e = tx.Exec(ctx, `INSERT INTO catalogue_imports(id,owner_id,namespace,external_id,request_hash,sha256,name,size,source_url,license,attribution,permission_basis,upload_id,origin) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, id, owner, in.Namespace, in.ExternalID, hex.EncodeToString(sum[:]), in.SHA256, in.Name, in.Size, in.SourceURL, in.License, in.Attribution, in.PermissionBasis, upload, in.Origin)
 	return safeError(ctx, e)
 }

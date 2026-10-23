@@ -62,6 +62,9 @@ func (s *Server) platformRoutes(r chi.Router) {
 	r.Head("/rooms/{room}/media/{media}", s.roomMedia)
 	if s.options.Uploads != nil {
 		r.Post("/catalogue-imports", s.catalogueImport)
+		r.Post("/external-imports/sibrowser", s.externalImport)
+		r.Post("/external-imports/sibrowser/publish", s.externalPublish)
+		r.Post("/external-imports/sibrowser/retry", s.externalRetry)
 		r.Post("/media-uploads", s.mediaUploadCreate)
 		r.Post("/drafts/{id}/assets", s.attachMedia)
 		r.Post("/uploads", s.uploadCreate)
