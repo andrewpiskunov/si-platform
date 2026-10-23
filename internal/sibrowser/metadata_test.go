@@ -36,3 +36,42 @@ func TestMetadataRejectsWrongPackage(t *testing.T) {
 		t.Fatal("wrong package accepted")
 	}
 }
+
+// Synthetic contract fixture; real captures currently expose no rating metadata.
+func TestMetadataOptionalEngagement(t *testing.T) {
+	b, _ := os.ReadFile("testdata/22419.html")
+	base := string(b)
+	// Insert inside the owning article, immediately before its title.
+	pos := strings.Index(base, `<h1`)
+	if pos < 0 {
+		t.Fatal("missing fixture title")
+	}
+	markup := `<div itemprop="aggregateRating" itemscope itemtype="https://schema.org/AggregateRating"><meta itemprop="ratingValue" content="4.6"><meta itemprop="ratingCount" content="20"><meta itemprop="bestRating" content="5"><meta itemprop="worstRating" content="1"></div>`
+	m, e := parseMetadata(strings.NewReader(base[:pos]+markup+base[pos:]), "22419")
+	if e != nil || m.Rating == nil || *m.Rating != 4.6 || m.RatingCount == nil || *m.RatingCount != 20 {
+		t.Fatal(m, e)
+	}
+	m, e = parseMetadata(strings.NewReader(base), "22419")
+	if e != nil || m.Rating != nil || m.RatingCount != nil || m.Likes != nil {
+		t.Fatal("invented values", m, e)
+	}
+	m, e = parseMetadata(strings.NewReader(base[:pos]+strings.Replace(markup, `content="5"`, `content="10"`, 1)+base[pos:]), "22419")
+	if e != nil || m.Rating != nil {
+		t.Fatal("wrong scale", m, e)
+	}
+}
+
+func TestMetadataEngagementScopeAndLikes(t *testing.T) {
+	b, _ := os.ReadFile("testdata/22419.html")
+	base := string(b)
+	pos := strings.Index(base, "<h1")
+	markup := `<div itemprop="interactionStatistic"><link itemprop="interactionType" href="https://schema.org/LikeAction"><meta itemprop="userInteractionCount" content="12"></div>`
+	m, e := parseMetadata(strings.NewReader(base[:pos]+markup+base[pos:]), "22419")
+	if e != nil || m.Likes == nil || *m.Likes != 12 {
+		t.Fatal(m, e)
+	}
+	m, e = parseMetadata(strings.NewReader(base[:pos]+"<article>"+markup+"</article>"+base[pos:]), "22419")
+	if e != nil || m.Likes != nil {
+		t.Fatal("recommended likes leaked", m, e)
+	}
+}

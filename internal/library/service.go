@@ -155,20 +155,20 @@ func (a *access) reader() error {
 	return nil
 }
 
-const publicCardColumns = "r.card,r.status,r.rights,r.updated_at,p.blocked,COALESCE(p.published_revision,0),COALESCE(p.pending_revision,0),COALESCE((SELECT summary FROM source_metadata WHERE pack_id=p.id),'null'),(COALESCE(r.document->>'logo','')<>'' OR EXISTS(SELECT 1 FROM source_metadata WHERE pack_id=p.id AND cover IS NOT NULL AND cover<>'null'::jsonb))"
+const publicCardColumns = "r.card,r.status,r.rights,r.updated_at,p.blocked,COALESCE(p.published_revision,0),COALESCE(p.pending_revision,0),COALESCE((SELECT summary FROM source_metadata WHERE pack_id=p.id),'null'),(COALESCE(r.document->>'logo','')<>'' OR EXISTS(SELECT 1 FROM source_metadata WHERE pack_id=p.id AND cover IS NOT NULL AND cover<>'null'::jsonb))" + "," + engagementColumns
 
-const cardColumns = "r.card,r.status,r.rights,r.updated_at,p.blocked,COALESCE(p.published_revision,0),COALESCE(p.pending_revision,0),'null'::jsonb,false"
+const cardColumns = "r.card,r.status,r.rights,r.updated_at,p.blocked,COALESCE(p.published_revision,0),COALESCE(p.pending_revision,0),'null'::jsonb,false,null::jsonb"
 
 type scanner interface{ Scan(...any) error }
 
 func scanCard(row scanner) (Card, error) {
 	var card Card
-	var metadata, rights, source []byte
+	var metadata, rights, source, engagement []byte
 	var hasCover bool
 	var status string
 	var blocked bool
 	var published, pending int
-	err := row.Scan(&metadata, &status, &rights, &card.UpdatedAt, &blocked, &published, &pending, &source, &hasCover)
+	err := row.Scan(&metadata, &status, &rights, &card.UpdatedAt, &blocked, &published, &pending, &source, &hasCover, &engagement)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return card, ErrNotFound
 	}
@@ -209,6 +209,9 @@ func scanCard(row scanner) (Card, error) {
 				card.Tags = append(card.Tags, t)
 			}
 		}
+	}
+	if card.Engagement, err = decodeEngagement(engagement); err != nil {
+		return card, err
 	}
 	if hasCover {
 		card.CoverURL = "/api/catalogue/" + card.ID + "/cover"

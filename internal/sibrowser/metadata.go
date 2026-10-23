@@ -67,6 +67,7 @@ func parseMetadata(r io.Reader, id string) (library.SourceMetadata, error) {
 	if main == nil {
 		return m, fault("metadata_markup_changed", true)
 	}
+	parseEngagement(main, &m)
 	stats := false
 	roundNames := map[string]string{}
 	ownWalk(main, func(n *html.Node) {
@@ -199,4 +200,61 @@ func (s *Source) Cover(ctx context.Context, id, raw string) ([]byte, error) {
 		return nil, fault("cover_too_large", false)
 	}
 	return b, nil
+}
+
+// Only explicit semantic metadata inside the owning article is eligible.
+// Missing values stay nil. Do not infer ratings from downloads or visual numbers.
+func parseEngagement(main *html.Node, m *library.SourceMetadata) {
+	ownWalk(main, func(n *html.Node) {
+		if attr(n, "itemprop") != "aggregateRating" {
+			return
+		}
+		values := map[string]string{}
+		ownWalk(n, func(c *html.Node) {
+			prop := attr(c, "itemprop")
+			v := attr(c, "content")
+			if v == "" {
+				v = cleanText(c)
+			}
+			values[prop] = v
+		})
+		if v := values["bestRating"]; v != "" && v != "5" {
+			return
+		}
+		if v := values["worstRating"]; v != "" && v != "1" {
+			return
+		}
+		rating, e := strconv.ParseFloat(strings.ReplaceAll(values["ratingValue"], ",", "."), 64)
+		if e != nil || !(rating >= 1 && rating <= 5) {
+			return
+		}
+		m.Rating = &rating
+		if count, e := strconv.ParseInt(strings.ReplaceAll(values["ratingCount"], " ", ""), 10, 64); e == nil && count >= 0 && count <= 1000000000000 {
+			m.RatingCount = &count
+		}
+	})
+	ownWalk(main, func(n *html.Node) {
+		if attr(n, "itemprop") != "interactionStatistic" {
+			return
+		}
+		like := false
+		var count *int64
+		ownWalk(n, func(c *html.Node) {
+			if attr(c, "itemprop") == "interactionType" && (attr(c, "href") == "https://schema.org/LikeAction" || attr(c, "href") == "http://schema.org/LikeAction") {
+				like = true
+			}
+			if attr(c, "itemprop") == "userInteractionCount" {
+				v := attr(c, "content")
+				if v == "" {
+					v = cleanText(c)
+				}
+				if x, e := strconv.ParseInt(v, 10, 64); e == nil && x >= 0 && x <= 1000000000000 {
+					count = &x
+				}
+			}
+		})
+		if like {
+			m.Likes = count
+		}
+	})
 }

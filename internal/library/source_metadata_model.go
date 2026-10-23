@@ -25,6 +25,9 @@ type SourceRound struct {
 	Themes []SourceTheme `json:"themes"`
 }
 type SourceMetadata struct {
+	Rating        *float64        `json:"rating"`
+	RatingCount   *int64          `json:"rating_count"`
+	Likes         *int64          `json:"likes"`
 	Name          string          `json:"name"`
 	Authors       []SourceLink    `json:"authors"`
 	Description   []string        `json:"description"`
@@ -59,6 +62,9 @@ func ValidSourceCover(id, raw string) bool {
 	return raw == "" || sourceIDPattern.MatchString(id) && raw == "https://www.sibrowser.ru/packages/"+id+"/logo.webp"
 }
 func (m SourceMetadata) Validate(id string) error {
+	if m.Rating != nil && (*m.Rating < 1 || *m.Rating > 5) || m.RatingCount != nil && (*m.RatingCount < 0 || *m.RatingCount > 1000000000000 || m.Rating == nil) || m.Likes != nil && (*m.Likes < 0 || *m.Likes > 1000000000000) || m.Downloads != nil && *m.Downloads > 1000000000000 {
+		return ErrInvalid
+	}
 	b, e := json.Marshal(m)
 	if e != nil || len(b) > 512<<10 || !sourceIDPattern.MatchString(id) || strings.TrimSpace(m.Name) == "" || len(m.Name) > 4000 || m.Filename == "" || len(m.Authors) == 0 || len(m.Authors) > 100 || !ValidSourceCover(id, m.CoverURL) {
 		return ErrInvalid

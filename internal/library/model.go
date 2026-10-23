@@ -34,6 +34,7 @@ type Rights struct {
 	Confirmed     bool   `json:"confirmed"`
 }
 type Card struct {
+	Engagement        *Engagement    `json:"engagement,omitempty"`
 	Source            *SourceSummary `json:"source,omitempty"`
 	CoverURL          string         `json:"cover_url,omitempty"`
 	PublishedRevision int            `json:"published_revision"`

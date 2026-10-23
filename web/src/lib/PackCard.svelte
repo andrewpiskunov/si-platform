@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
+ import PackEngagement from './PackEngagement.svelte';
  import PackCover from './PackCover.svelte';
  import {sourceDate} from './source-metadata.ts';
   import { page } from '$app/state';
@@ -31,7 +32,8 @@
     </div>
     <h3>{card.name || 'Новый пакет'}</h3>
     <span class="byline">{card.author || 'Автор пакета'}</span>
- {#if card.source}<small class="muted">{sourceDate(card.source.published_date)}{#if card.source.downloads != null} · {card.source.downloads.toLocaleString('ru-RU')} скачиваний на SIBrowser{/if}</small>{/if}
+ {#if card.source}<small class="muted">{sourceDate(card.source.published_date)}</small>{/if}
+ {#if !studio && card.engagement}<PackEngagement packId={card.id} initial={card.engagement} compact />{/if}
   </div>
   <div class="pack-card-foot">
     <span>{card.question_count} вопросов · {card.round_count} раундов</span><span

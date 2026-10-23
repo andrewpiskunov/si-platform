@@ -3,6 +3,7 @@
   import { contextLink, roomContext } from '#lib/appearance.ts';
   const room = $derived(roomContext(page.url));
   import SourceDetails from '#lib/SourceDetails.svelte';
+ import PackEngagement from '#lib/PackEngagement.svelte';
  import PackCover from '#lib/PackCover.svelte';
  import CreateRoom from '#lib/CreateRoom.svelte';
   import { api, bytes, errorText } from '#lib/api.ts';
@@ -50,6 +51,7 @@
           <div><strong>{card.round_count}</strong><span>раундов</span></div>
           <div><strong>{card.difficulty || '—'}</strong><span>сложность из 10</span></div>
         </div>
+        {#if card.engagement}<PackEngagement packId={card.id} initial={card.engagement} />{/if}
         <div class="stack">
  {#if data.detail}<SourceDetails detail={data.detail} {card} />{/if}
           <p class="muted">

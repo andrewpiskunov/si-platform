@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -30,7 +31,7 @@ func (s *Server) exportDraft(w http.ResponseWriter, r *http.Request) {
 		appError(w, e)
 		return
 	}
-	s.export(w, r, d)
+	s.export(w, r, d, false)
 }
 func (s *Server) publicDownload(w http.ResponseWriter, r *http.Request) {
 	a, ok := s.optionalIdentity(w, r)
@@ -42,9 +43,29 @@ func (s *Server) publicDownload(w http.ResponseWriter, r *http.Request) {
 		appError(w, e)
 		return
 	}
-	s.export(w, r, d)
+	// Catalogue downloads always serve the published revision, including for owners.
+	if d.Card.PublishedRevision == 0 {
+		appError(w, library.ErrNotFound)
+		return
+	}
+	if d.Card.Revision != d.Card.PublishedRevision {
+		d, e = s.options.Library.ForDownload(r.Context(), a, d.Card.ID, d.Card.PublishedRevision)
+		if e != nil {
+			appError(w, e)
+			return
+		}
+	}
+	if d.Card.PublishedRevision != d.Card.Revision {
+		appError(w, library.ErrNotFound)
+		return
+	}
+	if !d.Card.AllowDownload {
+		appError(w, library.ErrForbidden)
+		return
+	}
+	s.export(w, r, d, true)
 }
-func (s *Server) export(w http.ResponseWriter, r *http.Request, d library.Draft) {
+func (s *Server) export(w http.ResponseWriter, r *http.Request, d library.Draft, countDownload bool) {
 	select {
 	case s.exports <- struct{}{}:
 		defer func() { <-s.exports }()
@@ -76,7 +97,18 @@ func (s *Server) export(w http.ResponseWriter, r *http.Request, d library.Draft)
 	w.Header().Set("Content-Disposition", `attachment; filename="package.siq"`)
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	http.ServeContent(w, r, "package.siq", time.Time{}, f)
+	transfer := &downloadResponse{ResponseWriter: w}
+	http.ServeContent(transfer, r, "package.siq", time.Time{}, f)
+	stat, statErr := f.Stat()
+	if countDownload && r.Method == http.MethodGet && r.Header.Get("Range") == "" && transfer.status == http.StatusOK && !transfer.failed && statErr == nil && transfer.bytes == stat.Size() && ctx.Err() == nil {
+		// net/http may still buffer the tail even after Write reports success.
+		if err := http.NewResponseController(w).Flush(); err != nil {
+			return
+		}
+		if err := s.options.Library.RecordDownload(ctx, d.Card.ID); err != nil {
+			log.Printf("record package download: %v", err)
+		}
+	}
 }
 func (s *Server) originalDraft(w http.ResponseWriter, r *http.Request) {
 	a, ok := s.identity(w, r)
@@ -205,4 +237,31 @@ func (b *blobSeeker) Seek(offset int64, whence int) (int64, error) {
 	}
 	b.pos = base + offset
 	return b.pos, nil
+}
+
+// Observe the actual bytes written, including errors; ServeContent handles ranges.
+type downloadResponse struct {
+	http.ResponseWriter
+	status int
+	bytes  int64
+	failed bool
+}
+
+func (w *downloadResponse) WriteHeader(status int) {
+	if w.status != 0 {
+		return
+	}
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+func (w *downloadResponse) Write(b []byte) (int, error) {
+	if w.status == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
+	n, e := w.ResponseWriter.Write(b)
+	w.bytes += int64(n)
+	if e != nil || n != len(b) {
+		w.failed = true
+	}
+	return n, e
 }
