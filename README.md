@@ -62,3 +62,5 @@ Docker Compose подготовлен для самостоятельного р
 ### SIBrowser catalogue synchronization
 
 Operator CLI for initial full import and daily updates with automatic publication: [setup and recovery](Docs/35-SIBROWSER-SYNC.md).
+
+Продолжение этой ветки на другой машине: [состояние, запуск и перенос локальных данных](Docs/36-SIBROWSER-HANDOFF.md).
