@@ -127,13 +127,16 @@ export class RoomConnection {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private attempts = 0;
   private room: string;
+  private displayOnly = false;
   private update: (protocol: RoomProtocol, status: string, error?: string) => void;
   constructor(
     room: string,
     token: string,
-    update: (protocol: RoomProtocol, status: string, error?: string) => void
+    update: (protocol: RoomProtocol, status: string, error?: string) => void,
+    displayOnly = false
   ) {
     this.room = room;
+    this.displayOnly = displayOnly;
     this.protocol = new RoomProtocol(token);
     this.update = update;
   }
@@ -178,6 +181,7 @@ export class RoomConnection {
     if (this.stopped) return;
     this.update(this.protocol, 'connecting');
     const url = new URL(`/api/rooms/${encodeURIComponent(this.room)}/ws`, location.origin);
+    if (this.displayOnly) url.searchParams.set('display', '1');
     url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const socket = new WebSocket(url);
     this.socket = socket;

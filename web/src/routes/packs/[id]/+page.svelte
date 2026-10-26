@@ -1,8 +1,11 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { contextLink, roomContext } from '#lib/appearance.ts';
   const room = $derived(roomContext(page.url));
-  import CreateRoom from '#lib/CreateRoom.svelte';
+  import CreateRoomDialog from '#lib/CreateRoomDialog.svelte';
+  let creating = $state(false);
+  onMount(() => { creating = page.url.searchParams.get('create') === '1'; });
   import { api, bytes, errorText } from '#lib/api.ts';
   import { user } from '#lib/session.ts';
   let { data } = $props();
@@ -30,7 +33,7 @@
 
 <svelte:head><title>{data.card?.name || 'Пакет'} — Своя игра</title></svelte:head>
 <section class="page">
-  <div class="breadcrumbs"><a href={contextLink('/', room)}>Каталог</a> / Пакет вопросов</div>
+  <div class="breadcrumbs"><a href={contextLink('/packs', room)}>Каталог</a> / Пакет вопросов</div>
   {#if data.card}{@const card = data.card}
     <div class="two-columns">
       <div>
@@ -40,7 +43,7 @@
         <div class="row">
           {#each card.tags || [] as tag}<a
               class="tag"
-              href={contextLink(`/?tag=${encodeURIComponent(tag)}`, room)}>{tag}</a
+              href={contextLink(`/packs?tag=${encodeURIComponent(tag)}`, room)}>{tag}</a
             >{/each}{#if card.restriction}<span class="tag">{card.restriction}</span>{/if}
         </div>
         <div class="stat-grid">
@@ -86,10 +89,12 @@
             </details>{/if}
         </div>
       </div>
-      <aside class="panel"><CreateRoom packId={card.id} revision={card.revision} /></aside>
+      <aside class="panel stack"><h2>Провести игру</h2><p class="muted">Создайте комнату с этим пакетом и пригласите участников.</p><button class="primary" onclick={() => creating = true}>Создать комнату</button></aside>
     </div>{:else}<div class="empty">
       <h1>Пакет недоступен</h1>
       <p>{errorText(data.error)}</p>
-      <a class="button" href={contextLink('/', room)}>В каталог</a>
+      <a class="button" href={contextLink('/packs', room)}>В каталог</a>
     </div>{/if}
 </section>
+
+{#if creating && data.card}<CreateRoomDialog initialPack={data.card} onclose={() => creating = false} />{/if}

@@ -42,6 +42,31 @@
       ><option value="custom">Свои настройки</option></select
     ></label
   >
+  <label
+    >Формат ответов<select
+      value={rules.answer_mode || 'written'}
+      onchange={(event) => change({ answer_mode: event.currentTarget.value as 'oral' | 'written' })}
+    >
+      <option value="oral">Устная игра</option><option value="written">Письменные ответы</option>
+    </select></label
+  >
+  <p class="helper">
+    В устной игре участники отвечают голосом, ведущий сразу оценивает ответ. В письменной — вводят
+    ответ на сайте.
+  </p>
+  <label class="check"
+    ><input
+      type="checkbox"
+      checked={!!rules.presentation}
+      onchange={(event) => change({ presentation: event.currentTarget.checked })}
+    />Показывать заставки раунда и вопросов</label
+  >
+  <p class="helper">
+    Общее вступление, темы и объявления особых вопросов. Таймер игры начинается после заставки;
+    ведущий может её пропустить.
+  </p>
+  <label class="check"><input type="checkbox" checked={!!rules.progressive_reveal} onchange={(event) => change({progressive_reveal:event.currentTarget.checked})} />Постепенно раскрывать вопросы</label>
+  <p class="helper">Текст появляется по буквам, изображение открывается постепенно во время чтения. Общая пауза останавливает раскрытие у всех участников.</p>
   {#if !rules.auto_open}
     <p class="notice">В этой комнате сохранены старые правила с ручным переходом.</p>
     <button type="button" onclick={() => change({ auto_open: true })}

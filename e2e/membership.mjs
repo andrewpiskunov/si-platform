@@ -48,7 +48,7 @@ async function page(who) {
   });
   page.on('websocket', socket => {
     const url = new URL(socket.url());
-    if (!url.pathname.startsWith('/api/rooms/')) return;
+    if (!url.pathname.startsWith('/api/rooms/') || url.searchParams.get('display') === '1') return;
     client.socketCount++;
     if (url.searchParams.has('token')) errors.push('room credential in socket URL');
     socket.on('framesent', () => client.sent++);

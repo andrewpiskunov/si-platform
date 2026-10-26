@@ -1,4 +1,8 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import CreateRoomDialog from '#lib/CreateRoomDialog.svelte';
+  let creating = $state(false);
+  onMount(() => { creating = page.url.searchParams.get('create') === '1'; });
   import { page } from '$app/state';
   import { api } from '#lib/api.ts';
   import type { PublicRooms } from '#lib/types.ts';
@@ -55,15 +59,16 @@
 <section class="page">
   <div class="row between section-head">
     <div>
-      <p class="eyebrow">Есть свободное место</p>
+
       <h1>Публичные комнаты</h1>
       <p class="muted">
         Выберите игру и представьтесь. Для входа игроком или зрителем аккаунт не нужен.
       </p>
     </div>
+    <div class="row"><a class="button" href="/account#my-rooms">Мои комнаты</a><button class="primary" onclick={() => creating = true}>Создать комнату</button>
     <button disabled={refreshing} onclick={refresh}
       >{refreshing ? 'Обновляем…' : 'Обновить список комнат'}</button
-    >
+    ></div>
   </div>
   {#if displayed.error || refreshError}<div class="notice error" role="alert">
       <p>
@@ -99,8 +104,8 @@
           </div>
         </article>{:else}<div class="empty">
           <h2>Пока нет публичных комнат</h2>
-          <p>Обновите список позже или создайте свою игру из каталога пакетов.</p>
-          <a class="button" href={contextLink('/', context)}>Выбрать пакет</a>
+          <p>Создайте комнату, выберите пакет вопросов и пригласите участников.</p>
+          <button class="primary" onclick={() => creating = true}>Создать комнату</button>
         </div>{/each}
     </div>
     <p class="helper" style="margin-top:24px">
@@ -115,6 +120,8 @@
     </div>
   {/if}
 </section>
+
+{#if creating}<CreateRoomDialog onclose={() => creating = false} />{/if}
 
 <style>
   .room-cards {

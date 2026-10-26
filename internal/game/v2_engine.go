@@ -128,6 +128,8 @@ func ApplyAt(s State, actorID string, c Command, nowMS int64, entropy uint64) (S
 		err = restartStage(&n, nowMS)
 	case *StagePayload:
 		switch c.Type {
+		case "skip_presentation":
+			finishPresentation(&n, nowMS)
 		case "continue_media":
 			err = continueMedia(&n, nowMS)
 		case "wait_media":
@@ -251,6 +253,9 @@ func ApplyAt(s State, actorID string, c Command, nowMS int64, entropy uint64) (S
 				}
 			}
 			resumeMedia(&n, nowMS)
+			if g.Reveal != nil {
+				g.Reveal.StartAtMS += nowMS - g.PausedAtMS
+			}
 			g.PausedAtMS = 0
 			if !g.Stage.Expired && g.PausedTimer {
 				g.Stage.DeadlineMS = nowMS + g.Stage.RemainingMS
@@ -258,6 +263,7 @@ func ApplyAt(s State, actorID string, c Command, nowMS int64, entropy uint64) (S
 			g.Stage.RemainingMS = 0
 			g.PausedTimer = false
 		case "finish":
+			g.Reveal = nil
 			stopMedia(&n, nowMS)
 			n.Phase = Finished
 			n.ResumePhase = ""
@@ -327,6 +333,8 @@ func AdvanceAt(s State, nowMS int64) (State, bool) {
 		return n, true
 	}
 	switch g.Stage.Kind {
+	case "round_intro", "round_themes", "question_price", "question_type":
+		nextPresentation(&n, nowMS)
 	case "scheduled_content":
 		startPreparedContent(&n)
 	case "buzz_window":

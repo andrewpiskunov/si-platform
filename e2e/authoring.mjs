@@ -88,7 +88,7 @@ try {
   await api('POST', '/account/register', { username, password, display_name: 'Автор проверки' });
   registered = true;
   if (selectedCase !== 'editor') {
-    await visit('/');
+    await visit('/packs');
     assert.equal(await page.getByLabel('Возрастная отметка', { exact: true }).count(), 1, 'age filter missing');
     assert.ok(process.env.DATABASE_URL, 'DATABASE_URL for the local preview database is required to provision a synthetic moderator');
     await run(process.env.GO || 'go', ['run', './cmd/admin', 'role', username, 'moderator'], { cwd: root, env: process.env, timeout: 60000 });
@@ -108,7 +108,7 @@ try {
     }
     const credentials = await api('POST', '/rooms', { pack_id: ids[0], host_name: 'Ведущий', theme: 'pirate', title: 'Контекст каталога' });
     await page.evaluate(c => sessionStorage.setItem(`room:${c.room_id}`, JSON.stringify(c)), credentials);
-    await visit('/?room=' + credentials.room_id);
+    await visit('/packs?room=' + credentials.room_id);
     await page.getByLabel('Поиск пакетов', { exact: true }).fill(marker.toUpperCase());
     await ageFilter('12');
     await page.getByLabel('Язык', { exact: true }).selectOption('ru');

@@ -1,0 +1,88 @@
+/* The active game uses the viewport; setup and the rest of the site keep their normal flow. */
+.app-shell:has(.room.playing) > .topbar,
+.app-shell:has(.room.playing) > .site-footer,
+.app-shell:has(.room.playing) .theme-context-bar { display:none; }
+.app-shell:has(.room.playing) > main {max-width:none;width:100%;padding:12px 20px;margin:0;}
+.room.playing {margin:0;padding:0;background:none;border:0;}
+.room-back {font-size:13px;white-space:nowrap;}
+.playing .room-header {gap:12px;margin:0 0 8px;align-items:center;}
+.playing .room-header > div:first-child {display:flex;gap:16px;align-items:center;min-width:0;}
+.playing .room-header h1 {font-size:16px!important;line-height:1.2;margin:0!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px;}
+.playing .room-header .eyebrow {display:none;}
+.playing .room-header .helper {font-size:12px;}
+.playing .room-header button {padding:7px 10px;}
+.live-game .section-head {margin:0;align-items:center;gap:16px;}
+.live-game .section-head h2 {font-size:22px;margin:0;}
+.live-game .section-head p {margin:0;}
+.live-game .section-head .eyebrow {font-size:12px;}
+.live-game .room-toolbar {margin:0;}
+.live-game .room-toolbar button {font-size:12px;padding:8px;}
+.live-game .host-console {padding:14px;gap:12px;align-content:start;}
+.live-game .host-console > p {margin:0;font-size:15px;}
+.live-game .host-console .host-answer {font-size:23px;padding-left:10px;}
+.live-game .host-answer .helper {font-size:12px;}
+.live-game .host-console .game-action {padding:10px;margin:0;gap:10px;}
+.live-game .host-console .game-action h3 {margin:0;font-size:14px;}
+.live-game .host-console .game-action select {padding:8px;font-size:15px;}
+.live-game .host-console .game-action .row {gap:8px;}
+.live-game .host-console .game-action button {flex:1;padding:10px;font-size:16px;}
+.live-game .host-console .game-controls {flex-direction:row;gap:8px;}
+.live-game .host-console .game-controls button {font-size:13px;padding:8px;flex:1;}
+.live-game .question-stage {min-height:0;padding:24px;}
+.live-game .question-stage h2 {margin:12px 0;font-size:clamp(28px,3.5vw,64px);line-height:1.2;}
+.live-game .question-price {font-size:18px;margin:0;}
+.live-game .participants-strip {padding:0;margin:0;border:0;}
+.live-game .participants-strip h3, .live-game .host-identity {display:none;}
+.live-game .score-list {display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:6px;}
+.live-game .score-item {padding:8px;gap:4px 8px;grid-template-columns:28px minmax(0,1fr);min-width:0;}
+.live-game .score-item > .participant-avatar {width:28px;height:28px;}
+.live-game .score-item strong {font-size:26px;color:var(--accent);}
+.live-game .score-item .participant-name {font-size:13px;}
+.live-game .score-item .helper:empty {display:none;}
+@media(min-width:1000px) and (min-height:600px) {
+  .room.playing {height:calc(100dvh - 24px);display:flex;flex-direction:column;min-height:0;}
+  .playing .room-header {flex:none;min-height:36px;}
+  .live-game {flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr) auto;gap:10px 16px;}
+  .live-game > .section-head {grid-column:1;grid-row:1;}
+  .live-game > .room-toolbar {grid-column:2;grid-row:1;}
+  .live-game > .room-grid {grid-column:1/-1;grid-row:2;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;min-height:0;}
+  .live-game > .room-grid.participant-view {grid-template-columns:minmax(0,1fr);}
+  .live-game > .room-grid > .stack {min-height:0;overflow:auto;align-content:start;gap:12px;}
+  .live-game > .room-grid > .stack:first-child {display:flex;flex-direction:column;}
+  .live-game .question-stage {flex:1;}
+  .live-game .question-stage.media-question {flex:none;}
+  .live-game > .room-grid > .host-console {align-self:stretch;}
+  .live-game > .participants-strip {grid-column:1/-1;grid-row:3;}
+  .live-game .board-scroll {flex:1;min-height:0;}
+  .live-game .board {height:100%;}
+  .live-game .board-cell {min-height:48px;}
+  .live-game > .notice {position:fixed;z-index:5;bottom:110px;left:24px;max-width:60vw;padding:8px 16px;}
+}
+@media(max-width:999px),(max-height:599px) {
+  .playing .room-header {flex-wrap:wrap;}
+  .playing .room-header > div:first-child {flex-wrap:wrap;gap:8px;}
+  .live-game .room-grid {display:block;}
+  .live-game .host-console {margin-top:12px;}
+  .live-game .question-stage {min-height:40dvh;}
+  .live-game .section-head {margin:16px 0;flex-wrap:wrap;}
+  .live-game .participants-strip {margin-top:16px;}
+  .app-shell:has(.room.playing) > main {padding:12px;}
+}
+.page:has(> .room.playing) {padding:0;max-width:none;margin:0;}
+@media(min-width:1000px) and (min-height:600px) {
+  .room.playing .live-game .room-grid {margin-top:0;}
+  .room.playing .live-game .question-stage {min-height:0;}
+  .room.playing .live-game .participants-strip {margin:0;}
+}
+@media(min-width:1000px) and (min-height:600px) {
+  .room.playing .live-game .room-grid {align-items:stretch;}
+  .room.playing .live-game .host-console {padding:12px;gap:10px;}
+  .room.playing .live-game .host-console .host-answer p {margin:4px 0;}
+  .room.playing .live-game .host-console .game-controls {flex-direction:row;}
+  .room.playing .live-game > .section-head {padding:0;}
+}
+@media(min-width:1000px) and (min-height:600px) {
+  /* Participant action forms must remain inside the scene's scroll area. */
+  .room.playing .live-game > .room-grid.participant-view {display:grid;grid-template-columns:minmax(0,1fr);}
+  .room.playing .live-game > .room-grid > .stack:first-child > .game-action {flex-shrink:0;}
+}

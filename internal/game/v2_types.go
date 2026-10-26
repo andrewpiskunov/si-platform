@@ -2,6 +2,9 @@ package game
 
 // Rules is the versioned, per-question rules snapshot. Durations are seconds.
 type Rules struct {
+	ProgressiveReveal bool   `json:"progressive_reveal,omitempty"`
+	Presentation      bool   `json:"presentation,omitempty"`
+	AnswerMode        string `json:"answer_mode,omitempty"`
 	AutoOpen          bool   `json:"auto_open,omitempty"`
 	ReadingSeconds    int    `json:"reading_seconds,omitempty"`
 	Preset            string `json:"preset"`
@@ -133,6 +136,8 @@ type ActiveQuestion struct {
 
 // Session is private persisted state; transport must use SessionView instead.
 type Session struct {
+	Reveal       *RevealState    `json:"reveal,omitempty"`
+	IntroReturn  *Stage          `json:"intro_return,omitempty"`
 	Content      *ContentState   `json:"content,omitempty"`
 	Version      int             `json:"version"`
 	RulesVersion int64           `json:"rules_version"`
@@ -155,18 +160,19 @@ type RoundView struct {
 	Type string `json:"type"`
 }
 type QuestionView struct {
-	Media        *MediaView `json:"media,omitempty"`
-	ID           string     `json:"id"`
-	InstanceID   string     `json:"instance_id"`
-	Type         string     `json:"type"`
-	Theme        string     `json:"theme"`
-	Price        int64      `json:"price"`
-	Text         string     `json:"text"`
-	Answer       *string    `json:"answer,omitempty"`
-	ContentIndex int        `json:"content_index"`
-	ContentTotal int        `json:"content_total"`
-	AnswerIndex  int        `json:"answer_index"`
-	AnswerTotal  int        `json:"answer_total"`
+	Reveal       *RevealView `json:"reveal,omitempty"`
+	Media        *MediaView  `json:"media,omitempty"`
+	ID           string      `json:"id"`
+	InstanceID   string      `json:"instance_id"`
+	Type         string      `json:"type"`
+	Theme        string      `json:"theme"`
+	Price        int64       `json:"price"`
+	Text         string      `json:"text"`
+	Answer       *string     `json:"answer,omitempty"`
+	ContentIndex int         `json:"content_index"`
+	ContentTotal int         `json:"content_total"`
+	AnswerIndex  int         `json:"answer_index"`
+	AnswerTotal  int         `json:"answer_total"`
 }
 type PlayerView struct {
 	ID              string `json:"id"`
@@ -370,4 +376,21 @@ type SkipQuestionPayload struct {
 	StageID    string `json:"stage_id"`
 	InstanceID string `json:"instance_id"`
 	Reason     string `json:"reason"`
+}
+
+// RevealState persists presentation timing independently of the game deadline.
+// Extending a stage cannot rewind an already-revealed fragment.
+type RevealState struct {
+	StartAtMS  int64 `json:"start_at_ms"`
+	DurationMS int64 `json:"duration_ms"`
+}
+
+// TextOffset counts Unicode code points in the public text, not bytes or UTF-16.
+// Clients may interpolate ElapsedMS at ServerTimeMS, but never advance stages.
+type RevealView struct {
+	Kind       string `json:"kind"`
+	StartAtMS  int64  `json:"start_at_ms"`
+	DurationMS int64  `json:"duration_ms"`
+	ElapsedMS  int64  `json:"elapsed_ms"`
+	TextOffset int    `json:"text_offset"`
 }

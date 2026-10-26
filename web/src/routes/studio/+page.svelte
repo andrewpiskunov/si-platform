@@ -1,4 +1,5 @@
 <script lang="ts">
+  import GuestWorkspace from '#lib/GuestWorkspace.svelte';
   import AIAuthoring from '#lib/AIAuthoring.svelte';
   import UsagePanel from '#lib/UsagePanel.svelte';
   import { page } from '$app/state';
@@ -131,20 +132,18 @@
 <section class="page">
   <div class="section-head row between">
     <div>
-      <p class="eyebrow">Авторская мастерская</p>
-      <h1>Хорошие вопросы<br />начинаются здесь.</h1>
-      <p>Соберите пакет с нуля или продолжите работу с SIQ.</p>
+      <h1>Мастерская пакетов</h1>
+      <p>Создавайте вопросы или редактируйте пакеты SIQ.</p>
     </div>
-    <button class="primary" onclick={create} disabled={busy || login}>＋ Новый пакет</button>
+    {#if !loading && !login}<button class="primary" onclick={create} disabled={busy}>＋ Новый пакет</button>{/if}
   </div>
-  {#if error}<div class="notice error" role="alert">
-      {error}{#if login}
-        <a class="text-link" href="/login">Войти</a>{/if}
-    </div>{/if}{#if !login}<UsagePanel refreshTrigger={usageRefresh} />
+  {#if error && !login}<div class="notice error" role="alert">{error}</div>{/if}
+  {#if login}<GuestWorkspace kind="studio" />{/if}
+  {#if !loading && !login}<UsagePanel refreshTrigger={usageRefresh} />
     <AIAuthoring />
     <div class="two-columns" style="margin:32px 0">
       <div class="panel">
-        <h2>Уже есть пакет?</h2>
+        <h2>Импорт SIQ</h2>
         <p class="muted">
           Загрузите SIQ, чтобы редактировать вопросы и играть с друзьями. До 250 МБ.
         </p>
@@ -172,20 +171,20 @@
       </div>
       <details><summary>Быстро попробовать игру</summary><CreateRoom /></details>
     </div>{/if}
-  <div class="section-head">
+  {#if !loading && !login}<div class="section-head">
     <a class="text-link" href={contextLink('/themes', roomContext(page.url))}
       >Мои темы оформления ↗</a
     >
     <h2>Мои пакеты <span class="muted">{cards.length || ''}</span></h2>
-  </div>
+  </div>{/if}
   {#if loading}<p class="loading" role="status">
       Загружаем ваши пакеты…
     </p>{:else if cards.length}<div class="card-grid">
       {#each cards as card}<PackCard {card} studio />{/each}
     </div>{:else if !login}<div class="empty">
       <div class="empty-symbol" aria-hidden="true">＋</div>
-      <h3>Место для вашей первой идеи</h3>
-      <p>Начните с одной темы. Вопросы, ответы и медиа можно добавить в редакторе.</p>
+      <h3>У вас пока нет пакетов</h3>
+      <p>Создайте пакет или импортируйте файл SIQ.</p>
       <button onclick={create} disabled={busy}>Создать пакет</button>
     </div>{/if}
 </section>

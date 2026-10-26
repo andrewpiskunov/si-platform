@@ -61,7 +61,7 @@ async function newClient(credentials, name, context) {
   clients.push(client);
   page.on('pageerror', error => pageErrors.push({ client: name, message: error.message }));
   page.on('request', req => { if (/\/rooms\/[^/]+\/media\//.test(req.url())) client.mediaRequests.push(new URL(req.url()).pathname); if (req.url().endsWith('/media-ticket')) client.ticketRequests.push(req.postDataJSON()); });
-  page.on('websocket', socket => socket.on('framereceived', ({ payload }) => {
+  page.on('websocket', socket => new URL(socket.url()).searchParams.get('display') !== '1' && socket.on('framereceived', ({ payload }) => {
     try { const message = JSON.parse(payload.toString()); if (message.state) { client.wire.push(message.state); if (!client.state || message.state.seq >= client.state.seq) client.state = message.state; } } catch { /* heartbeat */ }
   }));
   await page.goto(`${base}/rooms/${credentials.room_id}`);
@@ -203,7 +203,7 @@ try {
   await players[0].page.reload();
   await players[0].page.getByRole('status').filter({ hasText: 'В сети' }).waitFor();
   await until(() => players[0].page.locator('.media-player video').evaluateAll(els => els.length === 1 && els[0].readyState >= 2 && els[0].paused), 'stopped video resumed on reconnect');
-  await button(host, 'Раскрыть ответ');
+  await button(host, 'Показать ответ игрокам');
   await until(() => game(host).question.media?.kind === 'image' && game(host).question.media.id !== imageID, 'answer media not revealed');
   await stage(host, 'present_answer');
   const answerID = game(host).question.media.id;
@@ -226,7 +226,7 @@ try {
       assert.equal(game(p).question.media.stopped_position_ms, 2000);
       await until(() => p.page.locator(`.media-player ${kind}`).evaluate(el => el.paused && Math.abs(el.currentTime - 2) < .15), 'explicit duration did not stop native playback');
     }
-    await button(host, 'Раскрыть ответ'); await stage(host, 'resolved');
+    await button(host, 'Показать ответ игрокам'); await stage(host, 'resolved');
   }
   const original = await ownerContext.request.get(`${base}/api/drafts/${draft.card.id}/assets/${asset(sound.name).key}?revision=${draft.card.revision}`);
   assert.equal(original.status(), 200); assert.deepEqual(await original.body(), sound.data, 'original audio changed');

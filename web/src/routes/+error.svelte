@@ -6,5 +6,5 @@
   <p class="eyebrow">{page.status}</p>
   <h1>Страница недоступна</h1>
   <p>Проверьте ссылку или вернитесь в каталог.</p>
-  <a class="button primary" href="/">В каталог</a>
+  <a class="button primary" href="/packs">В каталог</a>
 </section>

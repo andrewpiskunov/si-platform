@@ -132,6 +132,7 @@
     connection?.close();
     boardLoader.reset();
     roomID = id;
+    resultsOpen = page.url.searchParams.get('results') === '1';
     revoked = false;
     expired = false;
     retention = null;
@@ -518,7 +519,7 @@
       <a class="button" href="/rooms">Выйти к списку комнат</a>
     </div>{:else if !credentials}<div class="narrow" style="margin:auto">
       <p class="eyebrow">{invite ? 'Вас пригласили играть' : 'Вход в комнату'}</p>
-      <h1>Занимайте место.</h1>
+      <h1>Вход в комнату</h1>
       <p class="muted">
         Представьтесь и выберите роль. Вход произойдёт только после нажатия кнопки.
       </p>
@@ -545,11 +546,12 @@
           disabled={joining}>{joining ? 'Подключаемся…' : 'Войти в комнату →'}</button
         >
       </form>
-    </div>{:else if roomState?.gameplay}<div class="room">
-      <div class="row between section-head">
+    </div>{:else if roomState?.gameplay}<div class="room" class:playing={roomState.phase !== 'lobby'}>
+      <div class="row between section-head room-header">
         <div>
+          <a class="room-back" href="/rooms">← Комнаты</a>
           <p class="eyebrow">{board?.pack_name || 'Своя игра'}</p>
-          <h1 style="font-size:32px;margin-bottom:10px">{board?.title || 'Игровой вечер'}</h1>
+          <h1 style="font-size:32px;margin-bottom:10px">{board?.title || 'Игровая комната'}</h1>
           <span class="helper" role="status" aria-live="polite"
             >{ready
               ? '● В сети'
@@ -559,7 +561,7 @@
           >
         </div>
         <button class="small" onclick={() => roomSetupDialog?.showModal()}>Комната</button>
-        {#if isHost}<div class="row">
+        {#if isHost}<div class="row"><button class="small" onclick={() => window.open(`/rooms/${roomID}/display`, `display-${roomID}`, 'popup,width=1280,height=800')}>Второй экран ↗</button>
             {#if invite}<button class="small" onclick={share}
                 >{copied ? 'Ссылка скопирована' : 'Пригласить друзей ↗'}</button
               >{/if}<button class="small" disabled={rotating || !ready} onclick={rotateInvite}
@@ -575,7 +577,7 @@
           Комната теперь по приглашению. Прежние ссылки отключены; нажмите «Создать приглашение»,
           чтобы выдать новую.
         </p>{/if}
-      {#if isHost && normalizedSettings(roomState.settings).visibility === 'public'}<p
+      {#if roomState.phase === 'lobby' && isHost && normalizedSettings(roomState.settings).visibility === 'public'}<p
           class="helper"
         >
           Обновление приглашения не закрывает свободный вход в публичную комнату.
@@ -667,8 +669,9 @@
       {#if roomState}<VoiceLink value={normalizedSettings(roomState.settings).voice_url} />{/if}
       <div class="row between">
         <div>
+          <a class="room-back" href="/rooms">← Комнаты</a>
           <p class="eyebrow">{board?.pack_name || 'Своя игра'}</p>
-          <h1 style="font-size:32px;margin-bottom:10px">{board?.title || 'Игровой вечер'}</h1>
+          <h1 style="font-size:32px;margin-bottom:10px">{board?.title || 'Игровая комната'}</h1>
           <span class="helper" role="status" aria-live="polite"
             >{ready
               ? '● В сети'
@@ -711,10 +714,10 @@
             {#if roomState.phase === 'finished'}<div class="question-stage">
                 <p class="eyebrow">Спасибо за игру</p>
                 <h2>
-                  {[...players].sort((a, b) => b.score - a.score)[0]?.name || 'Вы'} — отличный вечер!
+                  Победитель: {[...players].sort((a, b) => b.score - a.score)[0]?.name || '—'}
                 </h2>
                 <p class="muted">Итоговые очки — в таблице игроков.</p>
-                <a class="button primary" href="/">Выбрать следующий пакет</a>
+                <a class="button primary" href="/packs">Выбрать следующий пакет</a>
               </div>{:else if between}<div>
                 <div class="row between" style="margin-bottom:20px">
                   <h2 style="margin:0">

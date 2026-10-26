@@ -1,9 +1,12 @@
 package game
 
 func DefaultRules() Rules {
-	return Rules{Preset: "classic", SelectionSeconds: 30, AnswerSeconds: 10, SpecialSeconds: 30, WagerSeconds: 30, FinalSeconds: 60, Penalties: true, BuzzerMode: "first", WindowMS: 200, FalseStart: true, FalseStartSeconds: 3, NoRiskMultiplier: 2}
+	return Rules{Preset: "classic", AnswerMode: "oral", SelectionSeconds: 30, AnswerSeconds: 30, SpecialSeconds: 30, WagerSeconds: 30, FinalSeconds: 60, Penalties: true, BuzzerMode: "first", WindowMS: 200, FalseStart: true, FalseStartSeconds: 3, NoRiskMultiplier: 2}
 }
 func (r Rules) Validate() error {
+	if r.AnswerMode != "" && r.AnswerMode != "oral" && r.AnswerMode != "written" {
+		return Fault("invalid_rules")
+	}
 	if r.ReadingSeconds < 0 || r.ReadingSeconds > 120 || r.AutoOpen && r.ReadingSeconds < 1 {
 		return Fault("invalid_rules")
 	}

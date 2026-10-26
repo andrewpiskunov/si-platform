@@ -33,14 +33,14 @@ async function until(condition, message) {
 }
 try {
   owner = await context();
+  // Keep legacy username login covered; email registration is in email-accounts.mjs.
+  const created = await owner.request.post(base + '/api/account/register', {data:{username,password,display_name:'Автор теста'}});
+  if (created.status() !== 201) throw new Error('legacy fixture registration failed');
+  await owner.context().clearCookies();
   await settled(owner, "/login");
-  await owner.getByRole("button", { name: "Регистрация", exact: true }).click();
-  await owner.getByLabel("Логин").fill(username);
-  await owner.getByLabel("Имя в игре").fill("Автор теста");
-  await owner.getByLabel("Пароль").fill(password);
-  await owner
-    .getByRole("button", { name: "Создать аккаунт", exact: true })
-    .click();
+  await owner.getByLabel("Почта или логин",{exact:true}).fill(username);
+  await owner.getByLabel("Пароль",{exact:true}).fill(password);
+  await owner.getByRole("button",{name:"Войти",exact:true}).click();
   await owner.waitForURL("**/studio");
   await owner
     .getByRole("button", { name: "＋ Новый пакет", exact: true })

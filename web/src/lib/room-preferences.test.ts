@@ -67,7 +67,7 @@ test('dirty rule edits survive incoming changed rules and explicit reset adopts 
   assert.equal(form.conflict, true);
   assert.equal(form.dirty, true);
   form = resetForm(form);
-  assert.equal(form.value.answer_seconds, 10);
+  assert.equal(form.value.answer_seconds, initial.answer_seconds);
   assert.equal(form.value.penalties, false);
   assert.equal(form.dirty, false);
   assert.equal(form.conflict, false);

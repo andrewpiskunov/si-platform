@@ -213,6 +213,7 @@ func startPreparedContent(s *State) {
 	g.Stage.DeadlineMS = start + duration
 	if g.Content.Group == "question" {
 		g.Question.Shown = true
+		startReveal(s, start)
 	}
 }
 func pauseMedia(s *State, now int64) {

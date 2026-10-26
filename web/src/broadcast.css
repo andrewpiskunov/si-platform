@@ -7,27 +7,31 @@
 }
 :root {
   font-family: Golos, 'Segoe UI', sans-serif;
-  --bg: #10182b;
-  --surface: #19253d;
-  --surface-2: #22324e;
-  --line: #35435d;
-  --text: #f5f7fc;
-  --muted: #a5b2ca;
-  --accent: #f1d694;
-  --accent-text: #262010;
+  --bg: #071b52;
+  --surface: #102d78;
+  --surface-2: #194198;
+  --line: #365bb0;
+  --text: #f5f8ff;
+  --muted: #b8cbef;
+  --accent: #ffe175;
+  --accent-text: #172450;
+  --button-radius: 2px;
+  --card-radius: 2px;
 }
 .app-shell {
   font-family: var(--theme-font, Golos, 'Segoe UI', sans-serif);
 }
 .app-shell[data-theme='classic'] {
-  --bg: #10182b;
-  --surface: #19253d;
-  --surface-2: #22324e;
-  --line: #35435d;
-  --text: #f5f7fc;
-  --muted: #a5b2ca;
-  --accent: #f1d694;
-  --accent-text: #262010;
+  --bg: #071b52;
+  --surface: #102d78;
+  --surface-2: #194198;
+  --line: #365bb0;
+  --text: #f5f8ff;
+  --muted: #b8cbef;
+  --accent: #ffe175;
+  --accent-text: #172450;
+  --button-radius: 2px;
+  --card-radius: 2px;
 }
 .ui-icon {
   width: 20px;
@@ -37,7 +41,7 @@
 }
 .topbar {
   max-width: 1480px;
-  min-height: 94px;
+  min-height: 76px;
   padding: 0 40px;
   gap: 48px;
 }
@@ -58,12 +62,12 @@
   display: grid;
   grid-template-columns: repeat(2, 9px);
   gap: 3px;
-  transform: rotate(-8deg);
+  transform: none;
 }
 .broadcast-mark i {
   width: 9px;
   height: 9px;
-  border-radius: 2px;
+  border-radius: 0;
   background: var(--accent);
 }
 .broadcast-mark i:last-child {
@@ -86,8 +90,9 @@
   font-size: 12px;
 }
 h1 {
+  font-size: clamp(28px, 3.2vw, 40px);
   font-weight: 550;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.035em;
 }
 h2,
 h3 {
@@ -175,8 +180,8 @@ details,
   overflow: hidden;
 }
 .app-shell[data-theme='classic'] .card-symbol:not(.theme-preview *) {
-  background: #1643b5;
-  color: #f1d694;
+  background: #164cc2;
+  color: #ffe175;
 }
 .pack-card-foot {
   gap: 12px;
@@ -240,25 +245,25 @@ details,
   border-radius: var(--button-radius, 4px);
 }
 .app-shell[data-theme='classic'] .board-theme:not(.theme-preview *) {
-  background: #102d75;
-  color: #f5f7fc;
+  background: #0d2d83;
+  color: #f5f8ff;
 }
 .app-shell[data-theme='classic'] .board-cell:not(.theme-preview *) {
-  background: #1744ae;
-  color: #f1d694;
-  border-color: #345a9e;
+  background: #164cc2;
+  color: #ffe175;
+  border-color: #4169c0;
   border-radius: 2px;
 }
 .app-shell[data-theme='classic'] .board-cell:not(.theme-preview *):hover:not(:disabled) {
-  background: #2258c9;
+  background: #2362df;
   border-color: var(--accent);
 }
 .app-shell[data-theme='classic'] .question-stage:not(.theme-preview *) {
-  background: #123783;
-  border-color: #4166a9;
+  background: #0c359b;
+  border-color: #456cc5;
 }
 .app-shell[data-theme='classic'] .question-stage:not(.theme-preview *) h2 {
-  color: #f5f7fc;
+  color: #f5f8ff;
 }
 .question-price {
   font-size: 28px;
@@ -437,4 +442,20 @@ details,
 /* In the active room the scene takes priority over navigation chrome. */
 .app-shell:has(.game-v2) .theme-context-bar {padding:6px 24px;margin:0;background:transparent;border:0;}
 .app-shell:has(.game-v2) .page {padding-top:16px;}
-.app-shell[data-theme='classic'] .game-v2 .question-stage:not(.theme-preview *) {background:radial-gradient(ellipse at 50% 40%,#16356c,#0a1935);}
+.app-shell[data-theme='classic'] .game-v2 .question-stage:not(.theme-preview *) {background:#0c359b;}
+
+/* Straight geometry and a blue application shell. Theme variables remain authoritative. */
+.app-shell { min-height:100vh; }
+.app-shell[data-theme='classic'] .topbar { background:#0b2b80; }
+.app-shell[data-theme='classic'] .editor-toolbar { background:var(--bg); }
+.app-shell[data-theme='classic'] .swatch.classic { background:#164cc2; border-color:#ffe175; }
+.topbar { height:auto; }
+.brand-light { margin-left:.22em; }
+button, .button { box-shadow:none; }
+.pill, .tag, .notice, .auth-card, .theme-context-bar, .media-player,
+.question-stage, .game-action, .dialog-panel { border-radius:var(--card-radius,2px); }
+input::placeholder, textarea::placeholder { color:var(--muted); opacity:.8; }
+.empty { background:var(--surface); border-style:solid; padding:32px; }
+.empty-symbol { display:none; }
+.site-footer { border-top:1px solid var(--line); }
+@media (max-width:700px) { h1 { font-size:28px; } .empty { padding:24px 18px; } }

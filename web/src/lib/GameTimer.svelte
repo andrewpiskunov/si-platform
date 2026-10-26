@@ -44,7 +44,7 @@
     gap: 12px;
     padding: 10px 16px;
     border: 1px solid var(--accent, #f2d78c);
-    border-radius: 8px;
+    border-radius: var(--card-radius, 2px);
   }
   .game-timer strong {
     font:

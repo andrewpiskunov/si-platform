@@ -266,3 +266,14 @@ test('standard rules open answers automatically and name each countdown', () => 
   assert.equal(timerLabel('collect_answer'), 'Время на ответ');
   assert.equal(timerLabel('collect_answers'), 'Время на ответы');
 });
+
+test('presentation skip is stage scoped without requiring a question instance', () => {
+  const game = view([{type:'skip_presentation',requires_seq:true}]);
+  game.stage={id:'stage-intro',kind:'round_intro',expired:false};
+  const command=prepareAction(game,12,'skip_presentation',{},captureScope(game),'skip-intro');
+  assert.deepEqual(command.data,{stage_id:'stage-intro'});
+  assert.equal(command.expected_seq,12);
+  const old=captureScope(game);
+  game.stage={...game.stage,id:'stage-themes',kind:'round_themes'};
+  assert.throws(()=>prepareAction(game,13,'skip_presentation',{},old),/stale_stage/);
+});

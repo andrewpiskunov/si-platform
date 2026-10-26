@@ -19,6 +19,9 @@ func (s *Service) Handler() http.Handler {
 	r.Use(s.guard)
 	r.Post("/register", s.registerHTTP)
 	r.Post("/login", s.loginHTTP)
+	r.Post("/verify-email", s.verifyEmailHTTP)
+	r.Post("/forgot-password", s.forgotPasswordHTTP)
+	r.Post("/reset-password", s.resetPasswordHTTP)
 	r.Group(func(r chi.Router) {
 		r.Use(s.requireSession)
 		r.Post("/logout", s.logoutHTTP)
@@ -43,7 +46,7 @@ func (s *Service) guard(next http.Handler) http.Handler {
 			}
 		}
 		route := r.URL.Path
-		if strings.HasSuffix(route, "/login") || strings.HasSuffix(route, "/register") || strings.HasSuffix(route, "/password") || (r.Method == http.MethodDelete && strings.HasSuffix(route, "/me")) {
+		if strings.HasSuffix(route, "/login") || strings.HasSuffix(route, "/register") || strings.HasSuffix(route, "/password") || strings.HasSuffix(route, "/verify-email") || strings.HasSuffix(route, "/forgot-password") || strings.HasSuffix(route, "/reset-password") || (r.Method == http.MethodDelete && strings.HasSuffix(route, "/me")) {
 			if !s.admit(r) {
 				w.Header().Set("Retry-After", "6")
 				writeError(w, ErrRateLimited)
@@ -140,12 +143,25 @@ func (s *Service) clearCookie(w http.ResponseWriter) {
 }
 func (s *Service) registerHTTP(w http.ResponseWriter, r *http.Request) {
 	var req struct {
+		Email       string `json:"email"`
 		Username    string `json:"username"`
 		Password    string `json:"password"`
 		DisplayName string `json:"display_name"`
 	}
 	if err := decodeJSON(w, r, &req); err != nil {
 		writeError(w, err)
+		return
+	}
+	if req.Email != "" {
+		if req.Username != "" {
+			writeError(w, ErrInvalidInput)
+			return
+		}
+		if err := s.RegisterEmail(r.Context(), req.Email, req.Password, req.DisplayName); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, 202, map[string]bool{"email_sent": true})
 		return
 	}
 	session, err := s.Register(r.Context(), req.Username, req.Password, req.DisplayName)
@@ -313,4 +329,51 @@ func (s *Service) admit(r *http.Request) bool {
 		s.limits[host] = bucket
 	}
 	return bucket.take(now, 1.0/6, 10)
+}
+
+func (s *Service) verifyEmailHTTP(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Token string `json:"token"`
+	}
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	session, err := s.VerifyEmail(r.Context(), req.Token)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	s.sessionCookie(w, session)
+	writeJSON(w, 200, session)
+}
+func (s *Service) forgotPasswordHTTP(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := s.RequestReset(r.Context(), req.Email); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, 202, map[string]bool{"email_sent": true})
+}
+func (s *Service) resetPasswordHTTP(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Token    string `json:"token"`
+		Password string `json:"password"`
+	}
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := s.ResetPassword(r.Context(), req.Token, req.Password); err != nil {
+		writeError(w, err)
+		return
+	}
+	s.clearCookie(w)
+	writeJSON(w, 200, map[string]bool{"ok": true})
 }

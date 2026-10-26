@@ -1,6 +1,7 @@
 <script lang="ts">
   import '../app.css';
-  import '../broadcast.css'; // Approved Broadcast appearance
+  import '../broadcast.css';
+  import '../game-screen.css'; // Approved Broadcast appearance
   import Avatar from '#lib/Avatar.svelte';
   import Icon from '#lib/Icon.svelte';
   import { readRoomCredentials } from '#lib/room-credentials.ts';
@@ -72,7 +73,7 @@
 </script>
 
 <svelte:head
-  ><title>Своя игра — соберите свой вечер</title><meta
+  ><title>Своя игра — онлайн-викторина</title><meta
     name="description"
     content="Выбирайте пакеты вопросов, создавайте свои и играйте с друзьями в браузере."
   /></svelte:head
@@ -101,7 +102,7 @@
     />{/if}
   <a class="skip" href="#main">К содержимому</a>
   <header class="topbar">
-    <a class="brand" href={contextLink('/', context)} aria-label="Своя игра — главная"
+    <a class="brand" href="/" aria-label="Своя игра — главная"
       ><span class="brand-mark" aria-hidden="true"
         >{#if $themeDetail.manifest?.logo && $themeDetail.images[$themeDetail.manifest.logo]}<img
             class="theme-logo"
@@ -113,7 +114,7 @@
       ><span>Своя<span class="brand-light"> игра</span></span></a
     >
     <nav aria-label="Основная навигация">
-      <a class:active={page.url.pathname === '/'} href={contextLink('/', context)}>Каталог</a><a
+      <a class:active={page.url.pathname === '/packs' || page.url.pathname.startsWith('/packs/')} href={contextLink('/packs', context)}>Каталог</a><a
         class:active={page.url.pathname.startsWith('/rooms')}
         href={contextLink('/rooms', context)}>Комнаты</a
       ><a
@@ -140,8 +141,8 @@
   </main>
   <footer class="site-footer">
     <a href="/privacy">Хранение и удаление данных</a>
-    <span>Своя игра <span class="muted">· Вопросы, которые нас собирают</span></span><a
-      href={contextLink('/studio', context)}>Создать свой пакет ↗</a
+    <span>Своя игра <span class="muted">· Онлайн-викторина</span></span><a
+      href={contextLink('/studio', context)}>Создать пакет ↗</a
     >
   </footer>
 </div>

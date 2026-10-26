@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MyRooms from '#lib/MyRooms.svelte';
   import AccountExport from '#lib/AccountExport.svelte';
   import UsagePanel from '#lib/UsagePanel.svelte';
   import { onMount } from 'svelte';
@@ -19,13 +20,20 @@
     issued = $state('');
   onMount(() => {
     void refreshUser();
-    void loadTokens();
   });
-  async function loadTokens() {
+  $effect(() => {
+    const accountID = $user?.id;
+    tokens = [];
+    error = '';
+    if (accountID) void loadTokens(accountID);
+  });
+  async function loadTokens(accountID = $user?.id) {
+    if (!accountID) return;
     try {
-      tokens = (await api<{ tokens: Token[] | null }>('/account/tokens')).tokens || [];
+      const result = await api<{ tokens: Token[] | null }>('/account/tokens');
+      if ($user?.id === accountID) tokens = result.tokens || [];
     } catch (e) {
-      error = errorText(e);
+      if ($user?.id === accountID) error = errorText(e);
     }
   }
   async function logout() {
@@ -111,14 +119,14 @@
     <div class="account-identity">
       <p class="eyebrow">Личный кабинет</p>
       <h1>{$user?.display_name || 'Аккаунт'}</h1>
-      <p>{$user ? `@${$user.username}` : 'Войдите, чтобы управлять своим аккаунтом.'}</p>
+      <p>{$user ? ($user.username === $user.id ? 'Ваш личный кабинет' : `@${$user.username}`) : 'Войдите, чтобы управлять своим аккаунтом.'}</p>
     </div>
     {#if $user}<button onclick={logout} disabled={busy}>Выйти</button>{:else}<a
         class="button primary"
         href="/login">Войти</a
       >{/if}
   </div>
-  {#if $user}<UsagePanel />{/if}
+  {#if $user}{#key $user.id}<MyRooms />{/key}<UsagePanel />{/if}
   {#if error}<p class="notice error" role="alert">{error}</p>{/if}{#if $user}<div
       class="two-columns"
     >

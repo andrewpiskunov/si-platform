@@ -1,4 +1,5 @@
 <script lang="ts">
+  import GuestWorkspace from './GuestWorkspace.svelte';
   import UsagePanel from './UsagePanel.svelte';
   import { onMount } from 'svelte';
   import { api, APIError, errorText } from './api.ts';
@@ -66,11 +67,9 @@
   }
 </script>
 
-{#if error}<p class="notice error" role="alert">
-    {error}{#if login}
-      <a class="text-link" href="/login">Войти</a>{/if}
-  </p>{/if}
-{#if !login}<UsagePanel
+{#if error && !login}<p class="notice error" role="alert">{error}</p>{/if}
+{#if loading}<p role="status">Загружаем темы…</p>{:else if login}<GuestWorkspace kind="themes" />{/if}
+{#if !loading && !login}<UsagePanel
     refreshTrigger={usageRefresh}
     themeRevision={version
       ? (cards.find((card) => card.id === version?.card.id)?.revision ?? version.card.revision)

@@ -6,7 +6,7 @@ const page = await browser.newPage();
 const errors = [];
 page.on('pageerror', e => errors.push(e.message));
 try {
-  await page.goto(base);
+  await page.goto(base + '/packs');
   await page.locator('.app-shell[data-theme="classic"]').waitFor();
   await page.evaluate(() => document.fonts.ready);
   assert.match(await page.locator('.app-shell').evaluate(el => getComputedStyle(el).fontFamily), /Golos/);

@@ -1,0 +1,74 @@
+import { chromium } from 'playwright';
+import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
+const base = process.env.BASE_URL || 'http://localhost:5174';
+const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined });
+const page = await browser.newPage();
+const password = randomBytes(20).toString('hex');
+let registered = false;
+try {
+  page.setDefaultTimeout(7000);
+  await page.goto(base + '/rooms');
+  await page.waitForLoadState('networkidle');
+  await page.getByRole('button', { name: 'Создать комнату', exact: true }).first().click();
+  const dialog = page.getByRole('dialog', { name: 'Создать комнату' });
+  await dialog.waitFor();
+  await dialog.getByRole('searchbox', { name: 'Поиск пакетов' }).fill('несуществующий пакет');
+  await dialog.getByRole('button', { name: 'Найти', exact: true }).click();
+  await dialog.getByText('Пакеты не найдены', { exact: true }).waitFor();
+  await dialog.getByRole('button', { name: 'Выбрать демонстрационный пакет' }).click();
+  await dialog.getByText('Выбран: Демонстрационный пакет', { exact: true }).waitFor();
+  await dialog.getByLabel('Название комнаты', { exact: true }).fill('Вечер пятницы');
+  await dialog.getByRole('combobox', { name: /^Доступ в комнату/ }).selectOption('public');
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    assert.equal(await dialog.evaluate(el => el.scrollWidth > el.clientWidth), false, 'dialog overflows');
+  }
+  await page.keyboard.press('Escape');
+  assert.equal(await dialog.count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Создать комнату', exact: true }).first().evaluate(el => el === document.activeElement), true);
+  const registration = await page.request.post(base + '/api/account/register', { data: { username: 'dialog_' + randomBytes(6).toString('hex'), password, display_name: 'Проверка окна' } });
+  assert.equal(registration.status(), 201);
+  registered = true;
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+  const card = { id: 'c'.repeat(32), revision: 3, name: 'Пакет для проверки выбора', question_count: 20, round_count: 2, author: 'Автор' };
+  await page.route('**/api/catalogue?*', route => route.fulfill({ json: { items: [card] } }));
+  await page.getByRole('button', { name: 'Создать комнату', exact: true }).first().click();
+  assert.equal(await dialog.getByRole('button', { name: 'Создать комнату →' }).isDisabled(), true);
+  await dialog.getByRole('button', { name: /Пакет для проверки выбора/ }).click();
+  await dialog.getByLabel('Название комнаты', { exact: true }).fill('Проверка новой комнаты');
+  let payload;
+  await page.route('**/api/rooms', async route => {
+    if (route.request().method() !== 'POST') return route.continue();
+    payload = route.request().postDataJSON();
+    await route.fulfill({ status: 409, json: { error: 'blocked' } });
+  });
+  await dialog.getByRole('button', { name: 'Создать комнату →' }).click();
+  await dialog.getByRole('alert').getByText('Пакет заблокирован.').waitFor();
+  assert.equal(payload.pack_id, card.id);
+  assert.equal(payload.revision, 3);
+  assert.equal(payload.rules.presentation, true);
+  assert.equal(payload.title, 'Проверка новой комнаты');
+  await page.unroute('**/api/rooms');
+  await dialog.getByRole('button', { name: 'Изменить пакет', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Выбрать демонстрационный пакет' }).click();
+  await mkdir('.local/browser', { recursive: true });
+  await dialog.evaluate(el => el.scrollTop = 0);
+  await page.screenshot({ path: '.local/browser/create-room-dialog.png' });
+  const created = page.waitForResponse(r => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/rooms');
+  await dialog.getByRole('button', { name: 'Создать комнату →' }).click();
+  const response = await created;
+  assert.equal(response.status(), 201, await response.text());
+  assert.equal(response.request().postDataJSON().pack_id, '');
+  assert.equal(response.request().postDataJSON().settings.visibility, 'private');
+  await page.waitForURL(/\/rooms\/[a-f0-9]{32}/);
+  assert.equal(await dialog.count(), 0);
+  await page.getByText('Раундов: 3 · До 12 игроков', {exact:true}).waitFor();
+  await page.getByRole('combobox', {name:'Раунд',exact:true}).selectOption('r2');
+  console.log('PASS: create dialog, search, demo selection, settings, responsive layout, Escape and focus restoration');
+} finally {
+  if (registered) await page.request.delete(base + '/api/account/me', { data: { password } });
+  await browser.close();
+}

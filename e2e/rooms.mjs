@@ -46,7 +46,7 @@ async function page(who) {
     window.__roomTestSockets = [];
     window.WebSocket = class extends Native { constructor(...args) { super(...args); window.__roomTestSockets.push(this); } };
   });
-  page.on('websocket', socket => socket.on('framereceived', ({ payload }) => {
+  page.on('websocket', socket => new URL(socket.url()).searchParams.get('display') !== '1' && socket.on('framereceived', ({ payload }) => {
     try { const data = JSON.parse(payload.toString()); if (data.state) client.state = data.state; if (data.type === 'snapshot') client.snapshots++; } catch {}
   }));
   return client;

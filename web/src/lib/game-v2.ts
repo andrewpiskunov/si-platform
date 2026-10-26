@@ -1,5 +1,8 @@
 import { validRoomSettings } from './room-preferences.ts';
 export interface Rules {
+  progressive_reveal?: boolean;
+  presentation?: boolean;
+  answer_mode?: 'oral' | 'written';
   auto_open?: boolean;
   reading_seconds?: number;
   preset: 'classic' | 'friends' | 'custom';
@@ -51,6 +54,13 @@ export interface Appeal {
   resolved: boolean;
   resolution?: string;
 }
+export interface RevealView {
+  kind: 'text' | 'image';
+  start_at_ms: number;
+  duration_ms: number;
+  elapsed_ms: number;
+  text_offset?: number;
+}
 export interface MediaView {
   id: string;
   kind: string;
@@ -75,6 +85,7 @@ export interface SessionView {
   stage: Stage;
   round?: { id: string; name: string; type: string };
   question?: {
+    reveal?: RevealView;
     media?: MediaView;
     id: string;
     instance_id: string;
@@ -143,6 +154,7 @@ const fields: Record<string, string[]> = {
   extend: ['seconds'],
   restart_stage: ['reason'],
   advance: [],
+  skip_presentation: [],
   open_buzzer: [],
   buzz: [],
   answer: ['text'],
@@ -161,6 +173,7 @@ const fields: Record<string, string[]> = {
   transfer_host: ['target_id']
 };
 const staged = new Set([
+  'skip_presentation',
   'extend',
   'restart_stage',
   'media_ready',
@@ -298,6 +311,10 @@ export function timerSeconds(
   return Math.max(0, Math.ceil((stage.deadline_ms - serverTime - Math.max(0, elapsed)) / 1000));
 }
 export const stageNames: Record<string, string> = {
+  round_intro: 'Начало раунда',
+  round_themes: 'Темы раунда',
+  question_price: 'Выбран вопрос',
+  question_type: 'Особый вопрос',
   prepare_content: 'Подготовка медиа',
   scheduled_content: 'Общий старт',
   select_question: 'Выбор вопроса',
@@ -320,19 +337,22 @@ export const stageNames: Record<string, string> = {
 export const questionTypes: Record<string, string> = {
   simple: 'Обычный',
   withButton: 'На кнопку',
-  stake: 'Ставка',
+  stake: 'Аукцион',
   stakeAll: 'Общая ставка',
-  secret: 'Секрет',
+  secret: 'Кот в мешке',
   forAll: 'Всем',
   noRisk: 'Без риска'
 };
 export function classicRules(): Rules {
   return {
     preset: 'classic',
+    presentation: true,
+    progressive_reveal: true,
     auto_open: true,
     reading_seconds: 10,
     selection_seconds: 30,
-    answer_seconds: 10,
+    answer_seconds: 30,
+    answer_mode: 'oral',
     special_seconds: 30,
     wager_seconds: 30,
     final_seconds: 60,
@@ -361,6 +381,10 @@ export function answerBytes(value: string): number {
   );
 }
 
+export function isPresentationStage(kind: string): boolean {
+  return ['round_intro', 'round_themes', 'question_price', 'question_type'].includes(kind);
+}
+
 export function isBoardStage(kind: string): boolean {
   return ['select_question', 'select_final', 'resolved'].includes(kind);
 }
@@ -376,5 +400,5 @@ export function timerLabel(kind: string): string {
     select_question: 'Выбор вопроса',
     select_final: 'Выбор темы'
   };
-  return labels[kind] || 'Осталось';
+  return labels[kind] || (isPresentationStage(kind) ? 'Заставка' : 'Осталось');
 }

@@ -50,6 +50,7 @@ type Identity struct {
 	APIToken  bool
 }
 type Options struct {
+	SendMail      func(context.Context, string, string, string) error
 	Origin        string
 	SecureCookies bool
 }
@@ -152,12 +153,18 @@ func (s *Service) Register(ctx context.Context, username, password, displayName 
 	return session, nil
 }
 func (s *Service) Login(ctx context.Context, username, password string) (Session, error) {
-	username, valid := normalizeUsername(username)
+	identity := strings.TrimSpace(username)
+	username, valid := normalizeUsername(identity)
+	email, emailValid := normalizeEmail(identity)
+	if emailValid {
+		username = email
+		valid = true
+	}
 	if !validPassword(password) {
 		return Session{}, ErrUnauthorized
 	}
 	var id, hash string
-	err := s.pool.QueryRow(ctx, "SELECT id,password_hash FROM account_users WHERE username=$1 AND deleted_at IS NULL", username).Scan(&id, &hash)
+	err := s.pool.QueryRow(ctx, "SELECT id,password_hash FROM account_users WHERE (username=$1 OR email=$1) AND deleted_at IS NULL", username).Scan(&id, &hash)
 	exists := err == nil && valid
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return Session{}, safeError(ctx, err)
@@ -375,7 +382,7 @@ func (s *Service) changeIdentity(ctx context.Context, token, currentPassword, ne
 	action := "password_changed"
 	if deleting {
 		action = "deleted"
-		_, err = tx.Exec(ctx, "UPDATE account_users SET username=NULL,display_name='Deleted user',password_hash=NULL,role='author',deleted_at=clock_timestamp() WHERE id=$1", identity.User.ID)
+		_, err = tx.Exec(ctx, "UPDATE account_users SET username=NULL,email=NULL,display_name='Deleted user',password_hash=NULL,role='author',deleted_at=clock_timestamp() WHERE id=$1", identity.User.ID)
 	} else {
 		_, err = tx.Exec(ctx, "UPDATE account_users SET password_hash=$2 WHERE id=$1", identity.User.ID, replacementHash)
 	}
@@ -383,6 +390,9 @@ func (s *Service) changeIdentity(ctx context.Context, token, currentPassword, ne
 		return safeError(ctx, err)
 	}
 	if _, err = tx.Exec(ctx, "UPDATE account_credentials SET revoked_at=clock_timestamp() WHERE user_id=$1 AND revoked_at IS NULL", identity.User.ID); err != nil {
+		return safeError(ctx, err)
+	}
+	if _, err = tx.Exec(ctx, "DELETE FROM account_email_requests WHERE user_id=$1", identity.User.ID); err != nil {
 		return safeError(ctx, err)
 	}
 	if deleting {

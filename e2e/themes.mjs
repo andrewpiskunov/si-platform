@@ -54,7 +54,7 @@ function observe(page, name, credentials = null) {
   page.on('response', response => {
     if (/\/rooms\/[^/]+\/appearance\/assets\//.test(response.url()) && response.ok()) client.assetResponses.push({ url: response.url(), bytes: Number(response.headers()['content-length'] || 0) });
   });
-  page.on('websocket', socket => socket.on('framereceived', ({ payload }) => {
+  page.on('websocket', socket => new URL(socket.url()).searchParams.get('display') !== '1' && socket.on('framereceived', ({ payload }) => {
     try {
       const message = JSON.parse(payload.toString());
       if (message.type === 'appearance_refresh') client.refreshes++;
@@ -238,14 +238,14 @@ try {
 
   at('independent tabs, contextual catalogue and local preferences');
   const independent = observe(await ownerContext.newPage(), 'independent');
-  await independent.page.goto(base + '/');
+  await independent.page.goto(base + '/packs');
   assert.notEqual(await independent.page.locator('.app-shell').getAttribute('data-theme'), 'custom', 'direct catalogue inherited room appearance');
-  await independent.page.goto(`${base}/?room=${room}`);
+  await independent.page.goto(`${base}/packs?room=${room}`);
   await shell(independent, 'classic');
   assert.equal(independent.assetRequests.length, 0, 'new tab inherited room credentials');
   const catalogue = observe(await mobile.page.context().newPage(), 'catalogue', mobile.credentials);
   await catalogue.page.addInitScript(value => sessionStorage.setItem('room:' + value.room_id, JSON.stringify(value)), mobile.credentials);
-  await catalogue.page.goto(`${base}/?room=${room}`);
+  await catalogue.page.goto(`${base}/packs?room=${room}`);
   await shell(catalogue, 'custom'); await decorLoaded(catalogue.page);
   assert.equal(catalogue.wire.length, 0, 'readonly catalogue received game snapshots');
   assert.equal(host.state.phase, 'lobby', 'readonly appearance channel changed room phase');

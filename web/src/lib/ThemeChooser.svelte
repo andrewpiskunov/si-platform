@@ -50,7 +50,7 @@
 </script>
 
 <fieldset disabled={disabled || busy}>
-  <legend>Настроение вечера</legend>
+  <legend>Оформление комнаты</legend>
   <div class="choices">
     {#each [{ id: 'classic', name: 'Эфир' }, { id: 'pirate', name: 'Пираты' }, { id: 'anime', name: 'Аниме' }] as option}<button
         type="button"

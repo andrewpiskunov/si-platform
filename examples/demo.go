@@ -24,6 +24,31 @@ func Demo() packs.Document {
 		}
 		r.Themes = append(r.Themes, theme)
 	}
-	d.Rounds = []packs.Round{r}
+	special := packs.Round{ID: "r2", Name: "Особые вопросы"}
+	for i, item := range []struct{ name, kind, text, answer string }{
+		{"Аукцион", "stake", "Сколько минут в двух часах?", "120"},
+		{"Кот в мешке", "secret", "Какой прибор показывает направление на север?", "Компас"},
+		{"Вопрос всем", "forAll", "Как называется фигура с тремя сторонами?", "Треугольник"},
+		{"Без риска", "noRisk", "Сколько месяцев в году?", "12"},
+		{"Общая ставка", "stakeAll", "Как называется самая близкая к Земле звезда?", "Солнце"},
+	} {
+		id := fmt.Sprintf("r2-t%d", i+1)
+		special.Themes = append(special.Themes, packs.Theme{ID: id, Name: item.name,
+			Questions: []packs.Question{demoQuestion(id+"-q1", item.kind, 200, item.text, item.answer)}})
+	}
+	final := packs.Round{ID: "r3", Name: "Финал", Type: "final"}
+	for i, item := range [][3]string{
+		{"Геометрия", "Как называется отрезок, соединяющий центр окружности с её точкой?", "Радиус"},
+		{"Время", "Как называется период из ста лет?", "Век"},
+		{"Природа", "Как называется процесс превращения льда в воду?", "Плавление"},
+	} {
+		id := fmt.Sprintf("r3-t%d", i+1)
+		final.Themes = append(final.Themes, packs.Theme{ID: id, Name: item[0], Questions: []packs.Question{demoQuestion(id+"-q1", "stakeAll", 0, item[1], item[2])}})
+	}
+	d.Rounds = []packs.Round{r, special, final}
 	return d
+}
+
+func demoQuestion(id, kind string, price int, text, answer string) packs.Question {
+	return packs.Question{ID: id, Type: kind, Price: price, Params: []packs.Parameter{{Name: "question", Type: "content", Items: []packs.Content{{Type: "text", Value: text}}}}, Right: []string{answer}}
 }

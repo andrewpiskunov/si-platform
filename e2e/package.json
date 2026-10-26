@@ -19,7 +19,21 @@
     "test:retention": "node retention.mjs",
     "test:ai": "node ai.mjs",
     "test:mcp": "node mcp.mjs",
-    "test:broadcast": "node broadcast.mjs"
+    "test:broadcast": "node broadcast.mjs",
+    "test:catalogue-navigation": "node catalogue-navigation.mjs",
+    "test:create-room-dialog": "node create-room-dialog.mjs",
+    "test:my-rooms": "node my-rooms.mjs",
+    "test:oral-display": "node oral-display.mjs",
+    "test:game-viewport": "node game-viewport.mjs",
+    "test:presentation": "node presentation.mjs",
+    "test:question-fit": "node question-fit.mjs",
+    "test:special-mechanics": "node special-mechanics.mjs && ANSWER_MODE=written node special-mechanics.mjs",
+    "test:game-sounds": "node game-sounds.mjs",
+    "test:email-accounts": "node email-accounts.mjs",
+    "test:public-stage": "node public-stage.mjs && ANSWER_MODE=written node public-stage.mjs",
+    "test:final-flow": "node final-flow.mjs && ANSWER_MODE=written node final-flow.mjs && FINAL_NO_ELIGIBLE=1 node final-flow.mjs",
+    "test:progressive-reveal": "node progressive-reveal.mjs && REVEAL_MODE=disabled node progressive-reveal.mjs && REVEAL_MODE=legacy node progressive-reveal.mjs",
+    "test:progressive-image-fixture": "node progressive-image-fixture.mjs"
   },
   "devDependencies": {
     "playwright": "1.64.1"

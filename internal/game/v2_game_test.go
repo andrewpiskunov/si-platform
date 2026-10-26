@@ -10,7 +10,9 @@ import (
 func v2Fixture() State {
 	s := fixture()
 	s.Seq = 1
-	s.Gameplay = NewSession(DefaultRules())
+	rules := DefaultRules()
+	rules.AnswerMode = "written"
+	s.Gameplay = NewSession(rules)
 	n, err := ApplyAt(s, "host", v2cmd("begin_round", BeginRoundPayload{Round: RoundSpec{ID: "r", Name: "Round", Type: "standard", Themes: []ThemeSpec{{ID: "t", Name: "Theme", QuestionID: "q"}}, MinimumPrice: 100, MaximumPrice: 500}}), 1000, 7)
 	if err != nil {
 		panic(err)
@@ -585,7 +587,9 @@ func TestV2HistoryTrimmingRetainsCurrentJudgementAndCorrectionGuard(t *testing.T
 func TestV2RoundRequiredAndSecretDefaults(t *testing.T) {
 	s := fixture()
 	s.Seq = 1
-	s.Gameplay = NewSession(DefaultRules())
+	rules := DefaultRules()
+	rules.AnswerMode = "written"
+	s.Gameplay = NewSession(rules)
 	rejected(t, s, "host", "begin_question", BeginQuestionPayload{Question: qspec("noRisk")}, 1000)
 	s = begin(t, v2Fixture(), "secret")
 	rejected(t, s, "p1", "select_recipient", with(s, "target_id", "p1"), 1000)

@@ -1,16 +1,11 @@
-import { publicAPI } from '#lib/server/api.ts';
-import type { Card } from '#lib/types.ts';
+import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
-export const load: PageServerLoad = async ({ url }) => {
-  const query = new URLSearchParams();
-  for (const key of ['q', 'language', 'tag', 'difficulty', 'media', 'age', 'max_bytes', 'offset']) {
-    const value = url.searchParams.get(key);
-    if (value) query.set(key, value);
+
+// Keep existing catalogue search links and room context working at the new URL.
+export const load: PageServerLoad = ({ url }) => {
+  const catalogueKeys = ['q', 'language', 'tag', 'difficulty', 'media', 'age', 'max_bytes', 'offset', 'room'];
+  if (catalogueKeys.some((key) => url.searchParams.has(key))) {
+    redirect(307, `/packs${url.search}`);
   }
-  try {
-    const result = await publicAPI<{ items: Card[] | null }>(`/catalogue?${query}`);
-    return { items: result.items || [], failed: false, filters: Object.fromEntries(query) };
-  } catch {
-    return { items: [] as Card[], failed: true, filters: Object.fromEntries(query) };
-  }
+  return {};
 };

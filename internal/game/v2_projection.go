@@ -52,11 +52,22 @@ func ProjectAt(s State, id string, nowMS int64) View {
 			qv.Theme = q.Spec.Theme
 			qv.Price = q.Price
 		}
-		if q.Shown {
-			qv.Text = visibleText(q.Spec.Question, q.ContentIndex, host)
+		if q.Shown || host {
+			last := q.ContentIndex
+			// A later media step may have accompanying text while earlier text
+			// is already shown. Keep that new text behind the media start gate.
+			if !host && q.Rules.ProgressiveReveal && g.Content != nil && g.Content.Group == "question" && (g.Stage.Kind == "prepare_content" || g.Stage.Kind == "scheduled_content") {
+				last--
+			}
+			qv.Text = visibleText(q.Spec.Question, last, host)
+			qv.Reveal = projectReveal(n, host, nowMS)
 			if host || q.AnswerRevealed {
 				answer := strings.Join(q.Spec.Right, " / ")
-				explanation := visibleText(q.Spec.Answer, q.AnswerIndex, host)
+				last := q.AnswerIndex
+				if host {
+					last = len(q.Spec.Answer) - 1
+				}
+				explanation := visibleText(q.Spec.Answer, last, host)
 				if explanation != "" {
 					if answer != "" {
 						answer += "\n"
@@ -201,6 +212,14 @@ func allowedActions(s State, id string, now int64) []AllowedAction {
 		if s.Phase != Lobby {
 			add("pause")
 		}
+	}
+	if presentationStage(kind) {
+		if host {
+			add("skip_presentation")
+		}
+		return out
+	}
+	if host {
 		if kind != "buzz_window" && kind != "prepare_content" && kind != "scheduled_content" && (g.Stage.DeadlineMS > 0 || g.Stage.Expired) {
 			bounded("extend", 5, 120, 1)
 		}
@@ -349,7 +368,7 @@ func allowedActions(s State, id string, now int64) []AllowedAction {
 			add("reveal")
 		}
 	case "collect_answer", "collect_answers":
-		if !expired && sub != nil && sub.Answer == nil && (kind == "collect_answers" || g.Stage.TurnID == id) {
+		if q.Rules.AnswerMode != "oral" && !expired && sub != nil && sub.Answer == nil && (kind == "collect_answers" || g.Stage.TurnID == id) {
 			add("answer")
 		}
 		if host {
@@ -435,4 +454,18 @@ func projectedParticipants(s State, view *SessionView) []Participant {
 		}
 	}
 	return out
+}
+
+// ProjectDisplayAt is a spectator-only projection, independent of the token owner's role.
+func ProjectDisplayAt(s State, now int64) View {
+	n := s.Clone()
+	const screen = "display-screen"
+	n.Participants = append(n.Participants, Participant{ID: screen, Name: "Экран", Role: Spectator})
+	v := ProjectAt(n, screen, now)
+	v.You = ""
+	v.Participants = slices.DeleteFunc(v.Participants, func(p Participant) bool { return p.ID == screen })
+	if v.Gameplay != nil {
+		v.Gameplay.AllowedActions = []AllowedAction{}
+	}
+	return v
 }

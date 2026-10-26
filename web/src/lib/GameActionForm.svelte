@@ -42,7 +42,7 @@
     select_recipient: 'Кому передать вопрос',
     eliminate_theme: 'Удалить тему финала',
     judge: 'Оценить ответ',
-    reveal: 'Раскрыть',
+    reveal: 'Показать игрокам',
     correct_judgement: 'Исправить решение',
     adjust_score: 'Изменить счёт',
     appeal: 'Подать апелляцию',
@@ -105,26 +105,29 @@
 </script>
 
 <form
+  data-action={action.type}
   class="panel stack game-action"
   onsubmit={(event) => {
     event.preventDefault();
-    submit(values());
+    if (action.type === 'bid') {
+      if (action.modes?.includes('bid')) submit({mode:'bid',amount:amount ?? minimum});
+    } else submit(values());
   }}
 >
   <h3>{titles[action.type] || action.type}</h3>
   {#if action.type === 'answer'}<label
       >Текст ответа<textarea
+        aria-label="Текст ответа"
         bind:value={text}
         required
         maxlength="1024"
         placeholder="Ответ виден вам; ведущий получит его после закрытия сбора."></textarea><span
         class="helper"
         class:error-text={answerBytes(text) > 1024}
-        >{answerBytes(text)} / 1024 байт в сообщении. Русская буква обычно занимает 2 байта; специальные
-        символы — больше.</span
+        >{answerBytes(text) > 1024 ? 'Ответ слишком длинный. Сократите текст.' : 'Ответ можно отправить один раз.'}</span
       ></label
     >{/if}
-  {#if ['wager', 'select_price', 'bid', 'adjust_score', 'extend'].includes(action.type)}<label
+  {#if ['wager', 'select_price', 'adjust_score', 'extend'].includes(action.type) || action.type === 'bid' && action.modes?.includes('bid')}<label
       >{action.type === 'extend'
         ? 'Секунд'
         : action.type === 'adjust_score'
@@ -143,6 +146,14 @@
           : ''}{action.step ? ` · шаг ${action.step}` : ''}</span
       ></label
     >{/if}
+  {#if ['wager','select_price'].includes(action.type) && action.minimum !== undefined && action.maximum !== undefined && action.minimum !== action.maximum}
+    <div class="row amount-shortcuts" aria-label="Выбор суммы">
+      <button type="button" class="small" {disabled} onclick={() => amount=action.minimum}>Минимум · {action.minimum}</button>
+      <button type="button" class="small" {disabled} onclick={() => amount=action.maximum}>Максимум · {action.maximum}</button>
+    </div>
+  {/if}
+  {#if action.type === 'select_recipient'}<p class="helper">В списке только доступные получатели. После передачи вопрос откроется выбранному участнику.</p>{/if}
+  {#if action.type === 'bid' && !action.modes?.includes('bid')}<p class="helper">Обычное повышение недоступно. Выберите ва-банк или пас из доступных действий.</p>{/if}
   {#if action.targets?.length && action.type !== 'reveal'}<label
       >{action.type === 'eliminate_theme'
         ? 'Тема'
@@ -190,14 +201,14 @@
             type="button"
             {disabled}
             onclick={() => submit({ target_id: id })}>Раскрыть: {label(id)}</button
-          >{/each}{:else}<button {disabled}>Раскрыть ответ</button>{/if}{:else}<button
+          >{/each}{:else}<button {disabled}>Показать ответ игрокам</button>{/if}{:else}<button
         class="primary"
         {disabled}
         >{action.type === 'answer'
           ? 'Отправить ответ'
           : action.type === 'wager'
             ? 'Зафиксировать ставку'
-            : titles[action.type]}</button
+            : action.type === 'select_recipient' ? 'Передать вопрос' : action.type === 'select_price' ? 'Установить стоимость' : titles[action.type]}</button
       >{/if}
   </div>
   {#if error}<p class="notice error" role="alert">{error}</p>{/if}

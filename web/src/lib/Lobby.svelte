@@ -33,7 +33,7 @@
 <section class="lobby stack" aria-label="Лобби игры">
   <div class="lobby-heading">
     <div>
-      <p class="eyebrow">Сегодня играем</p>
+      <p class="eyebrow">Пакет вопросов</p>
       <h2>{board?.pack_name || 'Загружаем пакет…'}</h2>
       <p class="helper">Раундов: {board?.rounds.length || 0} · До 12 игроков</p>
     </div>
@@ -42,6 +42,7 @@
         <div><span class="helper">Ведущий</span><strong>{host.name}</strong></div>
       </div>{/if}
   </div>
+  <p class="notice">{room.gameplay?.rules.answer_mode === 'oral' ? 'Устная игра' : 'Письменные ответы'} · на ответ {room.gameplay?.rules.answer_seconds || 30} с · {room.settings?.visibility === 'public' ? 'Публичная комната' : 'По приглашению'}</p>
   <div class="row between">
     <h3>Игроки <span class="helper">{players.length} / 12</span></h3>
     <span aria-live="polite">Готовы {readyCount} из {players.length}</span>
@@ -103,7 +104,7 @@
   .lobby {
     padding: clamp(16px, 3vw, 32px);
     border: 1px solid var(--line);
-    border-radius: 12px;
+    border-radius: var(--card-radius, 2px);
     background: var(--surface);
     margin-block: 16px;
   }
@@ -144,7 +145,7 @@
     min-width: 0;
     padding: 14px;
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: var(--card-radius, 2px);
   }
   .lobby-seat strong {
     display: block;

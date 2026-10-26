@@ -20,6 +20,7 @@ func setStage(s *State, kind, turn string, now int64, seconds int) {
 		st.DeadlineMS = now + int64(seconds)*1000
 	}
 	g.Stage = st
+	g.Reveal = nil
 	repairChooser(s)
 	if s.Phase != Paused {
 		s.Phase = Running
@@ -175,7 +176,17 @@ func beginQuestion(s *State, q QuestionSpec, replay bool, now int64) error {
 	s.Question = nil
 	s.Winner = ""
 	s.Asked = append(s.Asked, q.ID)
-	switch q.Type {
+	if g.Rules.Presentation {
+		setStage(s, "question_price", "", now, 1)
+	} else {
+		activateQuestion(s, now)
+	}
+	return nil
+}
+func activateQuestion(s *State, now int64) {
+	g := s.Gameplay
+	a := g.Question
+	switch a.Spec.Type {
 	case "secret":
 		setStage(s, "select_recipient", g.ChooserID, now, g.Rules.SelectionSeconds)
 	case "stake":
@@ -192,7 +203,6 @@ func beginQuestion(s *State, q QuestionSpec, replay bool, now int64) error {
 	default:
 		present(s, now)
 	}
-	return nil
 }
 func present(s *State, now int64) {
 	q := s.Gameplay.Question
@@ -216,6 +226,7 @@ func presentStage(s *State, now int64) {
 	if step.DurationMS > 0 {
 		s.Gameplay.Stage.DeadlineMS = now + step.DurationMS
 	}
+	startReveal(s, now)
 }
 func answerSeconds(s State) int {
 	q := s.Gameplay.Question
@@ -240,6 +251,10 @@ func openAnswers(s *State, now int64) {
 	}
 }
 func advanceQuestion(s *State, now int64) error {
+	if presentationStage(s.Gameplay.Stage.Kind) {
+		finishPresentation(s, now)
+		return nil
+	}
 	g := s.Gameplay
 	q := g.Question
 	switch g.Stage.Kind {

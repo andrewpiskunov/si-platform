@@ -84,7 +84,7 @@ async function roomPage(creds, failFirst = true) {
     };
   }, creds);
   page.on("websocket", (socket) =>
-    socket.on("framereceived", ({ payload }) => {
+    new URL(socket.url()).searchParams.get("display") !== "1" && socket.on("framereceived", ({ payload }) => {
       try {
         const message = JSON.parse(payload.toString());
         if (message.type === "snapshot") client.snapshots++;

@@ -457,7 +457,7 @@ func TestV2MediaAnswerSequenceAndEligiblePlayers(t *testing.T) {
 			t.Fatal("first revealed answer media missing")
 		}
 		b, _ := json.Marshal(ProjectAt(s, id, 2000))
-		if strings.Contains(string(b), "answer-two") || strings.Contains(string(b), "Explanation") {
+		if strings.Contains(string(b), "answer-two") || id != "host" && strings.Contains(string(b), "Explanation") {
 			t.Fatal("future answer fragment leaked")
 		}
 	}

@@ -8,6 +8,10 @@ import (
 	"siplatform/internal/game"
 )
 
+// Two normal host tabs each need a spectator preview, while the two existing
+// external display slots remain available. Other connection modes keep limit 2.
+const displayConnectionLimit = 4
+
 type reply struct {
 	value any
 	err   error
@@ -154,13 +158,27 @@ func (r *room) doKind(ctx context.Context, kind string, run func(context.Context
 }
 func (r *room) attach(ctx context.Context, c *client) error {
 	_, err := r.do(ctx, func(ctx context.Context, r *room) (any, error) {
+		// Recovery can rotate a token between the handshake and actor attachment.
+		if c.token != "" {
+			id, err := r.server.store.Authenticate(ctx, r.id, c.token)
+			if err != nil {
+				return nil, err
+			}
+			if id != c.id {
+				return nil, game.Fault("unauthorized")
+			}
+		}
 		count := 0
 		for existing := range r.clients {
-			if existing.id == c.id && existing.ctx.Err() == nil {
+			if existing.id == c.id && existing.appearanceOnly == c.appearanceOnly && existing.displayOnly == c.displayOnly && existing.ctx.Err() == nil {
 				count++
 			}
 		}
-		if count >= 2 {
+		limit := 2
+		if c.displayOnly && !c.appearanceOnly {
+			limit = displayConnectionLimit
+		}
+		if count >= limit {
 			return nil, game.Fault("connection_limit")
 		}
 		state, err := r.server.store.Load(ctx, r.id)
@@ -186,6 +204,9 @@ func (r *room) attach(ctx context.Context, c *client) error {
 		}
 		r.arm(state)
 		view := game.ProjectAt(state, c.id, time.Now().UnixMilli())
+		if c.displayOnly {
+			view = game.ProjectDisplayAt(state, time.Now().UnixMilli())
+		}
 		if !c.send(Message{Type: "snapshot", State: &view}) {
 			return nil, game.Fault("slow_client")
 		}
@@ -200,7 +221,7 @@ func (r *room) detach(c *client) {
 		if err := r.checkRetention(ctx); err != nil {
 			return nil, err
 		}
-		if c.appearanceOnly {
+		if c.appearanceOnly || c.displayOnly {
 			return nil, nil
 		}
 		state, err := r.server.store.Load(ctx, r.id)
@@ -246,7 +267,7 @@ func (r *room) resolvePause(ctx context.Context) error {
 }
 func (r *room) command(ctx context.Context, c *client, cmd game.Command) error {
 	_, err := r.doKind(ctx, "command", func(ctx context.Context, r *room) (any, error) {
-		if c.appearanceOnly {
+		if c.appearanceOnly || c.displayOnly {
 			return nil, game.Fault("forbidden")
 		}
 		if _, ok := r.clients[c]; !ok {
@@ -304,6 +325,9 @@ func (r *room) broadcast(state game.State, except *client) {
 			continue
 		}
 		view := game.ProjectAt(state, c.id, time.Now().UnixMilli())
+		if c.displayOnly {
+			view = game.ProjectDisplayAt(state, time.Now().UnixMilli())
+		}
 		c.send(Message{Type: "snapshot", State: &view})
 	}
 }

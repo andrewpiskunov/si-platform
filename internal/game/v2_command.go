@@ -38,7 +38,7 @@ func (c Command) Payload() (any, error) {
 		p = &ExtendPayload{}
 	case "restart_stage":
 		p = &RestartPayload{}
-	case "advance", "open_buzzer", "buzz", "continue_media", "wait_media":
+	case "skip_presentation", "advance", "open_buzzer", "buzz", "continue_media", "wait_media":
 		p = &StagePayload{}
 	case "media_ready":
 		p = &MediaReadyPayload{}
@@ -96,6 +96,9 @@ func (c Command) Payload() (any, error) {
 		valid = ValidID(x.StageID) && validReason(x.Reason)
 	case *StagePayload:
 		valid = validStage(x.StageID, x.InstanceID)
+		if c.Type == "skip_presentation" {
+			valid = ValidID(x.StageID) && x.InstanceID == ""
+		}
 	case *MediaReadyPayload:
 		valid = validStage(x.StageID, x.InstanceID) && (x.Status == "loading" || x.Status == "ready" || x.Status == "error" || x.Status == "hidden")
 	case *SkipQuestionPayload:

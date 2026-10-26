@@ -28,6 +28,7 @@ func TestDiagnosticsMatchCommands(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			doc := examples.Demo()
+			doc.Rounds = doc.Rounds[:1] // Legacy command coverage uses the ordinary round only.
 			round := &doc.Rounds[0]
 			q := &round.Themes[0].Questions[0]
 			tc.change(round, q)

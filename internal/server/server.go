@@ -109,6 +109,8 @@ func (s *Server) Handler() http.Handler {
 		s.platformRoutes(r)
 		r.Post("/rooms", s.create)
 		r.Get("/rooms", s.publicRooms)
+		r.Get("/my-rooms", s.myRooms)
+		r.Post("/my-rooms/{room}/session", s.recoverMyRoom)
 		r.Post("/rooms/{room}/participants", s.join)
 		r.Get("/rooms/{room}/ws", s.websocket)
 		r.Post("/rooms/{room}/invite", s.rotateInvite)

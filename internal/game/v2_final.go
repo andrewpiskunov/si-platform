@@ -5,7 +5,15 @@ import (
 	"slices"
 )
 
-func beginRound(s *State, r RoundSpec, now int64) error {
+func beginRound(s *State, r RoundSpec, now int64) (err error) {
+	defer func() {
+		if err == nil && s.Gameplay.Rules.Presentation {
+			next := s.Gameplay.Stage
+			next.RemainingMS = max(int64(0), next.DeadlineMS-now)
+			s.Gameplay.IntroReturn = &next
+			setStage(s, "round_intro", "", now, 3)
+		}
+	}()
 	g := s.Gameplay
 	if !serializedTextFits(r.Name, 256) {
 		return Fault("invalid_round")

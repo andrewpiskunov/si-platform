@@ -9,7 +9,7 @@ const output =
   process.env.ARTIFACT_DIR ||
   fileURLToPath(new URL("../.local/browser", import.meta.url));
 await mkdir(output, { recursive: true });
-const browser = await chromium.launch();
+const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined });
 const contexts = [];
 const clients = [];
 const pageErrors = [];
@@ -79,7 +79,7 @@ async function newClient(credentials, name, context) {
     pageErrors.push({ client: name, message: error.message }),
   );
   page.on("websocket", (socket) =>
-    socket.on("framereceived", ({ payload }) => {
+    new URL(socket.url()).searchParams.get("display") !== "1" && socket.on("framereceived", ({ payload }) => {
       try {
         const message = JSON.parse(payload.toString());
         if (message.state) {

@@ -9,6 +9,7 @@
     type SessionView,
     type V2Command
   } from './game-v2.ts';
+  import { imageRevealProgress } from './reveal-model.ts';
   import { ServerClock, CurrentResource, playbackPlan } from './media-model.ts';
   let {
     media,
@@ -49,10 +50,17 @@
     alive = true,
     lastSent = '',
     pendingStage = '';
+  let localNow = $state(0),
+    reducedMotion = $state(false);
+  const imageProgress = $derived(imageRevealProgress(
+    view.question?.reveal, !!view.rules.progressive_reveal, view.stage.kind,
+    view.server_time_ms, clock.now(localNow), paused, reducedMotion
+  ));
   const resourceKey = $derived(`${view.stage.instance_id}:${media.id}:${quality}`);
   const stageID = $derived(view.stage.id);
   $effect(() => {
     clock.observe(view.server_time_ms, performance.now());
+    localNow = performance.now();
   });
   $effect(() => {
     const key = resourceKey;
@@ -157,6 +165,7 @@
     error = 'Не удалось загрузить медиа. Повторите загрузку или выберите экономное качество.';
   }
   function sync(gesture = false) {
+    localNow = performance.now();
     const plan = playbackPlan(media, paused, clock.now(performance.now()), view.stage.kind);
     show = loaded && plan.show;
     if (!element) return;
@@ -187,6 +196,12 @@
     }
   }
   onMount(() => {
+    const preference = matchMedia('(prefers-reduced-motion: reduce)');
+    const motionPreference = () => {
+      reducedMotion = preference.matches;
+    };
+    motionPreference();
+    preference.addEventListener('change', motionPreference);
     const visibility = () => {
       hidden = document.visibilityState === 'hidden';
     };
@@ -195,6 +210,7 @@
     const interval = setInterval(() => sync(), 100);
     return () => {
       alive = false;
+      preference.removeEventListener('change', motionPreference);
       clearInterval(interval);
       clearTimeout(refresh);
       resources.close();
@@ -222,6 +238,11 @@
   <div class="media-frame" class:media-waiting={!show}>
     {#if url}{#if media.kind === 'image'}<img
           bind:this={imageElement}
+          data-testid="image-reveal"
+          data-progress={imageProgress}
+          style:clip-path={imageProgress < 1
+            ? `inset(0 ${(1 - imageProgress) * 100}% 0 0)`
+            : undefined}
           src={url}
           alt="Изображение текущего фрагмента"
           class:media-concealed={!show}

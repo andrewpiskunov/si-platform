@@ -76,7 +76,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	auth := accounts.New(pool, accounts.Options{Origin: origin, SecureCookies: strings.HasPrefix(origin, "https://")})
+	sendMail, err := accounts.MailSenderFromEnv(os.Getenv, origin)
+	if err != nil {
+		return err
+	}
+	auth := accounts.New(pool, accounts.Options{Origin: origin, SecureCookies: strings.HasPrefix(origin, "https://"), SendMail: sendMail})
 	lib := library.New(pool)
 	var processor *media.Processor
 	if os.Getenv("MEDIA_DISABLED") != "true" {

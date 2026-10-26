@@ -90,8 +90,10 @@ func TestAuthoringRoomBoundary(t *testing.T) {
 	if newer.Card.Revision != draft.Card.Revision+1 {
 		t.Fatal("revision not incremented")
 	}
+	writtenRules := game.DefaultRules()
+	writtenRules.AnswerMode = "written"
 	var host postgres.Credentials
-	json.Unmarshal(api(t, "POST", h.URL+"/api/rooms", owner.Token, map[string]any{"host_name": "Host", "pack_id": draft.Card.ID, "revision": newer.Card.Revision, "title": "Вечер игры", "theme": "pirate"}, 201), &host)
+	json.Unmarshal(api(t, "POST", h.URL+"/api/rooms", owner.Token, map[string]any{"host_name": "Host", "pack_id": draft.Card.ID, "revision": newer.Card.Revision, "title": "Вечер игры", "theme": "pirate", "rules": writtenRules}, 201), &host)
 	p := join(t, h.URL, host, "Player")
 	join(t, h.URL, host, "Other")
 	board := api(t, "GET", h.URL+"/api/rooms/"+host.RoomID+"/board", p.Token, nil, 200)

@@ -24,17 +24,27 @@
   let {
     packId = '',
     revision = 0,
-    disabled = false
-  }: { packId?: string; revision?: number; disabled?: boolean } = $props();
+    disabled = false,
+    showHeading = true,
+    canCreate = true,
+    loginNext = '/studio',
+    onbusy = (_value: boolean) => {}
+  }: { packId?: string; revision?: number; disabled?: boolean; showHeading?: boolean; canCreate?: boolean; loginNext?: string; onbusy?: (value: boolean) => void } = $props();
   let host = $state(''),
     title = $state(''),
     busy = $state(false),
     selecting = $state(false),
     error = $state('');
+  $effect(() => {
+    packId;
+    revision;
+    error = '';
+  });
   async function create(event: SubmitEvent) {
     event.preventDefault();
-    if (!mounted || busy || selecting || disabled || !validRoomSettings(settings)) return;
+    if (!mounted || busy || selecting || disabled || !canCreate || !validRoomSettings(settings)) return;
     busy = true;
+    onbusy(true);
     error = '';
     try {
       const credentials = await api<Credentials>('/rooms', 'POST', {
@@ -55,6 +65,7 @@
       error = errorText(e);
     } finally {
       busy = false;
+      onbusy(false);
     }
   }
 </script>
@@ -62,13 +73,13 @@
 <form class="stack" onsubmit={create}>
   <fieldset class="stack" disabled={!mounted || busy || disabled}>
     <div>
-      <h2>Собираем компанию</h2>
+      {#if showHeading}<h2>Создать комнату</h2>{/if}
       <p class="muted">Вы будете ведущим. В комнате есть места для 12 игроков и 20 зрителей.</p>
     </div>
     <label
       >Название комнаты<input
         bind:value={title}
-        placeholder="Наш игровой вечер"
+        placeholder="Название комнаты"
         maxlength="80"
       /></label
     ><label
@@ -78,12 +89,14 @@
         maxlength="32"
       /></label
     >
+    <details><summary>Оформление комнаты</summary>
     <ThemeChooser
       value={appearance}
       onchange={(value) => (appearance = value)}
       disabled={busy}
       onloading={(value) => (selecting = value)}
     />
+    </details>
     <RoomSettingsFields {settings} onchange={(value) => (settings = value)} disabled={busy} />
     <details>
       <summary>Правила и таймеры</summary><GameRules
@@ -92,10 +105,15 @@
         disabled={busy}
       />
     </details>
+    <section class="notice" aria-label="Сводка игры">
+      <strong>{title || 'Своя игра'} · ведущий {host || $user?.display_name || 'Ведущий'}</strong>
+      <p>{rules.answer_mode === 'oral' ? 'Устная игра' : 'Письменные ответы'} · ответ {rules.answer_seconds} с · {settings.visibility === 'public' ? 'Публичная комната' : 'По приглашению'}</p>
+      <span class="helper">{settings.require_ready ? 'Старт после готовности игроков' : 'Старт по команде ведущего'}. {packId ? 'Выбранный пакет' : 'Демо: разминка, 5 особых механик и финал'}.</span>
+    </section>
     {#if error}<div class="notice error" role="alert">{error}</div>{/if}{#if $user}<button
         class="primary"
-        disabled={busy || selecting || disabled || !validRoomSettings(settings)}
+        disabled={busy || selecting || disabled || !canCreate || !validRoomSettings(settings)}
         >{busy ? 'Создаём комнату…' : 'Создать комнату →'}</button
-      >{:else}<a class="button primary" href="/login">Войти и создать комнату</a>{/if}
+      >{:else}<a class="button primary" href={`/login?next=${encodeURIComponent(loginNext)}`}>Войти и создать комнату</a>{/if}
   </fieldset>
 </form>

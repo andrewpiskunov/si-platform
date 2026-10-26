@@ -91,7 +91,7 @@ func TestV2RulesSnapshotDurationOverridesAndTimeoutActions(t *testing.T) {
 		t.Fatal("package duration did not override buzzer wait")
 	}
 	s = do(t, s, "p1", "buzz", dep(s))
-	if NextDeadline(s) != 11000 {
+	if NextDeadline(s) != 31000 {
 		t.Fatal("package duration overrode ordinary post-buzz answer")
 	}
 	s = judge(t, s, "p1", true)
